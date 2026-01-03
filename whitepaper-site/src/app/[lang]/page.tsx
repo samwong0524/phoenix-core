@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Cpu, Share2, ArrowRight, Zap, Mail, Layers, Code2, User, Briefcase, Network as NetworkIcon, Globe } from "lucide-react";
+import { MessageSquare, Cpu, Share2, ArrowRight, Zap, Mail, Layers, Code2, User, Briefcase, Network as NetworkIcon, Globe, Disc as Discord, MessageCircle } from "lucide-react";
 
 // --- Sub Components ---
 
@@ -32,7 +33,7 @@ const CONTENT: any = {
   zh: {
     nav: { demo: "启动演示", whitepaper: "白皮书", github: "代码仓" },
     hero: {
-      title: "MINIMAL PRIMITIVES.",
+      title: "极简 Multi-Agent 原语",
       subtitle: "如果人类社会可以通过“微信”这种简单的 IM 界面组织起数十亿人的协作，那么 AI Agents 也不应该被锁死在复杂的图结构（DAG）中。",
     },
     s1: {
@@ -47,7 +48,7 @@ const CONTENT: any = {
     s2: {
       title: "02. 液态拓扑",
       h3: "由 Agent 自主构建，而非人为预设。",
-      p: "传统的 Workflow 是死板的图纸。而在 Agent Wechat 中，拓扑结构是在运行过程中“流”出来的。当 Agent 发现任务过于复杂时，它会自主决定去“雇佣”下属。它是自适应的液态组织，而非僵硬的机械齿轮。",
+      p: "传统的 Workflow 是死板的图纸。而在 Agent Wechat 中，拓扑结构是在运行过程中“流”出来的。当 Agent发现任务过于复杂时，它会自主决定去“雇佣”下属。它是自适应的液态组织，而非僵硬的机械齿轮。",
       old: "静态工作流 (旧)",
       new: "液态拓扑 (Agent Wechat)",
       old_desc: "预设且脆弱",
@@ -64,6 +65,10 @@ const CONTENT: any = {
     cta: {
       ready: "准备好进入 Agent 社交时代吗？",
       btn: "探索交互式演示"
+    },
+    footer: {
+      contact: "联系我们",
+      wechat_tip: "扫描二维码添加微信"
     }
   },
   en: {
@@ -101,6 +106,10 @@ const CONTENT: any = {
     cta: {
       ready: "Ready for the era of Agent Social?",
       btn: "Explore Interactive Demo"
+    },
+    footer: {
+      contact: "Connect with us",
+      wechat_tip: "Scan to follow on WeChat"
     }
   }
 };
@@ -108,8 +117,18 @@ const CONTENT: any = {
 // --- Main Page ---
 
 export default function WhitepaperHome() {
-  const [lang, setLang] = useState<"zh" | "en">("zh");
-  const t = CONTENT[lang];
+  const params = useParams();
+  const lang = (params?.lang as "zh" | "en") || "en";
+  const t = CONTENT[lang] || CONTENT.en;
+  const router = useRouter();
+
+  const [showWeChat, setShowWeChat] = useState(false);
+
+  const toggleLang = () => {
+    const nextLang = lang === "zh" ? "en" : "zh";
+    document.cookie = `NEXT_LOCALE=${nextLang}; max-age=31536000; path=/`;
+    router.push(`/${nextLang}`);
+  };
 
   return (
     <div className="min-h-screen bg-black text-zinc-400 font-mono selection:bg-white selection:text-black">
@@ -123,10 +142,10 @@ export default function WhitepaperHome() {
           <div className="hidden md:flex gap-8">
             <Link href="/demo" className="text-zinc-500 hover:text-white transition-colors">{t.nav.demo}</Link>
             <a href="#" className="text-zinc-500 hover:text-white transition-colors">{t.nav.whitepaper}</a>
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors">{t.nav.github}</a>
+            <a href="https://github.com/chmod777john/agent-wechat" target="_blank" className="text-zinc-500 hover:text-white transition-colors">{t.nav.github}</a>
           </div>
           <button 
-            onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+            onClick={toggleLang}
             className="flex items-center gap-2 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded text-zinc-200 hover:bg-zinc-800 transition-all font-bold"
           >
             <Globe size={14} /> {lang.toUpperCase()}
@@ -156,7 +175,7 @@ export default function WhitepaperHome() {
           </div>
         </motion.div>
 
-        {/* Pillar 1: Primitives */}
+        {/* Pillars */}
         <Section title={t.s1.title} icon={Zap}>
           <div>
             <h3 className="text-white text-lg mb-6">{t.s1.h3}</h3>
@@ -178,7 +197,6 @@ export default function WhitepaperHome() {
           </div>
         </Section>
 
-        {/* Pillar 2: Autonomy */}
         <Section title={t.s2.title} icon={Share2}>
           <div>
             <h3 className="text-white text-lg mb-4">{t.s2.h3}</h3>
@@ -208,7 +226,6 @@ export default function WhitepaperHome() {
           </div>
         </Section>
 
-        {/* Pillar 3: Panoramic Illustration */}
         <Section title={t.s3.title} icon={MessageSquare} stacked={true}>
           <div className="max-w-3xl">
             <h3 className="text-white text-lg mb-4">{t.s3.h3}</h3>
@@ -219,8 +236,6 @@ export default function WhitepaperHome() {
              <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px]"></div>
              
              <div className="relative w-full h-full scale-[0.6] md:scale-[0.85] origin-center">
-                
-                {/* Precise Tree Connections */}
                 <svg className="absolute inset-0 w-full h-full">
                    <g stroke="#27272a" strokeWidth="2">
                       <line x1="500" y1="80" x2="350" y2="200" />
@@ -232,7 +247,6 @@ export default function WhitepaperHome() {
                    </g>
                 </svg>
 
-                {/* Nodes */}
                 <div className="absolute top-[55px] left-[475px]">
                    <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center shadow-2xl"><Briefcase size={20} className="text-zinc-500" /></div>
                 </div>
@@ -253,56 +267,33 @@ export default function WhitepaperHome() {
                 </div>
 
                 <div className="absolute top-[320px] left-[520px] z-10">
-                   <div className="w-16 h-16 rounded-full bg-black border-2 border-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.4)] flex items-center justify-center relative">
+                   <div className="w-16 h-16 rounded-full bg-black border-2 border-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.4)] flex items-center justify-center relative font-bold">
                       <Code2 size={32} className="text-blue-400" />
                       <div className="absolute inset-0 rounded-full border border-blue-500/20 scale-150 animate-ping"></div>
                    </div>
-                   <div className="mt-3 text-center">
-                      <span className="px-2 py-0.5 bg-blue-500 text-white text-[8px] font-bold rounded uppercase tracking-widest">{t.s3.target}</span>
-                   </div>
                 </div>
 
-                {/* IM Console */}
                 <motion.div 
                   initial={{ x: 20, y: 150 }}
                   className="absolute z-50 w-80 h-64 bg-zinc-950/95 backdrop-blur-2xl border border-zinc-800 rounded-2xl shadow-[0_60px_120px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden"
                 >
-                   <div className="h-10 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 justify-between font-bold">
-                      <div className="flex gap-2">
-                         <div className="w-3 h-3 rounded-full bg-red-900/40"></div>
-                         <div className="w-3 h-3 rounded-full bg-yellow-900/40"></div>
-                         <div className="w-3 h-3 rounded-full bg-green-900/40"></div>
-                      </div>
-                      <div className="text-[9px] text-zinc-500 tracking-[0.3em] uppercase">{t.s3.terminal}</div>
-                   </div>
+                   <div className="h-10 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 justify-between font-bold text-[9px] text-zinc-500 tracking-[0.3em] uppercase">{t.s3.terminal}</div>
                    <div className="flex flex-1">
                       <div className="w-16 border-r border-zinc-900 bg-black flex flex-col items-center py-6 gap-6 text-zinc-600">
-                         <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white"><User size={20} /></div>
+                         <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20"><User size={20} /></div>
                          <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800"></div>
                       </div>
                       <div className="flex-1 flex flex-col p-6 gap-4">
-                         <div className="flex gap-2 items-center">
-                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                            <div className="h-2 w-32 bg-zinc-800 rounded-full"></div>
-                         </div>
-                         <div className="self-end bg-blue-600 text-white text-xs p-4 rounded-3xl rounded-tr-none font-bold shadow-2xl leading-relaxed">
-                            {t.s3.chat}
-                         </div>
+                         <div className="flex gap-2 items-center"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div><div className="h-2 w-32 bg-zinc-800 rounded-full"></div></div>
+                         <div className="self-end bg-blue-600 text-white text-xs p-4 rounded-3xl rounded-tr-none font-bold shadow-2xl leading-relaxed">{t.s3.chat}</div>
                          <div className="mt-auto h-8 bg-zinc-900 rounded-full border border-zinc-800 flex items-center px-4"><div className="w-full h-1 bg-zinc-800 rounded-full"></div></div>
                       </div>
                    </div>
                 </motion.div>
 
-                {/* Laser */}
                 <svg className="absolute inset-0 z-30 w-full h-full pointer-events-none">
-                   <defs>
-                      <linearGradient id="laserGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                         <stop offset="0%" stopColor="#3b82f6" stopOpacity="0" />
-                         <stop offset="50%" stopColor="#3b82f6" stopOpacity="1" />
-                         <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                      </linearGradient>
-                   </defs>
-                   <motion.path d="M 330 280 C 450 280, 500 350, 530 380" fill="transparent" stroke="url(#laserGrad)" strokeWidth="6" strokeDasharray="15 10" animate={{ strokeDashoffset: [0, -50] }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
+                   <defs><linearGradient id="laserGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0" /><stop offset="50%" stopColor="#3b82f6" stopOpacity="1" /><stop offset="100%" stopColor="#3b82f6" stopOpacity="0" /></linearGradient></defs>
+                   <motion.path d="M 330 280 C 450 280, 500 350, 530 380" fill="transparent" stroke="url(#laserGrad)" strokeWidth="6" strokeDasharray="15 10" animate={{ strokeDashoffset: [0, -50] }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }} className="drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
                 </svg>
              </div>
           </div>
@@ -321,12 +312,63 @@ export default function WhitepaperHome() {
         </motion.div>
       </main>
 
-      <footer className="px-8 py-12 border-t border-zinc-900 text-[10px] text-zinc-700 flex justify-between uppercase tracking-widest">
-         <div>© 2026 AGENT WECHAT PROJECT</div>
-         <div className="flex gap-8">
-            <a href="#">Security</a>
-            <a href="#">Architecture</a>
-            <a href="#">Manifesto</a>
+      <footer className="px-8 py-20 border-t border-zinc-900 bg-zinc-950/20 backdrop-blur-sm">
+         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between gap-12">
+            <div className="flex flex-col gap-4">
+              <div className="font-bold text-white tracking-tighter flex items-center gap-2 text-lg">
+                <Cpu size={22} /> AGENT WECHAT
+              </div>
+              <p className="text-[10px] text-zinc-600 uppercase tracking-widest leading-loose">
+                © 2026 AGENT WECHAT PROJECT<br/>
+                Decentralized Organization Intelligence
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-6">
+               <div className="text-xs font-bold text-white uppercase tracking-widest">{t.footer.contact}</div>
+               <div className="flex gap-6 items-center">
+                  <a href="https://discord.gg/NQBg63b8A5" target="_blank" className="p-3 bg-zinc-900 rounded-full hover:bg-[#5865F2] hover:text-white transition-all shadow-xl group relative">
+                     <Discord size={20} />
+                     <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-white text-black text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Join Discord</span>
+                  </a>
+                  
+                  <div 
+                    onMouseEnter={() => setShowWeChat(true)}
+                    onMouseLeave={() => setShowWeChat(false)}
+                    className="p-3 bg-zinc-900 rounded-full hover:bg-[#07C160] hover:text-white transition-all shadow-xl cursor-pointer relative group"
+                  >
+                     <MessageCircle size={20} />
+                     <AnimatePresence>
+                       {showWeChat && (
+                         <motion.div 
+                           initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                           animate={{ opacity: 1, y: 0, scale: 1 }}
+                           exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                           className="absolute bottom-16 left-1/2 -translate-x-1/2 p-4 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-zinc-200"
+                         >
+                            <img src="/wechat-qr.png" alt="WeChat QR" className="w-32 h-32 rounded-lg" />
+                            <div className="text-black text-[10px] font-bold mt-2 text-center uppercase tracking-tighter whitespace-nowrap">{t.footer.wechat_tip}</div>
+                            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 border-r border-b border-zinc-200"></div>
+                         </motion.div>
+                       )}
+                     </AnimatePresence>
+                  </div>
+                  
+                  <a href="https://github.com/chmod777john/agent-wechat" target="_blank" className="p-3 bg-zinc-900 rounded-full hover:bg-white hover:text-black transition-all shadow-xl group relative">
+                     <Cpu size={20} />
+                     <span className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-white text-black text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">GitHub</span>
+                  </a>
+               </div>
+            </div>
+
+            <div className="flex flex-col gap-4 text-xs">
+               <div className="text-zinc-600 font-bold uppercase tracking-widest">Protocol</div>
+               <div className="flex flex-col gap-2">
+                  <a href="#" className="hover:text-white transition-colors">Manifesto</a>
+                  <a href="#" className="hover:text-white transition-colors">Architecture</a>
+                  <a href="#" className="hover:text-white transition-colors">Security</a>
+               </div>
+            </div>
          </div>
       </footer>
     </div>
