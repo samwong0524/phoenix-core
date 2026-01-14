@@ -154,6 +154,22 @@ export default function IMPage() {
     setStatus("idle");
   }, [workspaceOverrideId]);
 
+  const createWorkspace = useCallback(async (name?: string) => {
+    setError(null);
+    setAgentError(null);
+    setStatus("boot");
+    const created = await api<WorkspaceDefaults>(`/api/workspaces`, {
+      method: "POST",
+      body: JSON.stringify({ name: name?.trim() || "New Workspace" }),
+    });
+    saveSession(created);
+    setSession(created);
+    setActiveGroupId(created.defaultGroupId);
+    setStatus("idle");
+    window.history.replaceState(null, "", "/im");
+    return created;
+  }, []);
+
   const refreshGroups = useCallback(async (s: WorkspaceDefaults) => {
     setStatus("groups");
     const q = new URLSearchParams({ workspaceId: s.workspaceId, agentId: s.humanAgentId });
@@ -293,13 +309,27 @@ export default function IMPage() {
               {session?.workspaceId ?? "-"}
             </div>
           </div>
-          <button
-            className="btn"
-            onClick={() => session && void refreshGroups(session)}
-            disabled={!session || status === "groups"}
-          >
-            Refresh
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="btn"
+              onClick={() => session && void refreshGroups(session)}
+              disabled={!session || status === "groups"}
+            >
+              Refresh
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                const name = window.prompt("Workspace name", "New Workspace") ?? "";
+                if (name === "") return;
+                void createWorkspace(name);
+              }}
+              disabled={status !== "idle" && status !== "boot"}
+              title="Create a new workspace"
+            >
+              New
+            </button>
+          </div>
         </div>
 
         <div style={{ padding: 12 }}>

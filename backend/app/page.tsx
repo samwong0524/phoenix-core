@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { store } from "@/lib/storage";
 
+import CreateWorkspace from "./_components/create-workspace";
+
 export default function HomePage() {
   const workspacesPromise = store.listWorkspaces();
 
@@ -19,6 +21,11 @@ export default function HomePage() {
         <Link className="btn" href="/graph">
           Open Graph
         </Link>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Create Workspace</div>
+        <CreateWorkspace />
       </div>
 
       <div style={{ marginTop: 24 }}>
