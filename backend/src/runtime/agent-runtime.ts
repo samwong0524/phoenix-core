@@ -250,16 +250,6 @@ class AgentRunner {
   private async executeToolCall(input: { groupId: UUID; call: ToolCall }) {
     const name = input.call.name ?? "";
     const workspaceId = await store.getGroupWorkspaceId({ groupId: input.groupId });
-    const memberIds = await store.listGroupMemberIds({ groupId: input.groupId });
-
-    let humanId: UUID | null = null;
-    for (const id of memberIds) {
-      const r = await store.getAgentRole({ agentId: id }).catch(() => null);
-      if (r === "human") {
-        humanId = id;
-        break;
-      }
-    }
 
     if (name === "self") {
       const role = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
@@ -301,7 +291,7 @@ class AgentRunner {
         workspaceId,
         fromId: this.agentId,
         toId: to,
-        observerHumanId: humanId,
+        // Do not auto-add the human into agent↔agent threads; sidebar only shows human-participant chats.
         content,
         contentType: "text",
         groupName: null,

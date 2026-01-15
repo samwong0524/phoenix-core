@@ -43,6 +43,12 @@
 
 > 所有对话都是群，P2P = 2 人群
 
+**可见性约定（MVP）**
+
+- UI 左侧对话列表仅拉取 human 参与的 groups（human 为 group member）。
+- Agent↔Agent 的 direct message 默认只创建两方群（不自动加入 human “旁观者”）。
+- 如需人类介入，必须通过显式操作把 human 加入该 group（静态成员）。
+
 *   **`groups`**:
     *   `id`: UUID PRIMARY KEY
     *   `workspace_id`: UUID → workspaces.id

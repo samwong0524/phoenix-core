@@ -14,6 +14,12 @@ IM界面：
 
 未读消息小红点。，
 
+## 会话可见性（MVP 约定）
+
+- 左侧边栏只展示“人类（human agent）参与”的会话（human 是 group member）。
+- Agent↔Agent 的内部线程不会自动把 human 加入为旁观者，因此默认不会出现在左侧。
+- 人类需要介入时：通过搜索/建群/打开会话等显式把 human 加入对应 group（静态成员）。
+
 Agent-Graph 界面：展示 Agent 间的事件和数据流动
 
 Agent 详情区： 
