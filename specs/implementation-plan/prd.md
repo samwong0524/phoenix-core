@@ -29,7 +29,8 @@ Agent 详情区：
 1) 首次进入/新建 workspace：系统自动创建人类 agent、初始助手 agent，并建立两者的 P2P 会话，落到默认对话。
 2) 进入页面加载列表：拉取对话列表（含每个会话的最近一条消息摘要与未读数），按时间排序显示。[并且建立监听后端的连接，当后端有类似发消息等等的事件发生时，触发拉取]   [另一条stream连接用于获取llm上下文]
 3) 发送消息：人在当前会话输入文本，消息写入后触发助手唤醒。
-4) 助手响应：助手拉取未读 → 推理流式输出 → 前端通过刚刚已经建立的stream显示llmcontext -> 本次流式输出完成，触发前端那个连接，触发拉取
+4) 助手响应：助手拉取未读 → 推理流式输出 → 前端通过刚刚已经建立的stream显示llmcontext -> 本次流式输出完成，触发前端那个连接，触发拉取。
+   **注意**：推理产出不会自动写回当前会话；若要对人类或其他 agent 发送消息，必须显式调用 IM 工具（如 `send_group_message` / `send_direct_message`）。
 
 5) 拉取分为拉侧边栏和拉当前group
 6) llm 流式过程中，刷新页面，流式不变（也就是进入页面是总是连接那个 stream）
@@ -115,7 +116,7 @@ Agent 详情区：
   - **流来源说明**：
     - agent 发起 LLM call 后进入流式推理阶段，逐 chunk 写入 Realtime channel（或内存 bus）。
     - 推理过程中不会立刻改写持久化 context（`llm_history`），避免“半成品”污染。
-    - 流结束（`agent.done`）后，才将完整 assistant 输出追加到持久化 context，并同步写入 `messages`。
+- 流结束（`agent.done`）后，才将完整 assistant 输出追加到持久化 context；**不会自动写入 `messages`**。消息写入仅由显式 `send_*` 工具触发。
 - **UI 事件流（可选）**：`GET /api/ui-stream?workspaceId=...`（SSE）  
   仅订阅当前 workspace 的更新提示，不承载完整消息数据，也不要求可恢复。
   触发场景（仅 send / create）：
@@ -155,7 +156,7 @@ Agent 详情区：
 ## IM 系统 × Agent 系统：关键交互节点（非纯请求）
 
 - **消息写入 → 唤醒机制**
-  - 任意 `send_message` 成功写入后，触发目标 agent 的 wake。
+- 任意 `send_message` 成功写入后，触发目标 agent 的 wake。
   - 被唤醒的 agent 进入 `getAllUnread` → LLM 推理 → 产出流式 chunk → 落库。
   - `getAllUnread` 约定：
     - 输入：`agentId`（隐式为当前 agent）。
@@ -167,8 +168,8 @@ Agent 详情区：
   - agent 处理未读时，读取 `group_members.last_read_message_id` 作为边界。
   - 处理完成后更新 `last_read_message_id`，保证后续只处理增量。
 - **流式上下文与消息入库的解耦**
-  - LLM 推理过程中，chunk 实时推送到 `agent.stream`。
-  - 推理完成后才写入完整 assistant 消息到 `messages`（保证消息区一致性）。
+- LLM 推理过程中，chunk 实时推送到 `agent.stream`。
+- 推理完成后只写入持久化 context；对外消息必须通过显式 `send_*` 工具触发。
 - **Agent → Agent 的消息路径**
   - agentA 使用 `send_message` 发往包含 agentB 的群。
   - agentB 的 runner 被唤醒，读取未读并进入推理。

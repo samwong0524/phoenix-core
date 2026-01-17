@@ -18,6 +18,25 @@ export async function POST(req: Request) {
     name?: string;
   };
 
+  if (body.memberIds.length === 2) {
+    const groupId =
+      (await store.mergeDuplicateExactP2PGroups({
+        workspaceId: body.workspaceId,
+        memberA: body.memberIds[0]!,
+        memberB: body.memberIds[1]!,
+        preferredName: body.name ?? null,
+      })) ??
+      (
+        await store.createGroup({
+          workspaceId: body.workspaceId,
+          memberIds: body.memberIds,
+          name: body.name ?? undefined,
+        })
+      ).id;
+
+    return Response.json({ id: groupId, name: body.name ?? null }, { status: 201 });
+  }
+
   const group = await store.createGroup(body);
   return Response.json(group, { status: 201 });
 }

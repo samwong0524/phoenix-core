@@ -129,8 +129,9 @@ function IMPageInner() {
   const [status, setStatus] = useState<"boot" | "groups" | "messages" | "send" | "idle">("boot");
   const [error, setError] = useState<string | null>(null);
 
+  const [rawStreamPlain, setRawStreamPlain] = useState("");
   const [streamBlocks, setStreamBlocks] = useState<
-    Array<{ kind: string; label: string; text: string }>
+    Array<{ kind: string; label: string; text: string; runId: number }>
   >([]);
   const [rawStreamLog, setRawStreamLog] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -139,6 +140,7 @@ function IMPageInner() {
   const esRef = useRef<EventSource | null>(null);
   const activeGroupIdRef = useRef<string | null>(null);
   const streamAgentIdRef = useRef<string | null>(null);
+  const streamRunIdRef = useRef(0);
   const uiEsRef = useRef<EventSource | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -313,7 +315,9 @@ function IMPageInner() {
       esRef.current?.close();
       setStreamBlocks([]);
       setRawStreamLog("");
+      setRawStreamPlain("");
       setAgentError(null);
+      streamRunIdRef.current = 0;
 
       const groupId = activeGroupIdRef.current;
       const suffix = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
@@ -329,25 +333,30 @@ function IMPageInner() {
                 ? payload.data.tool_call_name ?? payload.data.tool_call_id ?? "tool_call"
                 : payload.data.kind;
             const chunk = payload.data.delta;
+            const runId = streamRunIdRef.current;
             setRawStreamLog((t) =>
               t
                 ? `${t}\n${label}: ${chunk || ""}`.trimEnd()
                 : `${label}: ${chunk || ""}`.trimEnd()
             );
+            if (chunk) {
+              setRawStreamPlain((t) => t + chunk);
+            }
             setStreamBlocks((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
-              if (last && last.kind === payload.data.kind && last.label === label) {
+              if (last && last.kind === payload.data.kind && last.label === label && last.runId === runId) {
                 last.text = `${last.text}${chunk || ""}`;
                 next[next.length - 1] = last;
               } else {
-                next.push({ kind: payload.data.kind, label, text: chunk || "" });
+                next.push({ kind: payload.data.kind, label, text: chunk || "", runId });
               }
               return next;
             });
             return;
           }
           if (payload.event === "agent.wakeup") {
+            streamRunIdRef.current += 1;
             setRawStreamLog((t) =>
               t
                 ? `${t}\nwakeup: ${payload.data.reason ?? "unknown"}`.trimEnd()
@@ -359,6 +368,7 @@ function IMPageInner() {
                 kind: "wakeup",
                 label: "wakeup",
                 text: payload.data.reason ?? "unknown",
+                runId: streamRunIdRef.current,
               });
               return next;
             });
@@ -378,12 +388,25 @@ function IMPageInner() {
                 kind: "unread",
                 label: "unread",
                 text: `${batchCount} batches, ${msgCount} messages`,
+                runId: streamRunIdRef.current,
               });
               return next;
             });
             return;
           }
           if (payload.event === "agent.done") {
+            setRawStreamLog((t) => (t ? `${t}\n—` : "—"));
+            setRawStreamPlain((t) => (t ? `${t}` : ""));
+            setStreamBlocks((prev) => {
+              const next = [...prev];
+              next.push({
+                kind: "done",
+                label: "done",
+                text: "—",
+                runId: streamRunIdRef.current,
+              });
+              return next;
+            });
             const groupId = activeGroupIdRef.current;
             const nextSession = loadSession();
             if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false });
@@ -458,7 +481,7 @@ function IMPageInner() {
       const nameRaw = window.prompt("Group name (optional)", "") ?? "";
       const name = nameRaw.trim() || undefined;
 
-      const created = await api<{ id: string; name: string | null; createdAt: string }>(`/api/groups`, {
+      const created = await api<{ id: string; name: string | null }>(`/api/groups`, {
         method: "POST",
         body: JSON.stringify({ workspaceId: session.workspaceId, memberIds, name }),
       });
@@ -546,20 +569,23 @@ function IMPageInner() {
         !!activeGroup?.memberIds?.includes(session.humanAgentId);
 
       if (targetId && !activeHasTarget) {
-        const delivered = await api<{ ok: true; groupId: string }>(`/api/send`, {
+        const opened = await api<{ id: string; name: string | null }>(`/api/groups`, {
           method: "POST",
           body: JSON.stringify({
             workspaceId: session.workspaceId,
-            fromId: session.humanAgentId,
-            toId: targetId,
-            content: text,
+            memberIds: [session.humanAgentId, targetId],
+            name: null,
           }),
+        });
+        await api(`/api/groups/${opened.id}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
         });
         setStatus("idle");
         setSelectedToAgentId(null);
         setSearchQuery("");
         void refreshGroups(session);
-        setActiveGroupId(delivered.groupId);
+        setActiveGroupId(opened.id);
         connectAgentStream(targetId);
         return;
       }
@@ -781,33 +807,16 @@ function IMPageInner() {
 
 	                          void (async () => {
 	                            try {
-	                              const opened = await api<{ ok: true; groupId: string; createdAt: string }>(
-	                                `/api/conversations/open`,
-	                                {
-	                                  method: "POST",
-	                                  body: JSON.stringify({
-	                                    workspaceId: session.workspaceId,
-	                                    memberIds: [session.humanAgentId, a.id],
-	                                    name: a.role,
-	                                  }),
-	                                }
-	                              );
-
-	                              setGroups((prev) => {
-	                                if (prev.some((g) => g.id === opened.groupId)) return prev;
-	                                const createdAt = opened.createdAt;
-	                                const next: Group = {
-	                                  id: opened.groupId,
-	                                  name: a.role,
+	                              const opened = await api<{ id: string; name: string | null }>(`/api/groups`, {
+	                                method: "POST",
+	                                body: JSON.stringify({
+	                                  workspaceId: session.workspaceId,
 	                                  memberIds: [session.humanAgentId, a.id],
-	                                  unreadCount: 0,
-	                                  updatedAt: createdAt,
-	                                  createdAt,
-	                                };
-	                                return [next, ...prev];
+	                                  name: null,
+	                                }),
 	                              });
 
-	                              setActiveGroupId(opened.groupId);
+	                              setActiveGroupId(opened.id);
 	                              connectAgentStream(a.id);
 	                              void refreshGroups(session);
 	                            } catch (e) {
@@ -988,6 +997,7 @@ function IMPageInner() {
             onClick={() => {
               setStreamBlocks([]);
               setRawStreamLog("");
+              setRawStreamPlain("");
               setAgentError(null);
             }}
           >
@@ -1003,18 +1013,7 @@ function IMPageInner() {
 
           <div className="card">
             <div className="card-title">Realtime stream</div>
-            <div className="card-body mono">
-              {streamBlocks.length === 0
-                ? "—"
-                : streamBlocks.map((block, index) => (
-                    <div key={`${block.kind}-${index}`} style={{ marginBottom: 10 }}>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-                        {block.label}
-                      </div>
-                      <div>{block.text || "—"}</div>
-                    </div>
-                  ))}
-            </div>
+            <div className="card-body mono">{rawStreamPlain || "—"}</div>
           </div>
 
           <div className="card">

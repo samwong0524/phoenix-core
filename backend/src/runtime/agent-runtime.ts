@@ -280,6 +280,8 @@ class AgentRunner {
           `Your workspace_id is: ${workspaceId}.\n` +
           `Your role is: ${role}.\n` +
           `Act strictly as this role when replying. Be concise and helpful.\n` +
+          `Your replies are NOT automatically delivered to humans.\n` +
+          `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
           `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.`,
       });
     }
@@ -289,16 +291,12 @@ class AgentRunner {
       .join("\n");
     history.push({ role: "user", content: userContent });
 
-    const { assistantText, assistantThinking } = await this.runWithTools({ groupId, history });
-
-    if (assistantText.trim()) {
-      await store.sendMessage({
-        groupId,
-        senderId: this.agentId,
-        content: assistantText,
-        contentType: "text",
-      });
+    const lastId = unreadMessages[unreadMessages.length - 1]?.id;
+    if (lastId) {
+      await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
+
+    const { assistantText, assistantThinking } = await this.runWithTools({ groupId, history });
 
     history.push({
       role: "assistant",
@@ -310,11 +308,6 @@ class AgentRunner {
       agentId: this.agentId,
       llmHistory: JSON.stringify(historyByGroup),
     });
-
-    const lastId = unreadMessages[unreadMessages.length - 1]?.id;
-    if (lastId) {
-      await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
-    }
   }
 
   private async runWithTools(input: { groupId: UUID; history: HistoryMessage[] }) {

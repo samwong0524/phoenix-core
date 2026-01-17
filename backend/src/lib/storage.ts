@@ -20,6 +20,8 @@ function initialAgentHistory(input: { agentId: UUID; workspaceId: UUID; role: st
     `Your workspace_id is: ${input.workspaceId}.\n` +
     `Your role is: ${input.role}.\n` +
     `Act strictly as this role when replying. Be concise and helpful.\n` +
+    `Your replies are NOT automatically delivered to humans.\n` +
+    `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
     `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.`;
 
   return JSON.stringify([{ role: "system", content }]);
@@ -830,26 +832,6 @@ export const store = {
         .where(eq(messages.groupId, g.id))
         .orderBy(desc(messages.sendTime))
         .limit(1);
-
-      // Hide "observer" threads from the human sidebar:
-      // groups with >2 members, no name, human never sent, but agents exchanged messages.
-      if (
-        viewerRole === "human" &&
-        input.agentId &&
-        (g.name ?? null) === null &&
-        members.length > 2 &&
-        lastMessage[0] &&
-        lastMessage[0].senderId !== input.agentId
-      ) {
-        const humanSent = await db
-          .select({ c: dsql<number>`count(*)` })
-          .from(messages)
-          .where(and(eq(messages.groupId, g.id), eq(messages.senderId, input.agentId)))
-          .limit(1);
-        if (Number(humanSent[0]?.c ?? 0) === 0) {
-          continue;
-        }
-      }
 
       let unreadCount = 0;
       if (input.agentId) {
