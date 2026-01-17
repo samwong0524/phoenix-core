@@ -129,7 +129,9 @@ function IMPageInner() {
   const [status, setStatus] = useState<"boot" | "groups" | "messages" | "send" | "idle">("boot");
   const [error, setError] = useState<string | null>(null);
 
-  const [rawStreamPlain, setRawStreamPlain] = useState("");
+  const [contentStream, setContentStream] = useState("");
+  const [reasoningStream, setReasoningStream] = useState("");
+  const [toolStream, setToolStream] = useState("");
   const [streamBlocks, setStreamBlocks] = useState<
     Array<{ kind: string; label: string; text: string; runId: number }>
   >([]);
@@ -141,6 +143,7 @@ function IMPageInner() {
   const activeGroupIdRef = useRef<string | null>(null);
   const streamAgentIdRef = useRef<string | null>(null);
   const streamRunIdRef = useRef(0);
+  const lastToolKeyRef = useRef<string | null>(null);
   const uiEsRef = useRef<EventSource | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -315,9 +318,12 @@ function IMPageInner() {
       esRef.current?.close();
       setStreamBlocks([]);
       setRawStreamLog("");
-      setRawStreamPlain("");
+      setContentStream("");
+      setReasoningStream("");
+      setToolStream("");
       setAgentError(null);
       streamRunIdRef.current = 0;
+      lastToolKeyRef.current = null;
 
       const groupId = activeGroupIdRef.current;
       const suffix = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
@@ -334,13 +340,30 @@ function IMPageInner() {
                 : payload.data.kind;
             const chunk = payload.data.delta;
             const runId = streamRunIdRef.current;
+            if (payload.data.kind === "reasoning") {
+              console.log("----");
+              console.log(chunk || "");
+              console.log("----");
+            }
             setRawStreamLog((t) =>
               t
                 ? `${t}\n${label}: ${chunk || ""}`.trimEnd()
                 : `${label}: ${chunk || ""}`.trimEnd()
             );
             if (chunk) {
-              setRawStreamPlain((t) => t + chunk);
+              if (payload.data.kind === "content") {
+                setContentStream((t) => t + chunk);
+              } else if (payload.data.kind === "reasoning") {
+                setReasoningStream((t) => t + chunk);
+              } else {
+                const toolKey = payload.data.tool_call_id ?? payload.data.tool_call_name ?? "tool_call";
+                setToolStream((t) => {
+                  const needsSeparator = lastToolKeyRef.current !== toolKey;
+                  lastToolKeyRef.current = toolKey;
+                  const prefix = needsSeparator ? `${t ? "\n\n" : ""}${label}: ` : "";
+                  return `${t}${prefix}${chunk}`;
+                });
+              }
             }
             setStreamBlocks((prev) => {
               const next = [...prev];
@@ -357,6 +380,10 @@ function IMPageInner() {
           }
           if (payload.event === "agent.wakeup") {
             streamRunIdRef.current += 1;
+            lastToolKeyRef.current = null;
+            setContentStream("");
+            setReasoningStream("");
+            setToolStream("");
             setRawStreamLog((t) =>
               t
                 ? `${t}\nwakeup: ${payload.data.reason ?? "unknown"}`.trimEnd()
@@ -377,6 +404,10 @@ function IMPageInner() {
           if (payload.event === "agent.unread") {
             const batchCount = payload.data.batches.length;
             const msgCount = payload.data.batches.reduce((sum, b) => sum + b.messageIds.length, 0);
+            lastToolKeyRef.current = null;
+            setContentStream("");
+            setReasoningStream("");
+            setToolStream("");
             setRawStreamLog((t) =>
               t
                 ? `${t}\nunread: ${batchCount} batches, ${msgCount} messages`.trimEnd()
@@ -396,7 +427,6 @@ function IMPageInner() {
           }
           if (payload.event === "agent.done") {
             setRawStreamLog((t) => (t ? `${t}\n—` : "—"));
-            setRawStreamPlain((t) => (t ? `${t}` : ""));
             setStreamBlocks((prev) => {
               const next = [...prev];
               next.push({
@@ -407,6 +437,7 @@ function IMPageInner() {
               });
               return next;
             });
+            lastToolKeyRef.current = null;
             const groupId = activeGroupIdRef.current;
             const nextSession = loadSession();
             if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false });
@@ -997,7 +1028,9 @@ function IMPageInner() {
             onClick={() => {
               setStreamBlocks([]);
               setRawStreamLog("");
-              setRawStreamPlain("");
+              setContentStream("");
+              setReasoningStream("");
+              setToolStream("");
               setAgentError(null);
             }}
           >
@@ -1012,8 +1045,18 @@ function IMPageInner() {
           {agentError ? <div className="toast" style={{ borderColor: "#713f12", background: "rgba(113,63,18,0.25)", color: "#fde68a" }}>{agentError}</div> : null}
 
           <div className="card">
-            <div className="card-title">Realtime stream</div>
-            <div className="card-body mono">{rawStreamPlain || "—"}</div>
+            <div className="card-title">Realtime content</div>
+            <div className="card-body mono">{contentStream || "—"}</div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Realtime reasoning</div>
+            <div className="card-body mono">{reasoningStream || "—"}</div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Realtime tools</div>
+            <div className="card-body mono">{toolStream || "—"}</div>
           </div>
 
           <div className="card">
