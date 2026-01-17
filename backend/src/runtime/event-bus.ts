@@ -47,6 +47,7 @@ type ChannelState = {
   nextId: number;
   buffer: AgentEvent[];
   listeners: Set<Listener>;
+  persistQueue: Promise<void>;
 };
 
 const DEFAULT_MAX_BUFFER = 2000;
@@ -63,6 +64,7 @@ export class AgentEventBus {
       nextId: 1,
       buffer: [],
       listeners: new Set(),
+      persistQueue: Promise.resolve(),
     };
     this.channels.set(agentId, created);
     return created;
@@ -78,8 +80,10 @@ export class AgentEventBus {
     }
 
     // Best-effort persistence for cross-process/history replay (optional).
-    // This keeps the existing in-memory bus semantics while enabling Redis Streams.
-    void persistAgentEvent(agentId, evt);
+    // Serialize per-agent writes to preserve event order in Upstash.
+    channel.persistQueue = channel.persistQueue
+      .catch(() => undefined)
+      .then(() => persistAgentEvent(agentId, evt));
 
     for (const listener of channel.listeners) {
       listener(evt);
