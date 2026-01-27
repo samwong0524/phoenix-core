@@ -190,6 +190,10 @@ function IMPageInner() {
   const vizRef = useRef<HTMLDivElement | null>(null);
   const groupsRef = useRef<Group[]>([]);
   const beamTimeoutsRef = useRef<number[]>([]);
+  const refreshQueueRef = useRef<{
+    timer: number | null;
+    pending: { groups: boolean; agents: boolean; messages: boolean; llmHistory: boolean };
+  }>({ timer: null, pending: { groups: false, agents: false, messages: false, llmHistory: false } });
   const vizPanStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
 
@@ -356,17 +360,21 @@ function IMPageInner() {
     return created;
   }, [refreshAgents]);
 
-  const refreshGroups = useCallback(async (s: WorkspaceDefaults) => {
-    setStatus("groups");
+  const refreshGroups = useCallback(async (s: WorkspaceDefaults, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setStatus("groups");
     const q = new URLSearchParams({ workspaceId: s.workspaceId, agentId: s.humanAgentId });
     const { groups } = await api<{ groups: Group[] }>(`/api/groups?${q.toString()}`);
     setGroups(groups);
-    setStatus("idle");
+    if (!opts?.silent) setStatus("idle");
   }, []);
 
   const refreshMessages = useCallback(
-    async (s: WorkspaceDefaults, groupId: string, opts?: { markRead?: boolean }) => {
-      setStatus("messages");
+    async (
+      s: WorkspaceDefaults,
+      groupId: string,
+      opts?: { markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean }
+    ) => {
+      if (!opts?.silent) setStatus("messages");
       const q = new URLSearchParams();
       if (opts?.markRead ?? true) q.set("markRead", "true");
       q.set("readerId", s.humanAgentId);
@@ -375,8 +383,10 @@ function IMPageInner() {
         `/api/groups/${groupId}/messages${suffix}`
       );
       setMessages(messages);
-      setStatus("idle");
-      void refreshGroups(s);
+      if (!opts?.silent) setStatus("idle");
+      if (!opts?.skipGroupRefresh) {
+        void refreshGroups(s, { silent: opts?.silent });
+      }
       queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     },
     [refreshGroups]
@@ -415,6 +425,43 @@ function IMPageInner() {
       console.debug("[im-viz]", record);
     }
   }, []);
+
+  const scheduleWorkspaceRefresh = useCallback(
+    (opts?: { groups?: boolean; agents?: boolean; messages?: boolean; llmHistory?: boolean }) => {
+      if (!session) return;
+      const pending = refreshQueueRef.current.pending;
+      pending.groups = opts?.groups ?? true;
+      pending.agents = opts?.agents ?? true;
+      pending.messages = opts?.messages ?? true;
+      pending.llmHistory = opts?.llmHistory ?? true;
+
+      if (refreshQueueRef.current.timer !== null) return;
+      refreshQueueRef.current.timer = window.setTimeout(() => {
+        const next = refreshQueueRef.current.pending;
+        refreshQueueRef.current.pending = {
+          groups: false,
+          agents: false,
+          messages: false,
+          llmHistory: false,
+        };
+        refreshQueueRef.current.timer = null;
+
+        if (next.groups) void refreshGroups(session, { silent: true });
+        if (next.agents) void refreshAgents(session);
+        if (next.llmHistory && streamAgentIdValueRef.current) {
+          void refreshLlmHistory(streamAgentIdValueRef.current);
+        }
+        if (next.messages && activeGroupIdRef.current) {
+          void refreshMessages(session, activeGroupIdRef.current, {
+            markRead: false,
+            silent: true,
+            skipGroupRefresh: true,
+          });
+        }
+      }, 200);
+    },
+    [refreshAgents, refreshGroups, refreshLlmHistory, refreshMessages, session]
+  );
 
   const connectAgentStream = useCallback(
     (agentId: string) => {
@@ -770,12 +817,7 @@ function IMPageInner() {
       }
 
       // any change in workspace => refresh lists (cheap enough for MVP)
-      void refreshGroups(session);
-      void refreshAgents(session);
-      if (streamAgentIdValueRef.current) void refreshLlmHistory(streamAgentIdValueRef.current);
-      if (activeGroupIdRef.current) {
-        void refreshMessages(session, activeGroupIdRef.current, { markRead: false });
-      }
+      scheduleWorkspaceRefresh();
     };
     es.onerror = () => {
       // tolerate disconnects; user can refresh manually
@@ -786,9 +828,7 @@ function IMPageInner() {
     logVizDebug,
     pushBeam,
     pushVizEvent,
-    refreshAgents,
-    refreshGroups,
-    refreshLlmHistory,
+    scheduleWorkspaceRefresh,
     session,
   ]);
 
