@@ -1,7 +1,8 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Briefcase, Code2, Network, User } from "lucide-react";
 
@@ -76,6 +77,14 @@ type VizDebugEntry = {
   data: Record<string, unknown>;
 };
 
+type RightPanelId = "history" | "content" | "reasoning" | "tools";
+type RightPanelState = {
+  id: RightPanelId;
+  title: string;
+  size: number;
+  collapsed: boolean;
+};
+
 type AgentStreamEvent =
   | {
       id: number;
@@ -104,6 +113,8 @@ type AgentStreamEvent =
   | { id: number; at: number; event: "agent.error"; data: { message: string } };
 
 const SESSION_KEY = "agent-wechat.session.v1";
+const RIGHT_PANEL_MIN_HEIGHT = 120;
+const RIGHT_PANEL_HEADER_HEIGHT = 32;
 
 function loadSession(): WorkspaceDefaults | null {
   try {
@@ -176,6 +187,12 @@ function IMPageInner() {
   const [vizIsPanning, setVizIsPanning] = useState(false);
   const [agentStatusById, setAgentStatusById] = useState<Record<string, AgentStatus>>({});
   const [vizDebug, setVizDebug] = useState<VizDebugEntry[]>([]);
+  const [rightPanels, setRightPanels] = useState<RightPanelState[]>([
+    { id: "history", title: "LLM history", size: 320, collapsed: false },
+    { id: "content", title: "Realtime content", size: 220, collapsed: false },
+    { id: "reasoning", title: "Realtime reasoning", size: 220, collapsed: false },
+    { id: "tools", title: "Realtime tools", size: 200, collapsed: false },
+  ]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -979,6 +996,55 @@ function IMPageInner() {
     return "#22c55e";
   };
 
+  const toggleRightPanel = useCallback((id: RightPanelId) => {
+    setRightPanels((prev) =>
+      prev.map((panel) =>
+        panel.id === id ? { ...panel, collapsed: !panel.collapsed } : panel
+      )
+    );
+  }, []);
+
+  const handleRightPanelResizeStart = useCallback(
+    (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const first = rightPanels[index];
+      const second = rightPanels[index + 1];
+      if (!first || !second) return;
+      if (first.collapsed || second.collapsed) return;
+
+      const startY = event.clientY;
+      const startFirst = first.size;
+      const startSecond = second.size;
+      const min = RIGHT_PANEL_MIN_HEIGHT;
+
+      const onMove = (e: PointerEvent) => {
+        const delta = e.clientY - startY;
+        const total = startFirst + startSecond;
+        const nextFirst = Math.min(total - min, Math.max(min, startFirst + delta));
+        const nextSecond = total - nextFirst;
+        setRightPanels((prev) => {
+          if (!prev[index] || !prev[index + 1]) return prev;
+          if (prev[index].collapsed || prev[index + 1].collapsed) return prev;
+          const next = [...prev];
+          next[index] = { ...next[index], size: nextFirst };
+          next[index + 1] = { ...next[index + 1], size: nextSecond };
+          return next;
+        });
+      };
+
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        document.body.style.cursor = "";
+      };
+
+      document.body.style.cursor = "row-resize";
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [rightPanels]
+  );
+
   const summarizeHistoryEntry = useCallback((entry: any, index: number, opts?: { omitRole?: boolean }) => {
     const role = typeof entry?.role === "string" ? entry.role : "unknown";
     const toolCalls = Array.isArray(entry?.tool_calls) ? entry.tool_calls.length : 0;
@@ -1525,70 +1591,91 @@ function IMPageInner() {
           </button>
         </div>
 
-        <div
-          style={{
-            padding: 16,
-            overflow: "auto",
-            flex: 1,
-            minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
+        <div className="agent-sidebar-body">
           <div className="muted" style={{ fontSize: 12 }}>
             Streaming from: <span className="mono">{streamAgentId ?? "-"}</span>
           </div>
-          {agentError ? <div className="toast" style={{ borderColor: "#713f12", background: "rgba(113,63,18,0.25)", color: "#fde68a" }}>{agentError}</div> : null}
-
-          <div className="card">
-            <div className="card-title">LLM history</div>
-            <div className="card-body mono" style={{ whiteSpace: "pre-wrap" }}>
-              {Array.isArray(llmHistoryParsed) ? (
-                <div className="history-list">
-                  {llmHistoryParsed.length === 0 ? (
-                    <div className="muted">—</div>
-                  ) : (
-                    llmHistoryParsed.map((entry, idx) => (
-                      <details
-                        key={entry?.id ?? `${idx}`}
-                        className="history-item"
-                        style={{ ["--accent" as any]: historyAccent(historyRole(entry)) }}
-                      >
-                        <summary>
-                          <span className="history-role">{historyRole(entry)}</span>
-                          <span className="history-summary">
-                            {summarizeHistoryEntry(entry, idx, { omitRole: true })}
-                          </span>
-                        </summary>
-                        <div className="history-item-body">
-                          <pre>{JSON.stringify(entry, null, 2)}</pre>
-                        </div>
-                      </details>
-                    ))
-                  )}
-                </div>
-              ) : (
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                  {llmHistoryFormatted || "—"}
-                </pre>
-              )}
+          {agentError ? (
+            <div
+              className="toast"
+              style={{ borderColor: "#713f12", background: "rgba(113,63,18,0.25)", color: "#fde68a" }}
+            >
+              {agentError}
             </div>
-          </div>
+          ) : null}
 
-          <div className="card">
-            <div className="card-title">Realtime content</div>
-            <div className="card-body mono">{contentStream || "—"}</div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Realtime reasoning</div>
-            <div className="card-body mono">{reasoningStream || "—"}</div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Realtime tools</div>
-            <div className="card-body mono">{toolStream || "—"}</div>
+          <div className="agent-panels">
+            {rightPanels.map((panel, idx) => (
+              <Fragment key={panel.id}>
+                <div
+                  className={cx("agent-panel", panel.collapsed && "collapsed")}
+                  style={
+                    panel.collapsed
+                      ? { flex: `0 0 ${RIGHT_PANEL_HEADER_HEIGHT}px`, height: RIGHT_PANEL_HEADER_HEIGHT }
+                      : { flex: `1 1 ${panel.size}px`, minHeight: RIGHT_PANEL_MIN_HEIGHT }
+                  }
+                >
+                  <button
+                    className="agent-panel-header"
+                    type="button"
+                    onClick={() => toggleRightPanel(panel.id)}
+                  >
+                    <span className="agent-panel-caret">{panel.collapsed ? "▸" : "▾"}</span>
+                    <span>{panel.title}</span>
+                  </button>
+                  {!panel.collapsed ? (
+                    <div className={cx("agent-panel-body", "mono")}>
+                      {panel.id === "history" ? (
+                        Array.isArray(llmHistoryParsed) ? (
+                          <div className="history-list">
+                            {llmHistoryParsed.length === 0 ? (
+                              <div className="muted">—</div>
+                            ) : (
+                              llmHistoryParsed.map((entry, idx2) => (
+                                <details
+                                  key={entry?.id ?? `${idx2}`}
+                                  className="history-item"
+                                  style={{ ["--accent" as any]: historyAccent(historyRole(entry)) }}
+                                >
+                                  <summary>
+                                    <span className="history-role">{historyRole(entry)}</span>
+                                    <span className="history-summary">
+                                      {summarizeHistoryEntry(entry, idx2, { omitRole: true })}
+                                    </span>
+                                  </summary>
+                                  <div className="history-item-body">
+                                    <pre>{JSON.stringify(entry, null, 2)}</pre>
+                                  </div>
+                                </details>
+                              ))
+                            )}
+                          </div>
+                        ) : (
+                          <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                            {llmHistoryFormatted || "—"}
+                          </pre>
+                        )
+                      ) : panel.id === "content" ? (
+                        contentStream || "—"
+                      ) : panel.id === "reasoning" ? (
+                        reasoningStream || "—"
+                      ) : (
+                        toolStream || "—"
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+                {idx < rightPanels.length - 1 ? (
+                  <div
+                    className={cx(
+                      "agent-panel-resizer",
+                      (panel.collapsed || rightPanels[idx + 1]?.collapsed) && "disabled"
+                    )}
+                    onPointerDown={(e) => handleRightPanelResizeStart(idx, e)}
+                  />
+                ) : null}
+              </Fragment>
+            ))}
           </div>
         </div>
       </section>

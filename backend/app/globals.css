@@ -233,6 +233,86 @@ textarea {
   overflow: auto;
 }
 
+.agent-sidebar-body {
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.agent-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-panel {
+  border: 1px solid #27272a;
+  background: #050505;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-panel.collapsed .agent-panel-body {
+  display: none;
+}
+
+.agent-panel-header {
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #27272a;
+  text-align: left;
+}
+
+.agent-panel-header:hover {
+  background: #0a0a0a;
+}
+
+.agent-panel-caret {
+  font-size: 12px;
+  color: #e4e4e7;
+}
+
+.agent-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #e4e4e7;
+  white-space: pre-wrap;
+}
+
+.agent-panel-resizer {
+  height: 6px;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.agent-panel-resizer:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.agent-panel-resizer.disabled {
+  cursor: default;
+  background: transparent;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;
