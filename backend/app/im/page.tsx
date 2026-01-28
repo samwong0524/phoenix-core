@@ -90,7 +90,8 @@ type RightPanelState = {
 };
 
 // Streamdown plugins for markdown rendering
-const streamdownPlugins = [code(), mermaid()];
+// Note: code and mermaid are pre-configured plugin instances, not functions
+const streamdownPlugins = [code, mermaid];
 
 // Helper component for rendering markdown content
 function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
