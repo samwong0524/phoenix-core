@@ -215,6 +215,69 @@ textarea {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.viz-shell {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.viz-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.viz-events {
+  width: 280px;
+  max-width: 320px;
+  overflow: auto;
+  border: 1px solid #27272a;
+  border-radius: 12px;
+  background: rgba(9, 9, 11, 0.82);
+  padding: 12px;
+  font-size: 12px;
+  color: #e4e4e7;
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.45);
+  height: calc(100% - 16px);
+  margin: 8px 12px 8px 0;
+  transition: width 160ms ease, opacity 160ms ease, margin 160ms ease;
+}
+
+.viz-events.collapsed {
+  width: 0;
+  padding: 0;
+  border: none;
+  margin: 8px 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.viz-events-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid #27272a;
+  background: rgba(9, 9, 11, 0.7);
+  color: #e4e4e7;
+  cursor: pointer;
+}
+
+.viz-events-toggle:hover {
+  background: rgba(24, 24, 27, 0.9);
+}
+
+.viz-events-toggle.floating {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 2;
+}
+
 .tree-caret,
 .tree-caret-placeholder {
   width: 18px;
