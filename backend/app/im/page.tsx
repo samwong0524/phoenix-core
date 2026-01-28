@@ -5,6 +5,9 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Briefcase, Code2, Network, User } from "lucide-react";
+import { Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
+import { mermaid } from "@streamdown/mermaid";
 
 type UUID = string;
 
@@ -85,6 +88,19 @@ type RightPanelState = {
   size: number;
   collapsed: boolean;
 };
+
+// Streamdown plugins for markdown rendering
+const streamdownPlugins = [code(), mermaid()];
+
+// Helper component for rendering markdown content
+function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
+  if (!content) return <span className="muted">—</span>;
+  return (
+    <div className={className}>
+      <Streamdown plugins={streamdownPlugins}>{content}</Streamdown>
+    </div>
+  );
+}
 
 type AgentStreamEvent =
   | {
@@ -1466,7 +1482,7 @@ function IMPageInner() {
                     <div className="bubble-meta">
                       {fmtTime(m.sendTime)} • {senderRole}
                     </div>
-                    <div>{m.content}</div>
+                    <MarkdownContent content={m.content} />
                   </div>
                 </div>
               );
@@ -1933,11 +1949,11 @@ function IMPageInner() {
                           </pre>
                         )
                       ) : panel.id === "content" ? (
-                        contentStream || "—"
+                        <MarkdownContent content={contentStream} />
                       ) : panel.id === "reasoning" ? (
-                        reasoningStream || "—"
+                        <MarkdownContent content={reasoningStream} />
                       ) : (
-                        toolStream || "—"
+                        <MarkdownContent content={toolStream} />
                       )}
                     </div>
                   ) : null}
@@ -1964,6 +1980,55 @@ function IMPageInner() {
           to {
             stroke-dashoffset: 0;
           }
+        }
+        /* Streamdown markdown styles for dark theme */
+        .sd-markdown {
+          color: #e4e4e7;
+          line-height: 1.6;
+        }
+        .sd-markdown pre {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 6px;
+          padding: 12px;
+          overflow-x: auto;
+        }
+        .sd-markdown code {
+          background: #27272a;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 0.9em;
+        }
+        .sd-markdown pre code {
+          background: transparent;
+          padding: 0;
+        }
+        .sd-markdown h1, .sd-markdown h2, .sd-markdown h3,
+        .sd-markdown h4, .sd-markdown h5, .sd-markdown h6 {
+          color: #fafafa;
+          margin-top: 1em;
+          margin-bottom: 0.5em;
+        }
+        .sd-markdown a {
+          color: #38bdf8;
+        }
+        .sd-markdown blockquote {
+          border-left: 3px solid #52525b;
+          padding-left: 12px;
+          margin-left: 0;
+          color: #a1a1aa;
+        }
+        .sd-markdown table {
+          border-collapse: collapse;
+          width: 100%;
+        }
+        .sd-markdown th, .sd-markdown td {
+          border: 1px solid #27272a;
+          padding: 8px 12px;
+        }
+        .sd-markdown th {
+          background: #27272a;
         }
       `}</style>
     </div>
