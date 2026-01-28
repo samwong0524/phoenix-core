@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Briefcase, Code2, Network, User } from "lucide-react";
+import { Briefcase, ChevronDown, ChevronRight, Code2, Network, User } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { createCodePlugin } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
@@ -222,6 +222,7 @@ function IMPageInner() {
   const [midSplitRatio, setMidSplitRatio] = useState(0.55);
   const [midStackHeight, setMidStackHeight] = useState(0);
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  const [collapsedAgents, setCollapsedAgents] = useState<Record<string, boolean>>({});
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -427,6 +428,89 @@ function IMPageInner() {
     },
     [agentRoleById, session?.defaultGroupId, session?.humanAgentId]
   );
+
+  const groupByAgentId = useMemo(() => {
+    const map = new Map<string, Group>();
+    if (!session) return map;
+    for (const g of groups) {
+      if (!g.memberIds.includes(session.humanAgentId)) continue;
+      const others = g.memberIds.filter((id) => id !== session.humanAgentId);
+      if (others.length === 1) {
+        map.set(others[0], g);
+      }
+    }
+    return map;
+  }, [groups, session]);
+
+  const agentTreeRows = useMemo(() => {
+    if (!session)
+      return [] as Array<{
+        agent: AgentMeta;
+        group: Group | null;
+        depth: number;
+        hasChildren: boolean;
+        collapsed: boolean;
+        guides: boolean[];
+        isLast: boolean;
+      }>;
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    const childrenById = new Map<string, AgentMeta[]>();
+    const roots: AgentMeta[] = [];
+    const byCreatedAt = (a: AgentMeta, b: AgentMeta) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+
+    for (const agent of agents) {
+      if (agent.role === "human") continue;
+      const parentId = agent.parentId;
+      const parent = parentId && parentId !== agent.id ? byId.get(parentId) : null;
+      if (parent && parent.role !== "human" && parent.id !== agent.id) {
+        const list = childrenById.get(parent.id) ?? [];
+        list.push(agent);
+        childrenById.set(parent.id, list);
+      } else {
+        roots.push(agent);
+      }
+    }
+
+    for (const list of childrenById.values()) list.sort(byCreatedAt);
+    roots.sort(byCreatedAt);
+
+    const rows: Array<{
+      agent: AgentMeta;
+      group: Group | null;
+      depth: number;
+      hasChildren: boolean;
+      collapsed: boolean;
+      guides: boolean[];
+      isLast: boolean;
+    }> = [];
+    const walk = (agent: AgentMeta, depth: number, guides: boolean[], isLast: boolean) => {
+      const children = childrenById.get(agent.id) ?? [];
+      const collapsed = !!collapsedAgents[agent.id];
+      rows.push({
+        agent,
+        group: groupByAgentId.get(agent.id) ?? null,
+        depth,
+        hasChildren: children.length > 0,
+        collapsed,
+        guides,
+        isLast,
+      });
+      if (collapsed) return;
+      const nextGuides = [...guides, !isLast];
+      children.forEach((child, index) => {
+        walk(child, depth + 1, nextGuides, index === children.length - 1);
+      });
+    };
+    roots.forEach((root, index) => walk(root, 0, [], index === roots.length - 1));
+    return rows;
+  }, [agents, collapsedAgents, groupByAgentId, session]);
+
+  const extraGroups = useMemo(() => {
+    if (!session) return groups;
+    const mappedIds = new Set(Array.from(groupByAgentId.values()).map((g) => g.id));
+    return groups.filter((g) => !mappedIds.has(g.id));
+  }, [groupByAgentId, groups, session]);
 
   const streamAgentId = useMemo(() => {
     if (!session) return null;
@@ -1355,6 +1439,112 @@ function IMPageInner() {
 
   const title = getGroupLabel(activeGroup);
 
+  const toggleAgentCollapsed = useCallback((agentId: string) => {
+    setCollapsedAgents((prev) => ({ ...prev, [agentId]: !prev[agentId] }));
+  }, []);
+
+  const renderGroupRow = (
+    g: Group,
+    tree?: {
+      depth: number;
+      hasChildren: boolean;
+      collapsed: boolean;
+      agentId: string;
+      guides: boolean[];
+      isLast: boolean;
+    }
+  ) => {
+    const guideWidth = 14;
+    const caretWidth = 18;
+    const caretGap = 6;
+    const depth = tree?.depth ?? 0;
+    const prefixWidth = depth > 0 ? depth * guideWidth + guideWidth : 0;
+    const previewIndent = tree ? prefixWidth + caretWidth + caretGap : 0;
+    return (
+      <button
+        key={g.id}
+        className={cx("row", g.id === activeGroupId && "active")}
+        onClick={() => {
+          setActiveGroupId(g.id);
+        }}
+        style={{ paddingLeft: 16 }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {tree && tree.depth > 0 ? (
+              <span className="tree-prefix">
+                {tree.guides.map((hasLine, idx) => (
+                  <span
+                    key={`${g.id}-guide-${idx}`}
+                    className={hasLine ? "tree-line" : "tree-blank"}
+                  />
+                ))}
+                <span className={tree.isLast ? "tree-elbow last" : "tree-elbow"} />
+              </span>
+            ) : null}
+            {tree?.hasChildren ? (
+              <button
+                type="button"
+                className="tree-caret"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleAgentCollapsed(tree.agentId);
+                }}
+                title={tree.collapsed ? "展开" : "收起"}
+              >
+                {tree.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+              </button>
+            ) : tree ? (
+              <span className="tree-caret-placeholder" />
+            ) : null}
+            <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {getGroupLabel(g)}
+            </div>
+          </div>
+          {g.unreadCount > 0 && <span className="badge">{g.unreadCount}</span>}
+        </div>
+        {g.lastMessage ? (
+          <div
+            className="muted"
+            style={{
+              fontSize: 12,
+              marginTop: 6,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              marginLeft: previewIndent,
+            }}
+          >
+            {g.lastMessage.content}
+          </div>
+        ) : null}
+        {g.contextTokens > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
+              <span className="muted">Context</span>
+              <span className="mono" style={{ color: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e" }}>
+                {g.contextTokens.toLocaleString()}
+                <span className="muted" style={{ marginLeft: 4 }}>/ {tokenLimit.toLocaleString()}</span>
+              </span>
+            </div>
+            <div style={{ height: 3, background: "#27272a", borderRadius: 2, overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%`,
+                  background: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e",
+                  borderRadius: 2,
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="app dark">
       <aside className="panel panel-left">
@@ -1405,53 +1595,26 @@ function IMPageInner() {
         </div>
 
         <div className="list">
-          {groups.length === 0 ? (
+          {agentTreeRows.length === 0 && extraGroups.length === 0 ? (
             <div style={{ padding: 16 }} className="muted">
               No groups yet.
             </div>
           ) : (
-            groups.map((g) => (
-              <button
-                key={g.id}
-                className={cx("row", g.id === activeGroupId && "active")}
-                onClick={() => {
-                  setActiveGroupId(g.id);
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-	                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-	                    {getGroupLabel(g)}
-	                  </div>
-                  {g.unreadCount > 0 && <span className="badge">{g.unreadCount}</span>}
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {g.lastMessage ? g.lastMessage.content : "—"}
-                </div>
-                {/* Token usage bar - current context window */}
-                {g.contextTokens > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
-                      <span className="muted">Context</span>
-                      <span className="mono" style={{ color: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e" }}>
-                        {g.contextTokens.toLocaleString()}
-                        <span className="muted" style={{ marginLeft: 4 }}>/ {tokenLimit.toLocaleString()}</span>
-                      </span>
-                    </div>
-                    <div style={{ height: 3, background: "#27272a", borderRadius: 2, overflow: "hidden" }}>
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%`,
-                          background: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e",
-                          borderRadius: 2,
-                          transition: "width 0.3s ease",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </button>
-            ))
+            <>
+              {agentTreeRows.map(({ agent, group, depth, hasChildren, collapsed, guides, isLast }) =>
+                group
+                  ? renderGroupRow(group, {
+                      depth,
+                      hasChildren,
+                      collapsed,
+                      agentId: agent.id,
+                      guides,
+                      isLast,
+                    })
+                  : null
+              )}
+              {extraGroups.map((g) => renderGroupRow(g))}
+            </>
           )}
         </div>
       </aside>

@@ -62,6 +62,8 @@ textarea {
   border-right-width: 1px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel-mid {
@@ -146,6 +148,7 @@ textarea {
 .list {
   overflow: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .row {
@@ -210,6 +213,79 @@ textarea {
 
 .mid-resizer:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.tree-caret,
+.tree-caret-placeholder {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #a1a1aa;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tree-caret:hover {
+  color: #e4e4e7;
+}
+
+.tree-caret-placeholder {
+  cursor: default;
+}
+
+.tree-prefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tree-line,
+.tree-blank,
+.tree-elbow {
+  display: inline-block;
+  width: 14px;
+  height: 22px;
+  position: relative;
+  flex: 0 0 14px;
+}
+
+.tree-line::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: -8px;
+  bottom: -8px;
+  width: 1px;
+  background: hsl(var(--border));
+}
+
+.tree-elbow::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: -8px;
+  bottom: -8px;
+  width: 1px;
+  background: hsl(var(--border));
+}
+
+.tree-elbow.last::before {
+  bottom: 50%;
+}
+
+.tree-elbow::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: hsl(var(--border));
 }
 
 .bubble {
