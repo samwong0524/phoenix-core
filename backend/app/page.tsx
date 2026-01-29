@@ -5,6 +5,9 @@ import { store } from "@/lib/storage";
 import ClearDbButton from "./_components/clear-db";
 import CreateWorkspace from "./_components/create-workspace";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function HomePage() {
   let workspaces:
     | Array<{ id: string; name: string; createdAt: string }>
