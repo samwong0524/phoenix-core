@@ -42,6 +42,10 @@ const AGENT_TOOLS = [
             type: "string",
             description: "Role name for the new agent, e.g. coder/researcher/reviewer",
           },
+          guidance: {
+            type: "string",
+            description: "Extra system guidance to seed the new agent.",
+          },
         },
         required: ["role"],
       },
@@ -506,8 +510,9 @@ class AgentRunner {
     }
 
     if (name === "create") {
-      const args = safeJsonParse<{ role?: string }>(input.call.argumentsText, {});
+      const args = safeJsonParse<{ role?: string; guidance?: string }>(input.call.argumentsText, {});
       const role = (args.role ?? "").trim();
+      const guidance = (args.guidance ?? "").trim();
       if (!role) {
         emitToolDone(false);
         return { ok: false, error: "Missing role" };
@@ -517,6 +522,7 @@ class AgentRunner {
         workspaceId,
         creatorId: this.agentId,
         role,
+        guidance,
       });
       this.ensureRunner(created.agentId);
       getWorkspaceUIBus().emit(workspaceId, {

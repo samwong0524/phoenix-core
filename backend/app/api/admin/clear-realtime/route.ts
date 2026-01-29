@@ -15,7 +15,7 @@ export async function POST() {
   ];
 
   if (keys.length > 0) {
-    await redis.del(...keys);
+    await redis.del(keys);
   }
 
   return Response.json({ ok: true, deleted: keys.length });

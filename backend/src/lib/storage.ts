@@ -13,7 +13,12 @@ function uuid(): UUID {
   return crypto.randomUUID();
 }
 
-function initialAgentHistory(input: { agentId: UUID; workspaceId: UUID; role: string }) {
+function initialAgentHistory(input: {
+  agentId: UUID;
+  workspaceId: UUID;
+  role: string;
+  guidance?: string;
+}) {
   const content =
     `You are an agent in an IM system.\n` +
     `Your agent_id is: ${input.agentId}.\n` +
@@ -24,7 +29,15 @@ function initialAgentHistory(input: { agentId: UUID; workspaceId: UUID; role: st
     `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
     `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.`;
 
-  return JSON.stringify([{ role: "system", content }]);
+  const history: Array<{ role: "system"; content: string }> = [{ role: "system", content }];
+  const guidance = (input.guidance ?? "").trim();
+  if (guidance) {
+    history.push({
+      role: "system",
+      content: `Additional instructions:\n${guidance}`,
+    });
+  }
+  return JSON.stringify(history);
 }
 
 async function emitDbWrite(input: {
@@ -209,6 +222,7 @@ export const store = {
     role: string;
     parentId?: UUID | null;
     llmHistory?: string;
+    guidance?: string;
   }) {
     const db = getDb();
     const agentId = uuid();
@@ -226,7 +240,14 @@ export const store = {
       workspaceId: input.workspaceId,
       role: input.role,
       parentId: input.parentId ?? null,
-      llmHistory: input.llmHistory ?? initialAgentHistory({ agentId, workspaceId: input.workspaceId, role: input.role }),
+      llmHistory:
+        input.llmHistory ??
+        initialAgentHistory({
+          agentId,
+          workspaceId: input.workspaceId,
+          role: input.role,
+          guidance: input.guidance,
+        }),
       createdAt,
     });
 
@@ -488,7 +509,12 @@ export const store = {
     return result;
   },
 
-  async createSubAgentWithP2P(input: { workspaceId: UUID; creatorId: UUID; role: string }) {
+  async createSubAgentWithP2P(input: {
+    workspaceId: UUID;
+    creatorId: UUID;
+    role: string;
+    guidance?: string;
+  }) {
     const db = getDb();
     const createdAt = now();
     const agentId = uuid();
@@ -514,6 +540,7 @@ export const store = {
           agentId,
           workspaceId: input.workspaceId,
           role: input.role,
+          guidance: input.guidance,
         }),
         createdAt,
       });
