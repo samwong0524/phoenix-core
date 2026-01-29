@@ -615,13 +615,46 @@ class AgentRunner {
       if (!memberIds.includes(this.agentId)) {
         memberIds.push(this.agentId);
       }
-      const created = await store.createGroup({ workspaceId, memberIds, name: args.name ?? undefined });
-      getWorkspaceUIBus().emit(workspaceId, {
-        event: "ui.group.created",
-        data: { workspaceId, group: { id: created.id, name: created.name, memberIds } },
-      });
+      let groupId = "";
+      let groupName: string | null = args.name ?? null;
+      if (memberIds.length === 2) {
+        const existing = await store.findLatestExactP2PGroupId({
+          workspaceId,
+          memberA: memberIds[0]!,
+          memberB: memberIds[1]!,
+          preferredName: args.name ?? null,
+        });
+        groupId =
+          (await store.mergeDuplicateExactP2PGroups({
+            workspaceId,
+            memberA: memberIds[0]!,
+            memberB: memberIds[1]!,
+            preferredName: args.name ?? null,
+          })) ??
+          (
+            await store.createGroup({
+              workspaceId,
+              memberIds,
+              name: args.name ?? undefined,
+            })
+          ).id;
+        if (!existing) {
+          getWorkspaceUIBus().emit(workspaceId, {
+            event: "ui.group.created",
+            data: { workspaceId, group: { id: groupId, name: groupName, memberIds } },
+          });
+        }
+      } else {
+        const created = await store.createGroup({ workspaceId, memberIds, name: args.name ?? undefined });
+        groupId = created.id;
+        groupName = created.name;
+        getWorkspaceUIBus().emit(workspaceId, {
+          event: "ui.group.created",
+          data: { workspaceId, group: { id: groupId, name: groupName, memberIds } },
+        });
+      }
       emitToolDone(true);
-      return { ok: true, groupId: created.id, name: created.name };
+      return { ok: true, groupId, name: groupName };
     }
 
     if (name === "send_group_message") {
@@ -691,29 +724,16 @@ class AgentRunner {
         return { ok: false, error: "Missing content" };
       }
 
-      const existing = await store.findLatestExactP2PGroupId({
+      const delivered = await store.sendDirectMessage({
         workspaceId,
-        memberA: this.agentId,
-        memberB: toAgentId,
-        preferredName: null,
-      });
-      const groupId =
-        existing ??
-        (
-          await store.createGroup({
-            workspaceId,
-            memberIds: [this.agentId, toAgentId],
-          })
-        ).id;
-      const channel = existing ? "reuse_existing_group" : "new_group";
-
-      const result = await store.sendMessage({
-        groupId,
-        senderId: this.agentId,
+        fromId: this.agentId,
+        toId: toAgentId,
         content,
         contentType: args.contentType ?? "text",
+        groupName: null,
       });
-
+      const groupId = delivered.groupId;
+      const channel = delivered.channel;
       const directMembers = await store.listGroupMemberIds({ groupId });
       getWorkspaceUIBus().emit(workspaceId, {
         event: "ui.message.created",
@@ -721,7 +741,7 @@ class AgentRunner {
           workspaceId,
           groupId,
           memberIds: directMembers,
-          message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
+          message: { id: delivered.messageId, senderId: this.agentId, sendTime: delivered.sendTime },
         },
       });
 
@@ -729,7 +749,13 @@ class AgentRunner {
       this.wakeAgent(toAgentId);
 
       emitToolDone(true);
-      return { ok: true, channel, groupId, messageId: result.id, sendTime: result.sendTime };
+      return {
+        ok: true,
+        channel,
+        groupId,
+        messageId: delivered.messageId,
+        sendTime: delivered.sendTime,
+      };
     }
 
     if (name === "get_group_messages") {

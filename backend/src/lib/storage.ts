@@ -761,6 +761,7 @@ export const store = {
     ].filter(Boolean) as UUID[];
 
     let groupId: UUID;
+    let channel: "new_thread" | "new_group" | "reuse_existing_group";
     if (input.newThread === true) {
       groupId = (
         await this.createGroup({
@@ -769,7 +770,14 @@ export const store = {
           name: input.groupName ?? undefined,
         })
       ).id;
+      channel = "new_thread";
     } else if (memberIds.length === 2) {
+      const existing = await this.findLatestExactP2PGroupId({
+        workspaceId: input.workspaceId,
+        memberA: memberIds[0]!,
+        memberB: memberIds[1]!,
+        preferredName: input.groupName ?? null,
+      });
       groupId =
         (await this.mergeDuplicateExactP2PGroups({
           workspaceId: input.workspaceId,
@@ -784,6 +792,7 @@ export const store = {
             name: input.groupName ?? undefined,
           })
         ).id;
+      channel = existing ? "reuse_existing_group" : "new_group";
     } else {
       const existing = await this.findLatestExactGroupId({
         workspaceId: input.workspaceId,
@@ -798,6 +807,7 @@ export const store = {
             name: input.groupName ?? undefined,
           })
         ).id;
+      channel = existing ? "reuse_existing_group" : "new_group";
     }
 
     const message = await this.sendMessage({
@@ -807,7 +817,7 @@ export const store = {
       contentType: input.contentType ?? "text",
     });
 
-    return { groupId, messageId: message.id, sendTime: message.sendTime };
+    return { groupId, messageId: message.id, sendTime: message.sendTime, channel };
   },
 
   async getGroupWorkspaceId(input: { groupId: UUID }): Promise<UUID> {
