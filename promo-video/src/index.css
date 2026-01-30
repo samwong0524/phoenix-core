@@ -39,6 +39,7 @@ body {
   width: 100%;
   display: grid;
   grid-template-columns: 320px 1fr 420px;
+  transform-style: preserve-3d;
 }
 
 .panel {
