@@ -34,6 +34,12 @@ export function getDemoState(frame: number, fps: number): DemoState {
   const grandBCreate = childBBusyEnd + toFrames(fps, 0.2);
   const messageToGrandA = grandACreate + toFrames(fps, 0.2);
   const messageToGrandB = grandBCreate + toFrames(fps, 0.2);
+  const grandABusyEnd = messageToGrandA + toFrames(fps, 1);
+  const grandBBusyEnd = messageToGrandB + toFrames(fps, 1);
+  const greatACreate = grandABusyEnd + toFrames(fps, 0.2);
+  const greatBCreate = grandBBusyEnd + toFrames(fps, 0.2);
+  const messageToGreatA = greatACreate + toFrames(fps, 0.2);
+  const messageToGreatB = greatBCreate + toFrames(fps, 0.2);
 
   const groups: DemoGroup[] = [
     {
@@ -96,6 +102,8 @@ export function getDemoState(frame: number, fps: number): DemoState {
     { id: "child_b", label: "child-2", x: 360, y: 160, appearAt: childBCreate },
     { id: "grand_a", label: "child-1a", x: 440, y: 30, appearAt: grandACreate },
     { id: "grand_b", label: "child-2a", x: 440, y: 190, appearAt: grandBCreate },
+    { id: "great_a", label: "child-1a-1", x: 520, y: 10, appearAt: greatACreate },
+    { id: "great_b", label: "child-2a-1", x: 520, y: 210, appearAt: greatBCreate },
   ];
 
   const edges: DemoEdge[] = [
@@ -104,6 +112,8 @@ export function getDemoState(frame: number, fps: number): DemoState {
     { id: "e3", from: "assistant", to: "child_b", appearAt: childBCreate },
     { id: "e4", from: "child_a", to: "grand_a", appearAt: grandACreate },
     { id: "e5", from: "child_b", to: "grand_b", appearAt: grandBCreate },
+    { id: "e6", from: "grand_a", to: "great_a", appearAt: greatACreate },
+    { id: "e7", from: "grand_b", to: "great_b", appearAt: greatBCreate },
   ];
 
   const graphNodes: DemoNode[] = [
@@ -113,6 +123,8 @@ export function getDemoState(frame: number, fps: number): DemoState {
     { id: "child_b", label: "child-2", x: 180, y: 140, appearAt: childBCreate },
     { id: "grand_a", label: "child-1a", x: 420, y: -220, appearAt: grandACreate },
     { id: "grand_b", label: "child-2a", x: 420, y: 220, appearAt: grandBCreate },
+    { id: "great_a", label: "child-1a-1", x: 660, y: -300, appearAt: greatACreate },
+    { id: "great_b", label: "child-2a-1", x: 660, y: 300, appearAt: greatBCreate },
   ];
 
   const graphEdges: DemoEdge[] = [
@@ -121,6 +133,8 @@ export function getDemoState(frame: number, fps: number): DemoState {
     { id: "ge3", from: "assistant", to: "child_b", appearAt: childBCreate },
     { id: "ge4", from: "child_a", to: "grand_a", appearAt: grandACreate },
     { id: "ge5", from: "child_b", to: "grand_b", appearAt: grandBCreate },
+    { id: "ge6", from: "grand_a", to: "great_a", appearAt: greatACreate },
+    { id: "ge7", from: "grand_b", to: "great_b", appearAt: greatBCreate },
   ];
 
   const edgePulses: DemoEdgePulse[] = [
@@ -159,12 +173,28 @@ export function getDemoState(frame: number, fps: number): DemoState {
       start: messageToGrandB,
       end: messageToGrandB + toFrames(fps, 0.6),
     },
+    {
+      id: "p6",
+      from: "grand_a",
+      to: "great_a",
+      start: messageToGreatA,
+      end: messageToGreatA + toFrames(fps, 0.6),
+    },
+    {
+      id: "p7",
+      from: "grand_b",
+      to: "great_b",
+      start: messageToGreatB,
+      end: messageToGreatB + toFrames(fps, 0.6),
+    },
   ];
 
   const nodeStatusTimeline: DemoNodeStatus[] = [
     { id: "assistant", start: assistantBusyStart, end: assistantBusyEnd },
     { id: "child_a", start: messageToChildA, end: childABusyEnd },
     { id: "child_b", start: messageToChildB, end: childBBusyEnd },
+    { id: "grand_a", start: messageToGrandA, end: grandABusyEnd },
+    { id: "grand_b", start: messageToGrandB, end: grandBBusyEnd },
   ];
 
   const historyItems: DemoPanelItem[] = [
@@ -203,6 +233,8 @@ export function getDemoState(frame: number, fps: number): DemoState {
     ["child_b", "coder"],
     ["grand_a", "assistant"],
     ["grand_b", "assistant"],
+    ["great_a", "assistant"],
+    ["great_b", "assistant"],
   ]);
 
   const historyEntries = historyItems.map((item) => ({ id: item.id, role: "assistant", content: item.label }));
