@@ -35,6 +35,9 @@ const CONTENT: any = {
     hero: {
       title: "极简 Multi-Agent 原语",
       subtitle: "如果人类社会可以通过“微信”这种简单的 IM 界面组织起数十亿人的协作，那么 AI Agents 也不应该被锁死在复杂的图结构（DAG）中。",
+      cta: "查看 GitHub",
+      photo: "产品截图",
+      video: "演示视频"
     },
     s1: {
       title: "01. 核心原语",
@@ -76,6 +79,9 @@ const CONTENT: any = {
     hero: {
       title: "MINIMAL PRIMITIVES.",
       subtitle: "If human society can organize billions of people through simple IM interfaces like WeChat, AI Agents should not be locked in complex graph structures (DAGs).",
+      cta: "View on GitHub",
+      photo: "Product Photo",
+      video: "Demo Video"
     },
     s1: {
       title: "01. The Primitives",
@@ -169,9 +175,39 @@ export default function WhitepaperHome() {
             {t.hero.subtitle}
           </p>
           <div className="flex gap-4">
-            <Link href="/demo" className="px-8 py-3 bg-white text-black font-bold hover:bg-zinc-200 transition-all flex items-center gap-2">
-              RUN SIMULATION <ArrowRight size={18} />
-            </Link>
+            <a
+              href="https://github.com/chmod777john/agent-wechat"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-8 py-3 bg-white text-black font-bold hover:bg-zinc-200 transition-all flex items-center gap-2"
+            >
+              {t.hero.cta} <ArrowRight size={18} />
+            </a>
+          </div>
+
+          <div className="mt-16 grid gap-8 md:grid-cols-2">
+            <div className="rounded-2xl border border-zinc-900 bg-zinc-950/60 overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+              <div className="px-4 py-3 text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-900">
+                {t.hero.photo}
+              </div>
+              <img
+                src="/hero.jpg"
+                alt="Swarm IDE Screenshot"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="rounded-2xl border border-zinc-900 bg-zinc-950/60 overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+              <div className="px-4 py-3 text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-900">
+                {t.hero.video}
+              </div>
+              <video
+                src="https://github.com/user-attachments/assets/4ebd88c6-bbdb-4714-87a5-54d1fed08db8"
+                controls
+                playsInline
+                poster="/hero.jpg"
+                className="w-full h-full object-cover"
+              />
+            </div>
           </div>
         </motion.div>
 
