@@ -467,9 +467,7 @@ class AgentRunner {
       history.push({
         role: "user",
         content:
-          "你刚才没有调用 send_* 发送消息。\n" +
-          "如果本轮确实不需要发送，请明确回复“无需发送”。\n" +
-          "否则请使用 send_group_message 或 send_direct_message 发送。",
+          "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。",
       });
 
       const followup = await this.runWithTools({
