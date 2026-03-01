@@ -23,7 +23,7 @@
 - Streaming graph that visualizes collaboration in real time
 
 ## Comparison
-It is worth noting that this project **independently** introduced swarm mode **before** both Kimi-Swarm and Claude Team. Claude Team in particular shows striking overlap: with careful comparison, its core ideas (dynamic delegation and human-to-any-agent communication) **align closely** with this project’s design. To some extent, this reflects the advanced perspective behind the design. Building this independently at a time when static LangGraph workflows were dominant was notably ahead of its time. The whitepaper was timestamped on-chain back then; if you want to verify this directly, see the [on-chain timestamp](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).
+~~It is worth noting that this project **independently** introduced swarm mode **before** both Kimi-Swarm and Claude Team. Claude Team in particular shows striking overlap: with careful comparison, its core ideas (dynamic delegation and human-to-any-agent communication) **align closely** with this project’s design. To some extent, this reflects the advanced perspective behind the design. Building this independently at a time when static LangGraph workflows were dominant was notably ahead of its time. The whitepaper was timestamped on-chain back then; if you want to verify this directly, see the [on-chain timestamp](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).~~
 
 | Item | Kimi-Swarm | Claude Agent Team | Swarm-IDE |
 | --- | --- | --- | --- |

@@ -28,7 +28,7 @@ https://zhuanlan.zhihu.com/p/2000736341479138182
 - 流式 graph 动态展现协作状态
 
 ## 对比
-值得注意的是，本项目在 Kimi-Swarm 和 Claude Team **之前**就已经**独立**提出蜂群模式。尤其是 Claude Team，仔细对比会发现它的主要思想(动态派遣、人与任意 Agent 通信)和本项目的设计**不谋而合**，某程度说明作者的眼光和设计已达到先进水平，在静态 LangGraph 框架大行其道的当时能独立做出来这样的设计，相当超前了。笔者当时就把项目白皮书放到区块链了，如果担心笔者在吹牛，可亲自去看[区块链链时间戳](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).
+~~值得注意的是，本项目在 Kimi-Swarm 和 Claude Team **之前**就已经**独立**提出蜂群模式。尤其是 Claude Team，仔细对比会发现它的主要思想(动态派遣、人与任意 Agent 通信)和本项目的设计**不谋而合**，某程度说明作者的眼光和设计已达到先进水平，在静态 LangGraph 框架大行其道的当时能独立做出来这样的设计，相当超前了。笔者当时就把项目白皮书放到区块链了，如果担心笔者在吹牛，可亲自去看[区块链链时间戳](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).~~
 
 | 对比项 | Kimi-Swarm | Claude Agent Team | Swarm-IDE |
 | --- | --- | --- | --- |
