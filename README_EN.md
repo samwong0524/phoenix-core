@@ -22,6 +22,19 @@
 - WeChat‑style chat UI: intervene at any depth anytime
 - Streaming graph that visualizes collaboration in real time
 
+## Comparison
+It is worth noting that this project **independently** introduced swarm mode **before** both Kimi-Swarm and Claude Team. Claude Team in particular shows striking overlap: with careful comparison, its core ideas (dynamic delegation and human-to-any-agent communication) **align closely** with this project’s design. To some extent, this reflects the advanced perspective behind the design. Building this independently at a time when static LangGraph workflows were dominant was notably ahead of its time. The whitepaper was timestamped on-chain back then; if you want to verify this directly, see the [on-chain timestamp](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).
+
+| Item | Kimi-Swarm | Claude Agent Team | Swarm-IDE |
+| --- | --- | --- | --- |
+| Nested agents | ❌ | ❌ | ✅ |
+| Inter-agent messaging | ❌ | ✅ | ✅ |
+| Human to sub-agent messaging | ❌ | ✅ | ✅ |
+| Group chat mode | ❌ | ❌ | ✅ |
+| Visualization | ❌ | ❌ | ✅ |
+| Open source | ❌ | ❌ | ✅ |
+| Release date | 2026.1.27 | 2026.2.6 | 2026.1.2 |
+
 ## UI Design
 - Graph shows swarm topology and live communication links
 - Tree‑structured multi‑level dialogs: talk to any agent like a chat app (even deep ones)
@@ -65,6 +78,5 @@ https://zhuanlan.zhihu.com/p/2000736341479138182
 
 ## Environment Variables
 The backend reads `backend/.env.local`:
-- `GLM_API_KEY` / `GLM_MODEL` (I use **GLM CodingPlan**)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` (I use **OpenRouter Kimi 2.5**)
 - See `backend/.env.example` for all fields
