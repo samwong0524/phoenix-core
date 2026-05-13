@@ -1,8 +1,8 @@
-# Swarm-IDE: Self-Organizing Agent Swarm
+# Phoenix-Core: Self-Organizing Agent Swarm
 
 <p align="center">
-  <a href="https://star-history.com/#chmod777john/agent-wechat&Date">
-    <img src="https://api.star-history.com/svg?repos=chmod777john/agent-wechat&type=Date" alt="Star History Chart" width="520" />
+  <a href="https://star-history.com/#samwong0524/phoenix-core&Date">
+    <img src="https://api.star-history.com/svg?repos=samwong0524/phoenix-core&type=Date" alt="Star History Chart" width="520" />
   </a>
 </p>
 
@@ -25,7 +25,7 @@
 ## Comparison
 ~~It is worth noting that this project **independently** introduced swarm mode **before** both Kimi-Swarm and Claude Team. Claude Team in particular shows striking overlap: with careful comparison, its core ideas (dynamic delegation and human-to-any-agent communication) **align closely** with this project’s design. To some extent, this reflects the advanced perspective behind the design. Building this independently at a time when static LangGraph workflows were dominant was notably ahead of its time. The whitepaper was timestamped on-chain back then; if you want to verify this directly, see the [on-chain timestamp](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).~~
 
-| Item | Kimi-Swarm | Claude Agent Team | Swarm-IDE |
+| Item | Kimi-Swarm | Claude Agent Team | Phoenix-Core |
 | --- | --- | --- | --- |
 | Nested agents | ❌ | ❌ | ✅ |
 | Inter-agent messaging | ❌ | ✅ | ✅ |
@@ -55,7 +55,7 @@ With only these two capabilities, any structure can be built.
 
 ## How to Run
 ```
-cd agent-wechat
+cd phoenix-core
 cd backend
 
 cp .env.example .env.local

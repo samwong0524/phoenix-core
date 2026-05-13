@@ -1,10 +1,10 @@
-# Swarm-IDE: 自组织的Agent蜂群
+# Phoenix-Core: 自组织的Agent蜂群
 
 [English README](./README_EN.md)
 
 <p align="center">
-  <a href="https://star-history.com/#chmod777john/agent-wechat&Date">
-    <img src="https://api.star-history.com/svg?repos=chmod777john/agent-wechat&type=Date" alt="Star History Chart" width="520" />
+  <a href="https://star-history.com/#samwong0524/phoenix-core&Date">
+    <img src="https://api.star-history.com/svg?repos=samwong0524/phoenix-core&type=Date" alt="Star History Chart" width="520" />
   </a>
 </p>
 
@@ -30,7 +30,7 @@ https://zhuanlan.zhihu.com/p/2000736341479138182
 ## 对比
 ~~值得注意的是，本项目在 Kimi-Swarm 和 Claude Team **之前**就已经**独立**提出蜂群模式。尤其是 Claude Team，仔细对比会发现它的主要思想(动态派遣、人与任意 Agent 通信)和本项目的设计**不谋而合**，某程度说明作者的眼光和设计已达到先进水平，在静态 LangGraph 框架大行其道的当时能独立做出来这样的设计，相当超前了。笔者当时就把项目白皮书放到区块链了，如果担心笔者在吹牛，可亲自去看[区块链链时间戳](https://viewblock.io/arweave/tx/BJ5GVAQBUXtv21jIEvuyqTsv9t93j7rlG47Lwcmtdu8).~~
 
-| 对比项 | Kimi-Swarm | Claude Agent Team | Swarm-IDE |
+| 对比项 | Kimi-Swarm | Claude Agent Team | Phoenix-Core |
 | --- | --- | --- | --- |
 | 支持嵌套 Agent | ❌ | ❌ | ✅ |
 | 支持 Agent 间通信 | ❌ | ✅ | ✅ |
@@ -66,11 +66,11 @@ https://zhuanlan.zhihu.com/p/2000736341479138182
 
 本系统要运行在 Linux 上，如果你没有 Linux 系统的话或者装环境遇到问题的话，可以尝试使用 GitHub 提供的免费虚拟机。点击链接创建虚拟机后，就可以执行后面的指令了
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&repo=chmod777john/swarm-ide)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&repo=samwong0524/phoenix-core)
 
 ### 方式二：本地运行
 ```
-cd swarm-ide
+cd phoenix-core
 cd backend
 
 cp .env.example .env.local
