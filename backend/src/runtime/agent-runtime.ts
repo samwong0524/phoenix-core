@@ -32,6 +32,46 @@ type ToolCall = {
 
 const SKILLS_MARKER = "[skills:loaded]";
 const SEND_TOOL_NAMES = new Set(["send", "send_group_message", "send_direct_message"]);
+const CREATE_TOOL_NAMES = new Set(["create"]);
+const REPLY_TOOL_NAMES = new Set(["send_group_message"]);
+
+/**
+ * Per-group agent turn counter for cascade prevention.
+ * Incremented each time an agent sends a message to the group.
+ * Reset to 0 when a human sends a message.
+ * When >= MAX_AGENT_TURNS, non-human-triggered processing is skipped.
+ */
+const MAX_AGENT_TURNS = 10;
+const groupAgentTurnCount = new Map<string, number>();
+
+function historyHasTool(history: HistoryMessage[], toolNames: Set<string>): boolean {
+  return history.some((msg) => {
+    if (msg.role !== "assistant" || !msg.tool_calls) return false;
+    const calls = msg.tool_calls as Array<{ function?: { name?: string } }>;
+    return calls.some((tc) => toolNames.has(tc.function?.name ?? ""));
+  });
+}
+
+function historyHasSuccessfulTool(history: HistoryMessage[], toolNames: Set<string>): boolean {
+  for (let i = 0; i < history.length; i++) {
+    const msg = history[i];
+    if (msg.role !== "assistant" || !msg.tool_calls) continue;
+    const calls = msg.tool_calls as Array<{ function?: { name?: string } }>;
+    const hasMatching = calls.some((tc) => toolNames.has(tc.function?.name ?? ""));
+    if (!hasMatching) continue;
+    // Check the following tool result(s) for ok:true
+    for (let j = i + 1; j < history.length; j++) {
+      if (history[j].role !== "tool") break;
+      try {
+        const parsed = JSON.parse(history[j].content);
+        if (parsed.ok === true) return true;
+      } catch {
+        // skip parse errors
+      }
+    }
+  }
+  return false;
+}
 
 async function buildSkillsBlock(): Promise<string> {
   try {
@@ -75,7 +115,7 @@ const AGENT_TOOLS = [
     function: {
       name: "create",
       description:
-        "Create a sub-agent with the given role for delegation. Returns {agentId}.",
+        "Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -121,7 +161,7 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "list_agents",
-      description: "List all agents in the current workspace (ids + roles).",
+      description: "List all agents in the current workspace (role names + UUIDs). Use role names (not UUIDs) when calling create_group or add_group_members.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
     },
   },
@@ -154,12 +194,12 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "list_group_members",
-      description: "List member ids for a group.",
+      description: "List member ids for a group. groupId must be the group UUID (not the name).",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          groupId: { type: "string", description: "Target group id" },
+          groupId: { type: "string", description: "The group UUID (not the name)" },
         },
         required: ["groupId"],
       },
@@ -169,12 +209,12 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "create_group",
-      description: "Create a group with the given member ids.",
+      description: "Create a group with the given member role names. Returns the groupId (UUID) and name. Use this groupId when calling send_group_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          memberIds: { type: "array", items: { type: "string" } },
+          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs" },
           name: { type: "string" },
         },
         required: ["memberIds"],
@@ -186,16 +226,16 @@ const AGENT_TOOLS = [
     function: {
       name: "add_group_members",
       description:
-        "Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members.",
+        "Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members. groupId must be the group UUID (not the name).",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          groupId: { type: "string", description: "Group ID to add members to" },
+          groupId: { type: "string", description: "The group UUID (not the name) to add members to" },
           memberIds: {
             type: "array",
             items: { type: "string" },
-            description: "Agent IDs to add",
+            description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs",
           },
         },
         required: ["groupId", "memberIds"],
@@ -211,7 +251,7 @@ const AGENT_TOOLS = [
         type: "object",
         additionalProperties: false,
         properties: {
-          groupId: { type: "string" },
+          groupId: { type: "string", description: "The group UUID (not the group name). Use create_group or list_groups to get it." },
           content: { type: "string" },
           contentType: { type: "string" },
         },
@@ -491,7 +531,10 @@ class AgentRunner {
           `- After completing an action, send ONE confirmation message and then stop.\n` +
           `- Do not reply to your own messages or to messages that are just echoing/agreeing with you.\n` +
           `- If there is no new external input (from a human or a different agent), stay silent and wait.\n` +
-          `- One action → one message → done. Do not send status updates that repeat what others already said.` +
+          `- One action → one message → done. Do not send status updates that repeat what others already said.\n` +
+          `- When creating groups as part of a human's request, include the human in the group so they can see progress and coordination.\n` +
+          `- CRITICAL: After completing a human's request (e.g. creating agents), you MUST send a confirmation to the human's group using send_group_message. Do NOT just send messages to other agents without replying to the human.\n` +
+          `- CRITICAL: Only use the "create" tool when a human explicitly asks you to create a new agent. Never create sub-agents on your own initiative or as a "suggestion" to the human.\n` +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
     } else if (skillsBlock && !hasSkills) {
@@ -508,11 +551,41 @@ class AgentRunner {
       await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
 
-    const { assistantText, assistantThinking, didSend } = await this.runWithTools({
+    // === Cascade prevention: per-group agent turn counter ===
+    const senderRoles = await Promise.all(
+      unreadMessages.map((m) => store.getAgentRole({ agentId: m.senderId }).catch(() => null))
+    );
+    const hasHumanSender = senderRoles.some((r) => r === "human");
+
+    if (hasHumanSender) {
+      groupAgentTurnCount.set(groupId, 0);
+    } else {
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      if (currentTurns >= MAX_AGENT_TURNS) {
+        // Mark as read but skip LLM: too many agent-only turns since last human message
+        return;
+      }
+
+      // Skip if all unread messages are from agents (no human) and none directly references this agent
+      const myAgentId = this.agentId;
+      const hasDirectMention = unreadMessages.some(
+        (m) => m.content.includes(myAgentId)
+      );
+      if (!hasDirectMention) {
+        return;
+      }
+    }
+
+    let { assistantText, assistantThinking, didSend } = await this.runWithTools({
       groupId,
       workspaceId,
       history,
     });
+
+    if (didSend) {
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      groupAgentTurnCount.set(groupId, currentTurns + 1);
+    }
 
     history.push({
       role: "assistant",
@@ -520,11 +593,47 @@ class AgentRunner {
       reasoning_content: assistantThinking || undefined,
     });
 
-    if (!didSend && !this.interruptRequested) {
+    // If the message was from a human and agent didn't send any reply, auto-send the assistant text
+    if (hasHumanSender && !didSend && assistantText.trim() && !this.interruptRequested) {
+      const members = await store.listGroupMemberIds({ groupId });
+      const result = await store.sendMessage({
+        groupId,
+        senderId: this.agentId,
+        content: assistantText,
+        contentType: "text",
+      });
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.message.created",
+        data: {
+          workspaceId,
+          groupId,
+          memberIds: members,
+          message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
+        },
+      });
+      for (const memberId of members) {
+        if (memberId === this.agentId) continue;
+        const role = await store.getAgentRole({ agentId: memberId }).catch(() => null);
+        if (role === "human" || role === null) continue;
+        this.ensureRunner(memberId);
+        this.wakeAgent(memberId);
+      }
+      didSend = true;
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      groupAgentTurnCount.set(groupId, currentTurns + 1);
+    }
+
+    // If agent created agents but never successfully replied to a group, force a reminder
+    const needsHumanReply = historyHasTool(history, CREATE_TOOL_NAMES) &&
+      !historyHasSuccessfulTool(history, REPLY_TOOL_NAMES);
+
+    if ((!didSend || needsHumanReply) && !this.interruptRequested) {
+      const reminder = needsHumanReply
+        ? "Reminder: 你创建了 agent 但未回复人类。请用 send_group_message 向对话群组发送确认消息。"
+        : "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。";
       history.push({
         role: "user",
-        content:
-          "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。",
+        content: reminder,
       });
 
       const followup = await this.runWithTools({
@@ -630,6 +739,36 @@ class AgentRunner {
     }
 
     return { assistantText, assistantThinking, didSend };
+  }
+
+  /**
+   * Resolve an array of agent identifiers to UUIDs.
+   * Values that are already valid UUIDs pass through unchanged.
+   * Non-UUID values are looked up by agent role in the given agent list.
+   * Unresolvable values are silently dropped.
+   */
+  private resolveAgentIds(
+    ids: string[],
+    agents: Array<{ id: UUID; role: string }>
+  ): UUID[] {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = new Set<UUID>(agents.map((a) => a.id));
+    const roleIndex = new Map<string, UUID>();
+    for (const a of agents) {
+      if (!roleIndex.has(a.role)) {
+        roleIndex.set(a.role, a.id);
+      }
+    }
+    const result: UUID[] = [];
+    for (const id of ids) {
+      if (uuidRe.test(id) && validUuids.has(id)) {
+        result.push(id);
+      } else {
+        const uuid = roleIndex.get(id);
+        if (uuid) result.push(uuid);
+      }
+    }
+    return result;
   }
 
   private async executeToolCall(input: { groupId: UUID; call: ToolCall }) {
@@ -848,13 +987,16 @@ class AgentRunner {
 
     if (name === "create_group") {
       const args = safeJsonParse<{ memberIds?: string[]; name?: string }>(input.call.argumentsText, {});
-      const memberIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
+      let memberIds = this.resolveAgentIds(
+        (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean),
+        await store.listAgentsMeta({ workspaceId })
+      );
       if (memberIds.length < 2) {
         emitToolDone(false);
         return { ok: false, error: "memberIds must have >= 2 members" };
       }
       if (!memberIds.includes(this.agentId)) {
-        memberIds.push(this.agentId);
+        memberIds = [...memberIds, this.agentId];
       }
       let groupId = "";
       let groupName: string | null = args.name ?? null;
@@ -901,11 +1043,12 @@ class AgentRunner {
     if (name === "add_group_members") {
       const args = safeJsonParse<{ groupId?: string; memberIds?: string[] }>(input.call.argumentsText, {});
       const groupId = (args.groupId ?? "").trim();
-      const memberIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
+      const rawIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
       if (!groupId) {
         emitToolDone(false);
         return { ok: false, error: "Missing groupId" };
       }
+      const memberIds = this.resolveAgentIds(rawIds, await store.listAgentsMeta({ workspaceId }));
       if (memberIds.length === 0) {
         emitToolDone(false);
         return { ok: false, error: "memberIds must have >= 1 member" };
@@ -946,14 +1089,27 @@ class AgentRunner {
         return { ok: false, error: "Missing content" };
       }
 
-      const members = await store.listGroupMemberIds({ groupId });
+      // Resolve groupId: if not a valid UUID, try to find by name
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolvedGroupId = groupId;
+      if (!uuidRegex.test(groupId)) {
+        const groups = await store.listGroups({ workspaceId, agentId: this.agentId });
+        const found = groups.find((g) => g.name === groupId);
+        if (!found) {
+          emitToolDone(false);
+          return { ok: false, error: `Group not found: "${groupId}". Use the group UUID, not the name.` };
+        }
+        resolvedGroupId = found.id;
+      }
+
+      const members = await store.listGroupMemberIds({ groupId: resolvedGroupId });
       if (!members.includes(this.agentId)) {
         emitToolDone(false);
         return { ok: false, error: "Access denied" };
       }
 
       const result = await store.sendMessage({
-        groupId,
+        groupId: resolvedGroupId,
         senderId: this.agentId,
         content,
         contentType: args.contentType ?? "text",
@@ -963,7 +1119,7 @@ class AgentRunner {
         event: "ui.message.created",
         data: {
           workspaceId,
-          groupId,
+          groupId: resolvedGroupId,
           memberIds: members,
           message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
         },
