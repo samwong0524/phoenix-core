@@ -10,6 +10,7 @@ import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStream
 import { formatSkillPrompt, getSkillLoader } from "./skill-loader";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
 type UUID = string;
@@ -31,6 +32,7 @@ type ToolCall = {
 };
 
 const SKILLS_MARKER = "[skills:loaded]";
+const SOUL_MARKER = "[soul:loaded]";
 const SEND_TOOL_NAMES = new Set(["send", "send_group_message", "send_direct_message"]);
 const CREATE_TOOL_NAMES = new Set(["create"]);
 const REPLY_TOOL_NAMES = new Set(["send_group_message"]);
@@ -85,6 +87,30 @@ async function buildSkillsBlock(): Promise<string> {
   } catch {
     return "";
   }
+}
+
+let cachedSoul: string | null = null;
+let soulLoadAttempted = false;
+
+async function loadSoulMd(): Promise<string> {
+  if (soulLoadAttempted) return cachedSoul ?? "";
+  soulLoadAttempted = true;
+  try {
+    const soulPath = path.resolve(process.cwd(), "src/prompts/soul.md");
+    const content = await fs.readFile(soulPath, "utf-8");
+    cachedSoul = `${SOUL_MARKER}\n\n${content.trim()}`;
+    return cachedSoul;
+  } catch {
+    cachedSoul = "";
+    return "";
+  }
+}
+
+function historyHasSoul(history: HistoryMessage[]) {
+  return history.some(
+    (msg) =>
+      msg.role === "system" && typeof msg.content === "string" && msg.content.includes(SOUL_MARKER)
+  );
 }
 
 function historyHasSkills(history: HistoryMessage[]) {
@@ -510,7 +536,9 @@ class AgentRunner {
     const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
     const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
     const skillsBlock = await buildSkillsBlock();
+    const soulBlock = await loadSoulMd();
     const hasSkills = historyHasSkills(history);
+    const hasSoul = historyHasSoul(history);
 
     if (history.length === 0) {
       const role = agent.role;
@@ -526,19 +554,16 @@ class AgentRunner {
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
           `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
           `If you need to run shell commands, use the bash tool.\n` +
-          `## Communication Rules\n` +
-          `- Say things ONCE. Do not repeat the same information in multiple messages with different formatting or emojis.\n` +
-          `- After completing an action, send ONE confirmation message and then stop.\n` +
-          `- Do not reply to your own messages or to messages that are just echoing/agreeing with you.\n` +
-          `- If there is no new external input (from a human or a different agent), stay silent and wait.\n` +
-          `- One action → one message → done. Do not send status updates that repeat what others already said.\n` +
-          `- When creating groups as part of a human's request, include the human in the group so they can see progress and coordination.\n` +
-          `- CRITICAL: After completing a human's request (e.g. creating agents), you MUST send a confirmation to the human's group using send_group_message. Do NOT just send messages to other agents without replying to the human.\n` +
-          `- CRITICAL: Only use the "create" tool when a human explicitly asks you to create a new agent. Never create sub-agents on your own initiative or as a "suggestion" to the human.\n` +
+          (soulBlock ? `\n\n${soulBlock}` : "") +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
-    } else if (skillsBlock && !hasSkills) {
-      history.push({ role: "system", content: skillsBlock });
+    } else {
+      if (soulBlock && !hasSoul) {
+        history.push({ role: "system", content: soulBlock });
+      }
+      if (skillsBlock && !hasSkills) {
+        history.push({ role: "system", content: skillsBlock });
+      }
     }
 
     const userContent = unreadMessages
