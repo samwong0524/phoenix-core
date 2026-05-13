@@ -14,6 +14,12 @@ export type UIEvent =
   | {
       id: number;
       at: number;
+      event: "ui.group.member_added";
+      data: { workspaceId: string; groupId: string; addedMemberIds: string[]; memberIds: string[] };
+    }
+  | {
+      id: number;
+      at: number;
       event: "ui.message.created";
       data: {
         workspaceId: string;

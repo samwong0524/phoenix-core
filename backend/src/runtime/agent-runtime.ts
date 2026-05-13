@@ -184,6 +184,27 @@ const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "add_group_members",
+      description:
+        "Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "Group ID to add members to" },
+          memberIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Agent IDs to add",
+          },
+        },
+        required: ["groupId", "memberIds"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "send_group_message",
       description: "Send a message to a group.",
       parameters: {
@@ -276,11 +297,12 @@ function getGlmConfig() {
   return { apiKey, baseUrl, model };
 }
 
-type LlmProvider = "glm" | "openrouter";
+type LlmProvider = "glm" | "openrouter" | "ollama";
 
 function getLlmProvider(): LlmProvider {
   const raw = (process.env.LLM_PROVIDER ?? "glm").toLowerCase();
   if (raw === "openrouter" || raw === "open-router" || raw === "or") return "openrouter";
+  if (raw === "ollama" || raw === "o" || raw === "local") return "ollama";
   return "glm";
 }
 
@@ -308,11 +330,20 @@ function getOpenRouterConfig() {
   return { apiKey, baseUrl, model, httpReferer, appTitle };
 }
 
+function getOllamaConfig() {
+  const baseUrl = normalizeOpenRouterUrl(
+    process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1/chat/completions"
+  );
+  const model = process.env.OLLAMA_MODEL ?? "qwen3:8b";
+  return { baseUrl, model };
+}
+
 class AgentRunner {
   private wake = createDeferred<void>();
   private started = false;
   private running = false;
   private interruptRequested = false;
+  private static readonly MAX_PROCESS_ITERATIONS = 3;
 
   constructor(
     private readonly agentId: UUID,
@@ -396,8 +427,11 @@ class AgentRunner {
     const role = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
     if (role === "human" || role === null) return;
     if (this.consumeInterruptRequest()) return;
+    let iterations = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) return;
+      iterations++;
       if (this.consumeInterruptRequest()) return;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
       if (batches.length === 0) return;
@@ -450,8 +484,14 @@ class AgentRunner {
           `Act strictly as this role when replying. Be concise and helpful.\n` +
           `Your replies are NOT automatically delivered to humans.\n` +
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
-          `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.\n` +
-          `If you need to run shell commands, use the bash tool.` +
+          `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
+          `If you need to run shell commands, use the bash tool.\n` +
+          `## Communication Rules\n` +
+          `- Say things ONCE. Do not repeat the same information in multiple messages with different formatting or emojis.\n` +
+          `- After completing an action, send ONE confirmation message and then stop.\n` +
+          `- Do not reply to your own messages or to messages that are just echoing/agreeing with you.\n` +
+          `- If there is no new external input (from a human or a different agent), stay silent and wait.\n` +
+          `- One action → one message → done. Do not send status updates that repeat what others already said.` +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
     } else if (skillsBlock && !hasSkills) {
@@ -858,6 +898,38 @@ class AgentRunner {
       return { ok: true, groupId, name: groupName };
     }
 
+    if (name === "add_group_members") {
+      const args = safeJsonParse<{ groupId?: string; memberIds?: string[] }>(input.call.argumentsText, {});
+      const groupId = (args.groupId ?? "").trim();
+      const memberIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
+      if (!groupId) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing groupId" };
+      }
+      if (memberIds.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "memberIds must have >= 1 member" };
+      }
+      const existingMembers = await store.listGroupMemberIds({ groupId });
+      if (!existingMembers.includes(this.agentId)) {
+        emitToolDone(false);
+        return { ok: false, error: "Access denied" };
+      }
+      const newMembers = memberIds.filter((id) => !existingMembers.includes(id));
+      if (newMembers.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "All specified members are already in the group" };
+      }
+      await store.addGroupMembers({ groupId, userIds: newMembers });
+      const allMembers = await store.listGroupMemberIds({ groupId });
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.group.member_added",
+        data: { workspaceId, groupId, addedMemberIds: newMembers, memberIds: allMembers },
+      });
+      emitToolDone(true);
+      return { ok: true, groupId, addedMembers: newMembers };
+    }
+
     if (name === "send_group_message") {
       const args = safeJsonParse<{ groupId?: string; content?: string; contentType?: string }>(
         input.call.argumentsText,
@@ -993,6 +1065,9 @@ class AgentRunner {
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
     const provider = getLlmProvider();
+    if (provider === "ollama") {
+      return this.callOllamaStreaming(history, ctx);
+    }
     if (provider === "openrouter") {
       return this.callOpenRouterStreaming(history, ctx);
     }
@@ -1300,6 +1375,160 @@ class AgentRunner {
         });
       } catch {
         // Best effort - don't fail if token tracking fails
+      }
+    }
+
+    return {
+      assistantText,
+      assistantThinking,
+      toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
+      finishReason: finalState.finishReason,
+    };
+  }
+
+  private async callOllamaStreaming(
+    history: HistoryMessage[],
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ) {
+    const { baseUrl, model } = getOllamaConfig();
+
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.start",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+      },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "start",
+    });
+
+    const tools = await getAgentTools();
+    const payload: Record<string, unknown> = {
+      messages: mapOpenRouterMessages(history),
+      model,
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    if (tools.length > 0) {
+      payload.tools = tools;
+      payload.tool_choice = "auto";
+    }
+
+    const requestBody = JSON.stringify(payload);
+    void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
+
+    const upstream = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => "");
+      throw new Error(`Ollama upstream error: ${upstream.status} ${text}`);
+    }
+
+    const assembler = new OpenAIStreamAssembler();
+    let prev = assembler.snapshot();
+    let assistantText = "";
+    let assistantThinking = "";
+
+    for await (const evt of parseSSEJsonLines(upstream.body)) {
+      const state = assembler.push(evt as any);
+
+      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
+      const contentDelta = state.content.slice(prev.content.length);
+      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
+
+      if (reasoningDelta) {
+        assistantThinking += reasoningDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "reasoning", delta: reasoningDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "reasoning",
+          delta: reasoningDelta,
+        });
+      }
+
+      if (contentDelta) {
+        assistantText += contentDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "content", delta: contentDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "content",
+          delta: contentDelta,
+        });
+      }
+
+      for (const delta of toolCallDeltas) {
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: {
+            kind: "tool_calls",
+            delta: delta.delta,
+            tool_call_id: delta.tool_call_id,
+            tool_call_name: delta.tool_call_name,
+          },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "tool_calls",
+          delta: delta.delta,
+          tool_call_id: delta.tool_call_id,
+          tool_call_name: delta.tool_call_name,
+        });
+      }
+
+      prev = state;
+    }
+
+    this.bus.emit(this.agentId, {
+      event: "agent.done",
+      data: { finishReason: prev.finishReason ?? undefined },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "done",
+      finishReason: prev.finishReason ?? null,
+    });
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.done",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+        finishReason: prev.finishReason ?? undefined,
+      },
+    });
+
+    const finalState = assembler.snapshot();
+
+    if (finalState.usage && finalState.usage.totalTokens > 0) {
+      try {
+        await store.setGroupContextTokens({
+          groupId: ctx.groupId,
+          tokens: finalState.usage.totalTokens,
+        });
+      } catch {
+        // Best effort
       }
     }
 
