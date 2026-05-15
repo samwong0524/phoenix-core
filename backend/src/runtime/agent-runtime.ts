@@ -36,7 +36,48 @@ type ToolCall = {
 };
 
 const SKILLS_MARKER = "[skills:loaded]";
+const SOUL_MARKER = "[soul:loaded]";
 const SEND_TOOL_NAMES = new Set(["send", "send_group_message", "send_direct_message"]);
+const CREATE_TOOL_NAMES = new Set(["create"]);
+const REPLY_TOOL_NAMES = new Set(["send_group_message"]);
+
+/**
+ * Per-group agent turn counter for cascade prevention.
+ * Incremented each time an agent sends a message to the group.
+ * Reset to 0 when a human sends a message.
+ * When >= MAX_AGENT_TURNS, non-human-triggered processing is skipped.
+ */
+const MAX_AGENT_TURNS = 10;
+const groupAgentTurnCount = new Map<string, number>();
+
+function historyHasTool(history: HistoryMessage[], toolNames: Set<string>): boolean {
+  return history.some((msg) => {
+    if (msg.role !== "assistant" || !msg.tool_calls) return false;
+    const calls = msg.tool_calls as Array<{ function?: { name?: string } }>;
+    return calls.some((tc) => toolNames.has(tc.function?.name ?? ""));
+  });
+}
+
+function historyHasSuccessfulTool(history: HistoryMessage[], toolNames: Set<string>): boolean {
+  for (let i = 0; i < history.length; i++) {
+    const msg = history[i];
+    if (msg.role !== "assistant" || !msg.tool_calls) continue;
+    const calls = msg.tool_calls as Array<{ function?: { name?: string } }>;
+    const hasMatching = calls.some((tc) => toolNames.has(tc.function?.name ?? ""));
+    if (!hasMatching) continue;
+    // Check the following tool result(s) for ok:true
+    for (let j = i + 1; j < history.length; j++) {
+      if (history[j].role !== "tool") break;
+      try {
+        const parsed = JSON.parse(history[j].content);
+        if (parsed.ok === true) return true;
+      } catch {
+        // skip parse errors
+      }
+    }
+  }
+  return false;
+}
 
 async function buildSkillsBlock(role?: string): Promise<string> {
   try {
@@ -64,6 +105,30 @@ async function buildSkillsBlock(role?: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+let cachedSoul: string | null = null;
+let soulLoadAttempted = false;
+
+async function loadSoulMd(): Promise<string> {
+  if (soulLoadAttempted) return cachedSoul ?? "";
+  soulLoadAttempted = true;
+  try {
+    const soulPath = path.resolve(process.cwd(), "src/prompts/soul.md");
+    const content = await fs.readFile(soulPath, "utf-8");
+    cachedSoul = `${SOUL_MARKER}\n\n${content.trim()}`;
+    return cachedSoul;
+  } catch {
+    cachedSoul = "";
+    return "";
+  }
+}
+
+function historyHasSoul(history: HistoryMessage[]) {
+  return history.some(
+    (msg) =>
+      msg.role === "system" && typeof msg.content === "string" && msg.content.includes(SOUL_MARKER)
+  );
 }
 
 function historyHasSkills(history: HistoryMessage[]) {
@@ -118,7 +183,7 @@ const AGENT_TOOLS = [
     function: {
       name: "create",
       description:
-        "Create a sub-agent with the given role for delegation. Returns {agentId}.",
+        "Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -184,7 +249,7 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "list_agents",
-      description: "List all agents in the current workspace (ids + roles).",
+      description: "List all agents in the current workspace (role names + UUIDs). Use role names (not UUIDs) when calling create_group or add_group_members.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
     },
   },
@@ -217,12 +282,12 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "list_group_members",
-      description: "List member ids for a group.",
+      description: "List member ids for a group. groupId must be the group UUID (not the name).",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          groupId: { type: "string", description: "Target group id" },
+          groupId: { type: "string", description: "The group UUID (not the name)" },
         },
         required: ["groupId"],
       },
@@ -232,15 +297,36 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "create_group",
-      description: "Create a group with the given member ids.",
+      description: "Create a group with the given member role names. Returns the groupId (UUID) and name. Use this groupId when calling send_group_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          memberIds: { type: "array", items: { type: "string" } },
+          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs" },
           name: { type: "string" },
         },
         required: ["memberIds"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_group_members",
+      description:
+        "Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members. groupId must be the group UUID (not the name).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "The group UUID (not the name) to add members to" },
+          memberIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs",
+          },
+        },
+        required: ["groupId", "memberIds"],
       },
     },
   },
@@ -253,7 +339,7 @@ const AGENT_TOOLS = [
         type: "object",
         additionalProperties: false,
         properties: {
-          groupId: { type: "string" },
+          groupId: { type: "string", description: "The group UUID (not the group name). Use create_group or list_groups to get it." },
           content: { type: "string" },
           contentType: { type: "string" },
         },
@@ -425,12 +511,13 @@ function getGlmConfig() {
   return { apiKey, baseUrl, model };
 }
 
-type LlmProvider = "glm" | "openrouter" | "anthropic";
+type LlmProvider = "glm" | "openrouter" | "ollama" | "anthropic";
 
 function getLlmProvider(): LlmProvider {
   const raw = (process.env.LLM_PROVIDER ?? "glm").toLowerCase();
   if (raw === "openrouter" || raw === "open-router" || raw === "or") return "openrouter";
   if (raw === "anthropic" || raw === "anthropic-compatible") return "anthropic";
+  if (raw === "ollama" || raw === "o" || raw === "local") return "ollama";
   return "glm";
 }
 
@@ -470,11 +557,20 @@ function getAnthropicConfig() {
   return { apiKey, baseUrl, model };
 }
 
+function getOllamaConfig() {
+  const baseUrl = normalizeOpenRouterUrl(
+    process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1/chat/completions"
+  );
+  const model = process.env.OLLAMA_MODEL ?? "qwen3:8b";
+  return { baseUrl, model };
+}
+
 class AgentRunner {
   private wake = createDeferred<void>();
   private started = false;
   private running = false;
   private interruptRequested = false;
+  private static readonly MAX_PROCESS_ITERATIONS = 3;
 
   constructor(
     private readonly agentId: UUID,
@@ -558,8 +654,11 @@ class AgentRunner {
     const role = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
     if (role === "human" || role === null) return;
     if (this.consumeInterruptRequest()) return;
+    let iterations = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) return;
+      iterations++;
       if (this.consumeInterruptRequest()) return;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
       if (batches.length === 0) return;
@@ -644,7 +743,9 @@ class AgentRunner {
     const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
     const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
     const skillsBlock = await buildSkillsBlock();
+    const soulBlock = await loadSoulMd();
     const hasSkills = historyHasSkills(history);
+    const hasSoul = historyHasSoul(history);
 
     if (history.length === 0) {
       const role = agent.role;
@@ -665,13 +766,18 @@ class AgentRunner {
           `Act strictly as this role when replying. Be concise and helpful.\n` +
           `Your replies are NOT automatically delivered to humans.\n` +
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
-          `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.\n` +
+          `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
           `If you need to run shell commands, use the bash tool.` +
           workflowContext +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
-    } else if (skillsBlock && !hasSkills) {
-      history.push({ role: "system", content: skillsBlock });
+    } else {
+      if (soulBlock && !hasSoul) {
+        history.push({ role: "system", content: soulBlock });
+      }
+      if (skillsBlock && !hasSkills) {
+        history.push({ role: "system", content: skillsBlock });
+      }
     }
 
     const userContent = unreadMessages
@@ -681,11 +787,41 @@ class AgentRunner {
 
     const lastId = unreadMessages[unreadMessages.length - 1]?.id;
 
-    const { assistantText, assistantThinking, didSend } = await this.runWithTools({
+    // === Cascade prevention: per-group agent turn counter ===
+    const senderRoles = await Promise.all(
+      unreadMessages.map((m) => store.getAgentRole({ agentId: m.senderId }).catch(() => null))
+    );
+    const hasHumanSender = senderRoles.some((r) => r === "human");
+
+    if (hasHumanSender) {
+      groupAgentTurnCount.set(groupId, 0);
+    } else {
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      if (currentTurns >= MAX_AGENT_TURNS) {
+        // Mark as read but skip LLM: too many agent-only turns since last human message
+        return;
+      }
+
+      // Skip if all unread messages are from agents (no human) and none directly references this agent
+      const myAgentId = this.agentId;
+      const hasDirectMention = unreadMessages.some(
+        (m) => m.content.includes(myAgentId)
+      );
+      if (!hasDirectMention) {
+        return;
+      }
+    }
+
+    let { assistantText, assistantThinking, didSend } = await this.runWithTools({
       groupId,
       workspaceId,
       history,
     });
+
+    if (didSend) {
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      groupAgentTurnCount.set(groupId, currentTurns + 1);
+    }
 
     history.push({
       role: "assistant",
@@ -693,11 +829,47 @@ class AgentRunner {
       reasoning_content: assistantThinking || undefined,
     });
 
-    if (!didSend && !this.interruptRequested) {
+    // If the message was from a human and agent didn't send any reply, auto-send the assistant text
+    if (hasHumanSender && !didSend && assistantText.trim() && !this.interruptRequested) {
+      const members = await store.listGroupMemberIds({ groupId });
+      const result = await store.sendMessage({
+        groupId,
+        senderId: this.agentId,
+        content: assistantText,
+        contentType: "text",
+      });
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.message.created",
+        data: {
+          workspaceId,
+          groupId,
+          memberIds: members,
+          message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
+        },
+      });
+      for (const memberId of members) {
+        if (memberId === this.agentId) continue;
+        const role = await store.getAgentRole({ agentId: memberId }).catch(() => null);
+        if (role === "human" || role === null) continue;
+        this.ensureRunner(memberId);
+        this.wakeAgent(memberId);
+      }
+      didSend = true;
+      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+      groupAgentTurnCount.set(groupId, currentTurns + 1);
+    }
+
+    // If agent created agents but never successfully replied to a group, force a reminder
+    const needsHumanReply = historyHasTool(history, CREATE_TOOL_NAMES) &&
+      !historyHasSuccessfulTool(history, REPLY_TOOL_NAMES);
+
+    if ((!didSend || needsHumanReply) && !this.interruptRequested) {
+      const reminder = needsHumanReply
+        ? "Reminder: 你创建了 agent 但未回复人类。请用 send_group_message 向对话群组发送确认消息。"
+        : "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。";
       history.push({
         role: "user",
-        content:
-          "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。",
+        content: reminder,
       });
 
       const followup = await this.runWithTools({
@@ -810,6 +982,36 @@ class AgentRunner {
     }
 
     return { assistantText, assistantThinking, didSend };
+  }
+
+  /**
+   * Resolve an array of agent identifiers to UUIDs.
+   * Values that are already valid UUIDs pass through unchanged.
+   * Non-UUID values are looked up by agent role in the given agent list.
+   * Unresolvable values are silently dropped.
+   */
+  private resolveAgentIds(
+    ids: string[],
+    agents: Array<{ id: UUID; role: string }>
+  ): UUID[] {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = new Set<UUID>(agents.map((a) => a.id));
+    const roleIndex = new Map<string, UUID>();
+    for (const a of agents) {
+      if (!roleIndex.has(a.role)) {
+        roleIndex.set(a.role, a.id);
+      }
+    }
+    const result: UUID[] = [];
+    for (const id of ids) {
+      if (uuidRe.test(id) && validUuids.has(id)) {
+        result.push(id);
+      } else {
+        const uuid = roleIndex.get(id);
+        if (uuid) result.push(uuid);
+      }
+    }
+    return result;
   }
 
   private async executeToolCall(input: { groupId: UUID; call: ToolCall }) {
@@ -1071,13 +1273,16 @@ class AgentRunner {
 
     if (name === "create_group") {
       const args = safeJsonParse<{ memberIds?: string[]; name?: string }>(input.call.argumentsText, {});
-      const memberIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
+      let memberIds = this.resolveAgentIds(
+        (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean),
+        await store.listAgentsMeta({ workspaceId })
+      );
       if (memberIds.length < 2) {
         emitToolDone(false);
         return { ok: false, error: "memberIds must have >= 2 members" };
       }
       if (!memberIds.includes(this.agentId)) {
-        memberIds.push(this.agentId);
+        memberIds = [...memberIds, this.agentId];
       }
       let groupId = "";
       let groupName: string | null = args.name ?? null;
@@ -1121,6 +1326,39 @@ class AgentRunner {
       return { ok: true, groupId, name: groupName };
     }
 
+    if (name === "add_group_members") {
+      const args = safeJsonParse<{ groupId?: string; memberIds?: string[] }>(input.call.argumentsText, {});
+      const groupId = (args.groupId ?? "").trim();
+      const rawIds = (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean);
+      if (!groupId) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing groupId" };
+      }
+      const memberIds = this.resolveAgentIds(rawIds, await store.listAgentsMeta({ workspaceId }));
+      if (memberIds.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "memberIds must have >= 1 member" };
+      }
+      const existingMembers = await store.listGroupMemberIds({ groupId });
+      if (!existingMembers.includes(this.agentId)) {
+        emitToolDone(false);
+        return { ok: false, error: "Access denied" };
+      }
+      const newMembers = memberIds.filter((id) => !existingMembers.includes(id));
+      if (newMembers.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "All specified members are already in the group" };
+      }
+      await store.addGroupMembers({ groupId, userIds: newMembers });
+      const allMembers = await store.listGroupMemberIds({ groupId });
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.group.member_added",
+        data: { workspaceId, groupId, addedMemberIds: newMembers, memberIds: allMembers },
+      });
+      emitToolDone(true);
+      return { ok: true, groupId, addedMembers: newMembers };
+    }
+
     if (name === "send_group_message") {
       const args = safeJsonParse<{ groupId?: string; content?: string; contentType?: string }>(
         input.call.argumentsText,
@@ -1137,14 +1375,27 @@ class AgentRunner {
         return { ok: false, error: "Missing content" };
       }
 
-      const members = await store.listGroupMemberIds({ groupId });
+      // Resolve groupId: if not a valid UUID, try to find by name
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolvedGroupId = groupId;
+      if (!uuidRegex.test(groupId)) {
+        const groups = await store.listGroups({ workspaceId, agentId: this.agentId });
+        const found = groups.find((g) => g.name === groupId);
+        if (!found) {
+          emitToolDone(false);
+          return { ok: false, error: `Group not found: "${groupId}". Use the group UUID, not the name.` };
+        }
+        resolvedGroupId = found.id;
+      }
+
+      const members = await store.listGroupMemberIds({ groupId: resolvedGroupId });
       if (!members.includes(this.agentId)) {
         emitToolDone(false);
         return { ok: false, error: "Access denied" };
       }
 
       const result = await store.sendMessage({
-        groupId,
+        groupId: resolvedGroupId,
         senderId: this.agentId,
         content,
         contentType: args.contentType ?? "text",
@@ -1154,7 +1405,7 @@ class AgentRunner {
         event: "ui.message.created",
         data: {
           workspaceId,
-          groupId,
+          groupId: resolvedGroupId,
           memberIds: members,
           message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
         },
@@ -1460,6 +1711,9 @@ class AgentRunner {
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
     const provider = getLlmProvider();
+    if (provider === "ollama") {
+      return this.callOllamaStreaming(history, ctx);
+    }
     if (provider === "openrouter") {
       return this.callOpenRouterStreaming(history, ctx);
     }
@@ -1947,6 +2201,160 @@ class AgentRunner {
         });
       } catch {
         // Best effort - don't fail if token tracking fails
+      }
+    }
+
+    return {
+      assistantText,
+      assistantThinking,
+      toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
+      finishReason: finalState.finishReason,
+    };
+  }
+
+  private async callOllamaStreaming(
+    history: HistoryMessage[],
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ) {
+    const { baseUrl, model } = getOllamaConfig();
+
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.start",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+      },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "start",
+    });
+
+    const tools = await getAgentTools();
+    const payload: Record<string, unknown> = {
+      messages: mapOpenRouterMessages(history),
+      model,
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    if (tools.length > 0) {
+      payload.tools = tools;
+      payload.tool_choice = "auto";
+    }
+
+    const requestBody = JSON.stringify(payload);
+    void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
+
+    const upstream = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => "");
+      throw new Error(`Ollama upstream error: ${upstream.status} ${text}`);
+    }
+
+    const assembler = new OpenAIStreamAssembler();
+    let prev = assembler.snapshot();
+    let assistantText = "";
+    let assistantThinking = "";
+
+    for await (const evt of parseSSEJsonLines(upstream.body)) {
+      const state = assembler.push(evt as any);
+
+      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
+      const contentDelta = state.content.slice(prev.content.length);
+      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
+
+      if (reasoningDelta) {
+        assistantThinking += reasoningDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "reasoning", delta: reasoningDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "reasoning",
+          delta: reasoningDelta,
+        });
+      }
+
+      if (contentDelta) {
+        assistantText += contentDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "content", delta: contentDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "content",
+          delta: contentDelta,
+        });
+      }
+
+      for (const delta of toolCallDeltas) {
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: {
+            kind: "tool_calls",
+            delta: delta.delta,
+            tool_call_id: delta.tool_call_id,
+            tool_call_name: delta.tool_call_name,
+          },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "tool_calls",
+          delta: delta.delta,
+          tool_call_id: delta.tool_call_id,
+          tool_call_name: delta.tool_call_name,
+        });
+      }
+
+      prev = state;
+    }
+
+    this.bus.emit(this.agentId, {
+      event: "agent.done",
+      data: { finishReason: prev.finishReason ?? undefined },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "done",
+      finishReason: prev.finishReason ?? null,
+    });
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.done",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+        finishReason: prev.finishReason ?? undefined,
+      },
+    });
+
+    const finalState = assembler.snapshot();
+
+    if (finalState.usage && finalState.usage.totalTokens > 0) {
+      try {
+        await store.setGroupContextTokens({
+          groupId: ctx.groupId,
+          tokens: finalState.usage.totalTokens,
+        });
+      } catch {
+        // Best effort
       }
     }
 
