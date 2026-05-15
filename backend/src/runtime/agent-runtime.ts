@@ -513,6 +513,23 @@ const AGENT_TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "delete_group",
+      description:
+        "Delete a group and all its associated data (messages, workflows, tasks, task_logs, assignments). Only the group creator (coordinator) can use this. This operation is irreversible — use only when a project is completed or cancelled.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "The group UUID to delete" },
+          confirm: { type: "boolean", description: "Set to true to confirm deletion" },
+        },
+        required: ["groupId", "confirm"],
+      },
+    },
+  },
 ] as const;
 
 const BUILTIN_TOOL_NAMES = new Set(AGENT_TOOLS.map((tool) => tool.function.name));
@@ -1437,6 +1454,83 @@ class AgentRunner {
       });
       emitToolDone(true);
       return { ok: true, groupId, addedMembers: newMembers };
+    }
+
+    if (name === "delete_group") {
+      const args = safeJsonParse<{ groupId?: string; confirm?: boolean }>(
+        input.call.argumentsText,
+        {}
+      );
+      const groupId = (args.groupId ?? "").trim();
+      if (!groupId) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing groupId" };
+      }
+      if (!args.confirm) {
+        emitToolDone(false);
+        return { ok: false, error: "Must set confirm=true to delete. This operation is irreversible." };
+      }
+
+      const db = getDb();
+
+      // Authorization: groups table has no creator_id column.
+      // Multi-member groups have a workflow → only the workflow creator (coordinator) can delete.
+      // P2P groups have no workflow → any member can delete.
+      const wfRows = await db.execute(
+        sql`SELECT creator_id FROM workflows WHERE group_id = ${groupId} ORDER BY created_at DESC LIMIT 1`
+      );
+      const wfRowsArr = wfRows as unknown as Array<{ creator_id: string }>;
+      const wfRow = wfRowsArr[0] ?? null;
+      if (wfRow && wfRow.creator_id !== this.agentId) {
+        emitToolDone(false);
+        return { ok: false, error: "Only the group creator (coordinator) can delete a group" };
+      }
+
+      // Verify membership (required for P2P groups without workflows)
+      const members = await store.listGroupMemberIds({ groupId });
+      if (!members.includes(this.agentId)) {
+        emitToolDone(false);
+        return { ok: false, error: "Access denied" };
+      }
+
+      // Collect workflow IDs for cascade delete
+      const workflowIds = await db.execute(
+        sql`SELECT id FROM workflows WHERE group_id = ${groupId}`
+      );
+      const wfIds = (workflowIds as unknown as Array<{ id: string }>).map((r) => r.id);
+
+      // Cascade delete: task_logs → tasks → agent_assignments → workflows → messages → group_members → groups
+      try {
+        await db.transaction(async (tx) => {
+          if (wfIds.length > 0) {
+            // 1. task_logs
+            await tx.execute(
+              sql`DELETE FROM task_logs WHERE task_id IN (SELECT id FROM tasks WHERE workflow_id IN (${sql.join(wfIds, sql`, `)}))`
+            );
+            // 2. tasks
+            await tx.execute(
+              sql`DELETE FROM tasks WHERE workflow_id IN (${sql.join(wfIds, sql`, `)})`
+            );
+          }
+          // 3. agent_assignments
+          await tx.execute(sql`DELETE FROM agent_assignments WHERE group_id = ${groupId}`);
+          // 4. workflows
+          await tx.execute(sql`DELETE FROM workflows WHERE group_id = ${groupId}`);
+          // 5. messages
+          await tx.execute(sql`DELETE FROM messages WHERE group_id = ${groupId}`);
+          // 6. group_members
+          await tx.execute(sql`DELETE FROM group_members WHERE group_id = ${groupId}`);
+          // 7. group
+          await tx.execute(sql`DELETE FROM groups WHERE id = ${groupId}`);
+        });
+      } catch (err) {
+        console.error(`[delete_group] Transaction failed for group=${groupId}:`, err);
+        emitToolDone(false);
+        return { ok: false, error: "Failed to delete group" };
+      }
+
+      emitToolDone(true);
+      return { ok: true, groupId, message: "Group and all associated data deleted" };
     }
 
     if (name === "send_group_message") {
