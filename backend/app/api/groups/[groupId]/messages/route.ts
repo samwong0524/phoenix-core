@@ -55,7 +55,7 @@ export async function POST(
   });
 
   const runtime = getAgentRuntime();
-  void runtime.wakeAgentsForGroup(groupId, body.senderId);
+  await runtime.wakeAgentsForGroup(groupId, body.senderId);
 
   return Response.json(result, { status: 201 });
 }

@@ -8,6 +8,8 @@ import { getWorkspaceUIBus } from "./ui-bus";
 import { getMcpRegistry } from "./mcp";
 import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStreamEvent } from "./agent-logger";
 import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache } from "./skill-loader";
+import { getDb } from "@/db";
+import { sql } from "drizzle-orm";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
@@ -605,6 +607,7 @@ class AgentRunner {
   }
 
   wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" = "manual") {
+    console.info(`[AgentRunner:wakeup] agent=${this.agentId} reason=${reason}`);
     this.wake.resolve();
     this.wake = createDeferred<void>();
     this.bus.emit(this.agentId, {
@@ -661,6 +664,7 @@ class AgentRunner {
       iterations++;
       if (this.consumeInterruptRequest()) return;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
+      console.info(`[processUntilIdle] agent=${this.agentId} iterations=${iterations} batches=${batches.length}`);
       if (batches.length === 0) return;
 
       this.bus.emit(this.agentId, {
@@ -675,8 +679,10 @@ class AgentRunner {
       });
 
       for (const batch of batches) {
+        console.info(`[processUntilIdle] Processing batch group=${batch.groupId} messages=${batch.messages.length}`);
         if (this.consumeInterruptRequest()) return;
         await this.processGroupUnread(batch.groupId, batch.messages);
+        console.info(`[processUntilIdle] Done processing batch group=${batch.groupId}`);
         if (this.consumeInterruptRequest()) return;
       }
     }
@@ -692,30 +698,39 @@ class AgentRunner {
       sendTime: string;
     }>
   ) {
+    console.info(`[processGroupUnread] group=${groupId} msgs=${unreadMessages.length}`);
     const workspaceId = await store.getGroupWorkspaceId({ groupId });
+    console.info(`[processGroupUnread] workspaceId=${workspaceId}`);
     const agent = await store.getAgent({ agentId: this.agentId });
+    console.info(`[processGroupUnread] agent role=${agent.role}`);
 
     // Check for active workflow in this group
-    const { getDb } = await import("@/db");
-    const { sql } = await import("drizzle-orm");
-    const db = getDb();
-    const wfRows = await db.execute(
-      sql`SELECT id, status, name FROM workflows WHERE group_id = ${groupId} AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`
-    );
-    const activeWf = (wfRows as unknown as Array<{ id: string; status: string; name: string }>)[0] ?? null;
+    let activeWf: { id: string; status: string; name: string } | null = null;
+    try {
+      const db = getDb();
+      console.info(`[processGroupUnread] db connected, checking workflow`);
+      const wfRows = await db.execute(
+        sql`SELECT id, status, name FROM workflows WHERE group_id = ${groupId} AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`
+      );
+      activeWf = (wfRows as unknown as Array<{ id: string; status: string; name: string }>)[0] ?? null;
+    } catch (err) {
+      console.error(`[processGroupUnread] workflow check error:`, err);
+    }
+    console.info(`[processGroupUnread] activeWf=${activeWf ? `${activeWf.id}(${activeWf.status})` : "none"}`);
 
     const agentRole = agent.role;
     const isCoordinator = agentRole === "coordinator" || agentRole === "assistant";
+    console.info(`[processGroupUnread] isCoordinator=${isCoordinator} (role=${agentRole})`);
 
     // If workflow is paused and this agent is not coordinator, skip
-    if (activeWf && activeWf.status === "paused" && !isCoordinator) return;
+    if (activeWf && activeWf.status === "paused" && !isCoordinator) { console.info('[processGroupUnread] SKIP: workflow paused, not coordinator'); return; }
 
     // If workflow active and this is the coordinator: check if human just spoke → auto-pause
     if (activeWf && activeWf.status === "active" && isCoordinator) {
       const senderIds = [...new Set(unreadMessages.map((m) => m.senderId))];
       let humanSpoke = false;
       for (const sid of senderIds) {
-        const rows = await db.execute(
+        const rows = await getDb().execute(
           sql`SELECT role FROM agents WHERE id = ${sid}`
         );
         const role = (rows as unknown as Array<{ role: string } | null>)[0]?.role;
@@ -725,7 +740,8 @@ class AgentRunner {
         }
       }
       if (humanSpoke) {
-        await db.execute(
+        console.info('[processGroupUnread] SKIP: human spoke during active workflow, auto-pause');
+        await getDb().execute(
           sql`UPDATE workflows SET status = 'paused', updated_at = ${new Date().toISOString()} WHERE id = ${activeWf.id}`
         );
         return;
@@ -734,10 +750,10 @@ class AgentRunner {
 
     // If workflow is active and agent is not the assigned task owner, skip
     if (activeWf && activeWf.status === "active" && !isCoordinator) {
-      const assignRows = await db.execute(
+      const assignRows = await getDb().execute(
         sql`SELECT id FROM agent_assignments WHERE agent_id = ${this.agentId} AND group_id = ${groupId} AND status = 'active' AND task_id IS NOT NULL LIMIT 1`
       );
-      if ((assignRows as unknown as Array<{ id: string }>)[0] === undefined) return;
+      if ((assignRows as unknown as Array<{ id: string }>)[0] === undefined) { console.info('[processGroupUnread] SKIP: workflow active, not assigned'); return; }
     }
 
     const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
@@ -2448,12 +2464,14 @@ export class AgentRuntime {
   async wakeAgentsForGroup(groupId: UUID, senderId: UUID) {
     await this.bootstrap();
     const memberIds = await store.listGroupMemberIds({ groupId });
+    console.info(`[wakeAgentsForGroup] group=${groupId}, members=${memberIds.join(",")}, sender=${senderId}`);
 
     for (const memberId of memberIds) {
       if (memberId === senderId) continue;
       try {
         const role = await store.getAgentRole({ agentId: memberId });
         if (role === "human" || role === null) continue;
+        console.info(`[wakeAgentsForGroup] Waking agent ${memberId} (${role})`);
         this.ensureRunner(memberId).wakeup("group_message");
       } catch (err) {
         console.error(`[wakeAgentsForGroup] Failed to wake agent ${memberId}:`, err);
