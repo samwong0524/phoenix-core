@@ -791,6 +791,7 @@ function IMPageInner() {
         try {
           const payload = JSON.parse(evt.data) as AgentStreamEvent;
           if (payload.event === "agent.stream") {
+            if (agentError) setAgentError(null);
             const chunk = payload.data.delta;
             if (chunk) {
               if (payload.data.kind === "content") {
@@ -834,6 +835,7 @@ function IMPageInner() {
             return;
           }
           if (payload.event === "agent.done") {
+            setAgentError(null);
             toolCallBuffersRef.current = new Map();
             toolResultBuffersRef.current = new Map();
             const groupId = activeGroupIdRef.current;

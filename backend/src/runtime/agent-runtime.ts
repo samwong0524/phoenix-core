@@ -175,6 +175,32 @@ function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, 
       mapped.reasoning = reasoning_content;
     }
 
+    // Sanitize tool_calls: ensure all function.arguments are valid JSON strings
+    if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls)) {
+      mapped.tool_calls = (msg.tool_calls as Array<Record<string, unknown>>).map((tc) => {
+        if (tc.function && typeof tc.function === "object") {
+          const fn = tc.function as Record<string, unknown>;
+          const args = fn.arguments;
+          if (typeof args === "string") {
+            // Already a string — try to parse and re-stringify to ensure valid JSON
+            try {
+              JSON.parse(args);
+            } catch {
+              // Not valid JSON — replace with empty object
+              fn.arguments = "{}";
+            }
+          } else if (typeof args === "object" && args !== null) {
+            // Already an object — stringify it
+            fn.arguments = JSON.stringify(args);
+          } else {
+            // Missing or invalid — default to empty object
+            fn.arguments = "{}";
+          }
+        }
+        return tc;
+      });
+    }
+
     return mapped;
   });
 }
@@ -681,7 +707,11 @@ class AgentRunner {
       for (const batch of batches) {
         console.info(`[processUntilIdle] Processing batch group=${batch.groupId} messages=${batch.messages.length}`);
         if (this.consumeInterruptRequest()) return;
-        await this.processGroupUnread(batch.groupId, batch.messages);
+        try {
+          await this.processGroupUnread(batch.groupId, batch.messages);
+        } catch (err) {
+          console.error(`[processUntilIdle] Error processing group=${batch.groupId}:`, err);
+        }
         console.info(`[processUntilIdle] Done processing batch group=${batch.groupId}`);
         if (this.consumeInterruptRequest()) return;
       }
@@ -704,23 +734,30 @@ class AgentRunner {
     const agent = await store.getAgent({ agentId: this.agentId });
     console.info(`[processGroupUnread] agent role=${agent.role}`);
 
-    // Check for active workflow in this group
-    let activeWf: { id: string; status: string; name: string } | null = null;
+    // Check for active workflow in this group (includes draft for free-mode detection)
+    let wfRow: { id: string; status: string; name: string; creator_id: string } | null = null;
     try {
       const db = getDb();
       console.info(`[processGroupUnread] db connected, checking workflow`);
       const wfRows = await db.execute(
-        sql`SELECT id, status, name FROM workflows WHERE group_id = ${groupId} AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`
+        sql`SELECT id, status, name, creator_id FROM workflows WHERE group_id = ${groupId} ORDER BY updated_at DESC LIMIT 1`
       );
-      activeWf = (wfRows as unknown as Array<{ id: string; status: string; name: string }>)[0] ?? null;
+      const rows = wfRows as unknown as Array<{ id: string; status: string; name: string; creator_id: string }>;
+      wfRow = rows[0] ?? null;
     } catch (err) {
       console.error(`[processGroupUnread] workflow check error:`, err);
     }
-    console.info(`[processGroupUnread] activeWf=${activeWf ? `${activeWf.id}(${activeWf.status})` : "none"}`);
 
-    const agentRole = agent.role;
-    const isCoordinator = agentRole === "coordinator" || agentRole === "assistant";
-    console.info(`[processGroupUnread] isCoordinator=${isCoordinator} (role=${agentRole})`);
+    // 群主 = coordinator（铁律 #6）。谁创建的群/工作流，谁就是 coordinator
+    const isCoordinator = wfRow ? wfRow.creator_id === this.agentId : false;
+    // Free mode: no workflow or only draft → all agents respond freely
+    const isFreeMode = wfRow === null || wfRow.status === "draft";
+
+    // activeWf: only non-draft workflows count as "active workflow mode"
+    const activeWf = (wfRow && wfRow.status !== "draft")
+      ? { id: wfRow.id, status: wfRow.status, name: wfRow.name }
+      : null;
+    console.info(`[processGroupUnread] activeWf=${activeWf ? `${activeWf.id}(${activeWf.status})` : "none"}, isCoordinator=${isCoordinator}, freeMode=${isFreeMode}`);
 
     // If workflow is paused and this agent is not coordinator, skip
     if (activeWf && activeWf.status === "paused" && !isCoordinator) { console.info('[processGroupUnread] SKIP: workflow paused, not coordinator'); return; }
@@ -765,6 +802,18 @@ class AgentRunner {
 
     if (history.length === 0) {
       const role = agent.role;
+      const members = await store.listGroupMemberIds({ groupId });
+      const memberRoles: Array<{ id: string; role: string | null }> = await Promise.all(
+        members.map(async (mid) => ({
+          id: mid,
+          role: mid === this.agentId ? "YOU" : await store.getAgentRole({ agentId: mid }).catch(() => null),
+        }))
+      );
+      const membersList = memberRoles
+        .filter((m) => m.role !== "human")
+        .map((m) => `${m.id.substring(0, 8)}(${m.role})`)
+        .join(", ");
+
       const workflowContext = activeWf
         ? `\n\nThere is an active workflow: "${activeWf.name}" (status: ${activeWf.status}). ` +
           (isCoordinator
@@ -779,6 +828,8 @@ class AgentRunner {
           `Your agent_id is: ${this.agentId}.\n` +
           `Your workspace_id is: ${workspaceId}.\n` +
           `Your role is: ${role}.\n` +
+          `This group has ${members.length} members: [${membersList}]. ` +
+          `Only reference these agents by their roles — do not invent other roles.\n` +
           `Act strictly as this role when replying. Be concise and helpful.\n` +
           `Your replies are NOT automatically delivered to humans.\n` +
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
@@ -796,8 +847,17 @@ class AgentRunner {
       }
     }
 
+    // Build user content with sender roles so agents know who's speaking
+    const senderRoleCache = new Map<string, string | null>();
+    const uniqueSenders = [...new Set(unreadMessages.map((m) => m.senderId))];
+    await Promise.all(
+      uniqueSenders.map(async (sid) => {
+        const role = await store.getAgentRole({ agentId: sid }).catch(() => null);
+        senderRoleCache.set(sid, role);
+      })
+    );
     const userContent = unreadMessages
-      .map((m) => `[group:${groupId}] ${m.senderId}: ${m.content}`)
+      .map((m) => `[group:${groupId}] ${senderRoleCache.get(m.senderId) ?? m.senderId.substring(0, 8)}: ${m.content}`)
       .join("\n");
     history.push({ role: "user", content: userContent });
 
@@ -814,22 +874,11 @@ class AgentRunner {
     } else {
       const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
       if (currentTurns >= MAX_AGENT_TURNS) {
-        // Mark as read but skip LLM: too many agent-only turns since last human message
         return;
       }
-
-      // Skip if all unread messages are from agents (no human) and none directly references this agent
-      const myAgentId = this.agentId;
-      const hasDirectMention = unreadMessages.some(
-        (m) => m.content.includes(myAgentId)
-      );
-      // @所有人 / @everyone / @all should wake all agents
-      const hasBroadcastMention = unreadMessages.some(
-        (m) => /@所有人|@everyone|@all/i.test(m.content)
-      );
-      if (!hasDirectMention && !hasBroadcastMention) {
-        return;
-      }
+      // Free mode: allow agents to respond naturally without requiring direct mentions.
+      // The LLM decides based on context. The turn counter (MAX_AGENT_TURNS) is the
+      // ultimate safety net against infinite loops.
     }
 
     let { assistantText, assistantThinking, didSend } = await this.runWithTools({
@@ -957,7 +1006,7 @@ class AgentRunner {
         tool_calls: res.toolCalls.map((c) => ({
           id: c.id,
           type: "function",
-          function: { name: c.name, arguments: c.argumentsText },
+          function: { name: c.name, arguments: JSON.stringify(safeJsonParse(c.argumentsText, {})) },
         })),
         reasoning_content: res.assistantThinking || undefined,
       });
@@ -1306,6 +1355,8 @@ class AgentRunner {
       }
       let groupId = "";
       let groupName: string | null = args.name ?? null;
+      const isNewGroup = memberIds.length > 2; // Only create workflow for multi-member groups, not P2P
+
       if (memberIds.length === 2) {
         const existing = await store.findLatestExactP2PGroupId({
           workspaceId,
@@ -1341,6 +1392,15 @@ class AgentRunner {
           event: "ui.group.created",
           data: { workspaceId, group: { id: groupId, name: groupName, memberIds } },
         });
+
+        // 铁律 #6: 群主 = coordinator
+        // Auto-create a draft workflow with the group creator as coordinator
+        const now = new Date().toISOString();
+        const workflowId = crypto.randomUUID();
+        await getDb().execute(
+          sql`INSERT INTO workflows (id, group_id, name, creator_id, status, created_at, updated_at)
+              VALUES (${workflowId}, ${groupId}, ${groupName ?? 'Group Workflow'}, ${this.agentId}, 'draft', ${now}, ${now})`
+        );
       }
       emitToolDone(true);
       return { ok: true, groupId, name: groupName };
