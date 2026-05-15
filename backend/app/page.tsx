@@ -4,6 +4,7 @@ import { store } from "@/lib/storage";
 
 import ClearDbButton from "./_components/clear-db";
 import CreateWorkspace from "./_components/create-workspace";
+import WorkspacesList from "./_components/workspaces-list";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -70,38 +71,6 @@ export default async function HomePage() {
           Click to open IM with the selected workspace.
         </p>
         <WorkspacesList workspaces={workspaces ?? []} />
-      </div>
-    </div>
-  );
-}
-
-function WorkspacesList({ workspaces }: { workspaces: Array<{ id: string; name: string; createdAt: string }> }) {
-  if (workspaces.length === 0) {
-    return <div className="muted">No workspaces yet. Open IM to create one.</div>;
-  }
-
-  return (
-    <div className="card" style={{ maxWidth: 880 }}>
-      <div className="card-title">Recent</div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {workspaces.map((w) => (
-          <Link
-            key={w.id}
-            href={`/im?workspaceId=${encodeURIComponent(w.id)}`}
-            className="row"
-            style={{ textDecoration: "none" }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ fontWeight: 600 }}>{w.name}</div>
-              <div className="muted mono" style={{ fontSize: 12 }}>
-                {new Date(w.createdAt).toLocaleString()}
-              </div>
-            </div>
-            <div className="muted mono" style={{ fontSize: 12, marginTop: 6 }}>
-              {w.id}
-            </div>
-          </Link>
-        ))}
       </div>
     </div>
   );
