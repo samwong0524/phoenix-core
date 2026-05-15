@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, inArray, ne, sql as dsql } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { agents, groupMembers, groups, messages, workspaces } from "@/db/schema";
+import { agents, backups, groupMembers, groups, messages, workspaces } from "@/db/schema";
 
 type UUID = string;
 
@@ -13,30 +13,20 @@ function uuid(): UUID {
   return crypto.randomUUID();
 }
 
-function initialAgentHistory(input: {
+async function initialAgentHistory(input: {
   agentId: UUID;
   workspaceId: UUID;
   role: string;
   guidance?: string;
 }) {
-  const content =
-    `You are an agent in an IM system.\n` +
-    `Your agent_id is: ${input.agentId}.\n` +
-    `Your workspace_id is: ${input.workspaceId}.\n` +
-    `Your role is: ${input.role}.\n` +
-    `Act strictly as this role when replying. Be concise and helpful.\n` +
-    `Your replies are NOT automatically delivered to humans.\n` +
-    `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
-    `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.`;
+  const { buildSystemPrompt } = await import("@/runtime/soul");
+  const systemContent = await buildSystemPrompt(input.role, input.guidance);
 
-  const history: Array<{ role: "system"; content: string }> = [{ role: "system", content }];
-  const guidance = (input.guidance ?? "").trim();
-  if (guidance) {
-    history.push({
-      role: "system",
-      content: `Additional instructions:\n${guidance}`,
-    });
-  }
+  const meta = `Your agent_id is: ${input.agentId}.\nYour workspace_id is: ${input.workspaceId}.\nYour role is: ${input.role}.\nYour replies are NOT automatically delivered to humans.\nTo send messages, you MUST call tools like send_group_message or send_direct_message.`;
+
+  const history: Array<{ role: "system"; content: string }> = [
+    { role: "system", content: `${systemContent}\n\n${meta}` },
+  ];
   return JSON.stringify(history);
 }
 
@@ -242,12 +232,12 @@ export const store = {
       parentId: input.parentId ?? null,
       llmHistory:
         input.llmHistory ??
-        initialAgentHistory({
+        (await initialAgentHistory({
           agentId,
           workspaceId: input.workspaceId,
           role: input.role,
           guidance: input.guidance,
-        }),
+        })),
       createdAt,
     });
 
@@ -292,6 +282,17 @@ export const store = {
     const defaultGroupId = uuid();
     const createdAt = now();
 
+    const humanHistory = await initialAgentHistory({
+      agentId: humanAgentId,
+      workspaceId,
+      role: "human",
+    });
+    const assistantHistory = await initialAgentHistory({
+      agentId: assistantAgentId,
+      workspaceId,
+      role: "assistant",
+    });
+
     await db.transaction(async (tx) => {
       await tx.insert(workspaces).values({
         id: workspaceId,
@@ -305,11 +306,7 @@ export const store = {
           workspaceId,
           role: "human",
           parentId: null,
-          llmHistory: initialAgentHistory({
-            agentId: humanAgentId,
-            workspaceId,
-            role: "human",
-          }),
+          llmHistory: humanHistory,
           createdAt,
         },
         {
@@ -317,11 +314,7 @@ export const store = {
           workspaceId,
           role: "assistant",
           parentId: null,
-          llmHistory: initialAgentHistory({
-            agentId: assistantAgentId,
-            workspaceId,
-            role: "assistant",
-          }),
+          llmHistory: assistantHistory,
           createdAt,
         },
       ]);
@@ -402,16 +395,17 @@ export const store = {
 
       if (!humanAgentId) {
         humanAgentId = uuid();
+        const humanHistory = await initialAgentHistory({
+          agentId: humanAgentId,
+          workspaceId: input.workspaceId,
+          role: "human",
+        });
         await tx.insert(agents).values({
           id: humanAgentId,
           workspaceId: input.workspaceId,
           role: "human",
           parentId: null,
-          llmHistory: initialAgentHistory({
-            agentId: humanAgentId,
-            workspaceId: input.workspaceId,
-            role: "human",
-          }),
+          llmHistory: humanHistory,
           createdAt,
         });
         createdHuman = true;
@@ -419,16 +413,17 @@ export const store = {
 
       if (!assistantAgentId) {
         assistantAgentId = uuid();
+        const assistantHistory = await initialAgentHistory({
+          agentId: assistantAgentId,
+          workspaceId: input.workspaceId,
+          role: "assistant",
+        });
         await tx.insert(agents).values({
           id: assistantAgentId,
           workspaceId: input.workspaceId,
           role: "assistant",
           parentId: null,
-          llmHistory: initialAgentHistory({
-            agentId: assistantAgentId,
-            workspaceId: input.workspaceId,
-            role: "assistant",
-          }),
+          llmHistory: assistantHistory,
           createdAt,
         });
         createdAssistant = true;
@@ -530,18 +525,20 @@ export const store = {
       .limit(1);
     if (workspace.length === 0) throw new Error("workspace not found");
 
+    const agentHistory = await initialAgentHistory({
+      agentId,
+      workspaceId: input.workspaceId,
+      role: input.role,
+      guidance: input.guidance,
+    });
+
     await db.transaction(async (tx) => {
       await tx.insert(agents).values({
         id: agentId,
         workspaceId: input.workspaceId,
         role: input.role,
         parentId: input.creatorId,
-        llmHistory: initialAgentHistory({
-          agentId,
-          workspaceId: input.workspaceId,
-          role: input.role,
-          guidance: input.guidance,
-        }),
+        llmHistory: agentHistory,
         createdAt,
       });
 
@@ -1169,5 +1166,228 @@ export const store = {
       senderId: m.senderId,
       sendTime: m.sendTime.toISOString(),
     }));
+  },
+
+  async backupWorkspace(input: { workspaceId: UUID }) {
+    const db = getDb();
+
+    const workspace = await db
+      .select({ id: workspaces.id, name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, input.workspaceId))
+      .limit(1);
+    if (workspace.length === 0) throw new Error("workspace not found");
+
+    const allAgents = await db
+      .select({
+        id: agents.id,
+        workspaceId: agents.workspaceId,
+        role: agents.role,
+        parentId: agents.parentId,
+        llmHistory: agents.llmHistory,
+        createdAt: agents.createdAt,
+      })
+      .from(agents)
+      .where(eq(agents.workspaceId, input.workspaceId));
+
+    const allGroups = await db
+      .select({
+        id: groups.id,
+        workspaceId: groups.workspaceId,
+        name: groups.name,
+        contextTokens: groups.contextTokens,
+        createdAt: groups.createdAt,
+      })
+      .from(groups)
+      .where(eq(groups.workspaceId, input.workspaceId));
+
+    const groupIds = allGroups.map((g) => g.id);
+    let allMembers: Array<{ groupId: UUID; userId: UUID; lastReadMessageId: UUID | null; joinedAt: Date }> = [];
+    if (groupIds.length > 0) {
+      allMembers = await db
+        .select({
+          groupId: groupMembers.groupId,
+          userId: groupMembers.userId,
+          lastReadMessageId: groupMembers.lastReadMessageId,
+          joinedAt: groupMembers.joinedAt,
+        })
+        .from(groupMembers)
+        .where(inArray(groupMembers.groupId, groupIds));
+    }
+
+    let allMessages: Array<{
+      id: UUID;
+      workspaceId: UUID;
+      groupId: UUID;
+      senderId: UUID;
+      contentType: string;
+      content: string;
+      sendTime: Date;
+    }> = [];
+    if (groupIds.length > 0) {
+      allMessages = await db
+        .select({
+          id: messages.id,
+          workspaceId: messages.workspaceId,
+          groupId: messages.groupId,
+          senderId: messages.senderId,
+          contentType: messages.contentType,
+          content: messages.content,
+          sendTime: messages.sendTime,
+        })
+        .from(messages)
+        .where(and(eq(messages.workspaceId, input.workspaceId), inArray(messages.groupId, groupIds)))
+        .orderBy(messages.sendTime);
+    }
+
+    const backupData = {
+      workspace: { id: input.workspaceId, name: workspace[0]!.name },
+      agents: allAgents,
+      groups: allGroups,
+      groupMembers: allMembers,
+      messages: allMessages,
+    };
+
+    const backupId = uuid();
+    const createdAt = now();
+
+    await db.execute(
+      dsql`INSERT INTO backups (id, workspace_id, data, created_at) VALUES (${backupId}, ${input.workspaceId}, ${JSON.stringify(backupData)}::jsonb, ${createdAt})`
+    );
+
+    return { id: backupId, createdAt: createdAt.toISOString() };
+  },
+
+  async restoreBackup(input: { backupId: UUID }) {
+    const db = getDb();
+
+    const result = await db.execute(
+      dsql`SELECT workspace_id, data FROM backups WHERE id = ${input.backupId}`
+    );
+    const rows = result as unknown as Array<{ workspace_id: string; data: string }>;
+    if (rows.length === 0) throw new Error("backup not found");
+
+    const workspaceId = rows[0].workspace_id;
+    const parsed = JSON.parse(rows[0].data);
+
+    await db.transaction(async (tx) => {
+      await tx.execute(dsql`DELETE FROM messages WHERE workspace_id = ${workspaceId}`);
+
+      const allGroups = await tx
+        .select({ id: groups.id })
+        .from(groups)
+        .where(eq(groups.workspaceId, workspaceId));
+      const groupIds = allGroups.map((g) => g.id);
+      if (groupIds.length > 0) {
+        await tx.delete(groupMembers).where(inArray(groupMembers.groupId, groupIds));
+      }
+      await tx.delete(groups).where(eq(groups.workspaceId, workspaceId));
+
+      await tx.delete(agents).where(eq(agents.workspaceId, workspaceId));
+
+      for (const agent of parsed.agents) {
+        const createdDate = agent.createdAt instanceof Date ? agent.createdAt : new Date(agent.createdAt);
+        await tx.insert(agents).values({
+          id: agent.id,
+          workspaceId: agent.workspaceId,
+          role: agent.role,
+          parentId: agent.parentId,
+          llmHistory: agent.llmHistory,
+          createdAt: createdDate,
+        });
+      }
+
+      for (const group of parsed.groups) {
+        const createdDate = group.createdAt instanceof Date ? group.createdAt : new Date(group.createdAt);
+        await tx.insert(groups).values({
+          id: group.id,
+          workspaceId: group.workspaceId,
+          name: group.name,
+          contextTokens: group.contextTokens ?? 0,
+          createdAt: createdDate,
+        });
+      }
+
+      for (const member of parsed.groupMembers) {
+        const joinedDate = member.joinedAt instanceof Date ? member.joinedAt : new Date(member.joinedAt);
+        await tx.insert(groupMembers).values({
+          groupId: member.groupId,
+          userId: member.userId,
+          lastReadMessageId: member.lastReadMessageId,
+          joinedAt: joinedDate,
+        });
+      }
+
+      for (const msg of parsed.messages) {
+        const sendDate = msg.sendTime instanceof Date ? msg.sendTime : new Date(msg.sendTime);
+        await tx.insert(messages).values({
+          id: msg.id,
+          workspaceId: msg.workspaceId,
+          groupId: msg.groupId,
+          senderId: msg.senderId,
+          contentType: msg.contentType,
+          content: msg.content,
+          sendTime: sendDate,
+        });
+      }
+    });
+
+    await emitDbWrite({
+      workspaceId,
+      table: "agents",
+      action: "update",
+    });
+    await emitDbWrite({
+      workspaceId,
+      table: "groups",
+      action: "update",
+    });
+    await emitDbWrite({
+      workspaceId,
+      table: "messages",
+      action: "update",
+    });
+
+    return { workspaceId, restoredAt: new Date().toISOString() };
+  },
+
+  async listBackups(input: { workspaceId?: UUID }) {
+    const db = getDb();
+
+    let result;
+    if (input.workspaceId) {
+      result = await db.execute(
+        dsql`SELECT id, workspace_id, created_at FROM backups WHERE workspace_id = ${input.workspaceId} ORDER BY created_at DESC`
+      );
+    } else {
+      result = await db.execute(
+        dsql`SELECT id, workspace_id, created_at FROM backups ORDER BY created_at DESC`
+      );
+    }
+
+    return (result as unknown as Array<{ id: string; workspace_id: string; created_at: Date }>).map((row) => ({
+      id: row.id as UUID,
+      workspaceId: row.workspace_id as UUID,
+      createdAt: row.created_at.toISOString(),
+    }));
+  },
+
+  async getBackupData(input: { backupId: UUID }) {
+    const db = getDb();
+
+    const result = await db.execute(
+      dsql`SELECT id, workspace_id, data, created_at FROM backups WHERE id = ${input.backupId}`
+    );
+    const rows = result as unknown as Array<{ id: string; workspace_id: string; data: string; created_at: Date }>;
+    if (rows.length === 0) throw new Error("backup not found");
+
+    const parsed = JSON.parse(rows[0].data);
+
+    return {
+      id: rows[0].id as UUID,
+      workspaceId: rows[0].workspace_id as UUID,
+      data: parsed,
+      createdAt: rows[0]!.created_at.toISOString(),
+    };
   },
 };

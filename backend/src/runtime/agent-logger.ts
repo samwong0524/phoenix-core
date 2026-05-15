@@ -180,7 +180,12 @@ export async function appendAgentLlmRequestRaw(input: { agentId: string; body: s
   const logDir = getRequestLogDir();
   await ensureDir(logDir);
   const filename = path.join(logDir, `agent-${input.agentId}.jsonl`);
-  await enqueueRequestWrite(input.agentId, () => fs.appendFile(filename, `${input.body}\n`, "utf-8"));
+  // Sanitize secrets from the request body before logging
+  const sanitized = input.body
+    .replace(/"Authorization"\s*:\s*"[^"]*"/g, '"Authorization": "[REDACTED]"')
+    .replace(/"x-api-key"\s*:\s*"[^"]*"/g, '"x-api-key": "[REDACTED]"')
+    .replace(/"apiKey"\s*:\s*"[^"]*"/g, '"apiKey": "[REDACTED]"');
+  await enqueueRequestWrite(input.agentId, () => fs.appendFile(filename, `${sanitized}\n`, "utf-8"));
 }
 
 async function writeStreamHeader(agentId: string, logDir: string, text: string) {
@@ -201,7 +206,7 @@ async function appendKindDelta(input: {
   tool_call_id?: string;
   tool_call_name?: string;
 }) {
-  const filename = path.join(logDir, `agent-${input.agentId}.${input.kind}.log`);
+  const filename = path.join(input.logDir, `agent-${input.agentId}.${input.kind}.log`);
   let text = input.delta;
 
   if (input.kind === "tool_calls" || input.kind === "tool_result") {

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { getUpstashRealtime } from "@/runtime/upstash-realtime";
+import { getWorkspaceUIBus } from "@/runtime/ui-bus";
 
 function sse(data: unknown) {
   return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`);
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
       const sendKeepalive = () => controller.enqueue(new TextEncoder().encode(`: ping\n\n`));
 
       let upstashUnsubscribe: (() => void) | null = null;
+      let inMemoryUnsubscribe: (() => void) | null = null;
 
       const channel = getUpstashRealtime().channel(`ui:${workspaceId}`);
       upstashUnsubscribe = await channel.subscribe({
@@ -52,6 +54,15 @@ export async function GET(req: Request) {
         },
       });
 
+      const uiBus = getWorkspaceUIBus();
+      const history = uiBus.getSince(workspaceId, 0);
+      for (const evt of history) {
+        controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
+      }
+      inMemoryUnsubscribe = uiBus.subscribe(workspaceId, (evt) => {
+        controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
+      });
+
       const keepalive = setInterval(sendKeepalive, 15_000);
 
       let closed = false;
@@ -60,6 +71,7 @@ export async function GET(req: Request) {
         closed = true;
         clearInterval(keepalive);
         upstashUnsubscribe?.();
+        inMemoryUnsubscribe?.();
         try {
           controller.close();
         } catch {

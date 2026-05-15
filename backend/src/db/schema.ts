@@ -1,4 +1,12 @@
-import { integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey(),
@@ -56,3 +64,73 @@ export const messages = pgTable("messages", {
   sendTime: timestamp("send_time", { withTimezone: true }).notNull(),
 });
 
+export const workflows = pgTable("workflows", {
+  id: uuid("id").primaryKey(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .references(() => agents.id),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey(),
+  workflowId: uuid("workflow_id")
+    .notNull()
+    .references(() => workflows.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  assigneeRole: text("assignee_role"),
+  assigneeId: uuid("assignee_id").references(() => agents.id),
+  status: text("status").notNull().default("pending"),
+  dependsOn: text("depends_on").array().default([]),
+  expectedOutput: text("expected_output"),
+  result: text("result"),
+  reviewNotes: text("review_notes"),
+  reviewCount: integer("review_count").default(0),
+  maxRevisions: integer("max_revisions").default(3),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export const taskLogs = pgTable("task_logs", {
+  id: uuid("id").primaryKey(),
+  taskId: uuid("task_id")
+    .notNull()
+    .references(() => tasks.id),
+  eventType: text("event_type").notNull(),
+  eventData: text("event_data"),
+  actorId: uuid("actor_id").references(() => agents.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+});
+
+export const agentAssignments = pgTable("agent_assignments", {
+  id: uuid("id").primaryKey(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id),
+  workflowId: uuid("workflow_id").references(() => workflows.id),
+  taskId: uuid("task_id").references(() => tasks.id),
+  status: text("status").notNull().default("active"),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull(),
+  releasedAt: timestamp("released_at", { withTimezone: true }),
+});
+
+export const backups = pgTable("backups", {
+  id: uuid("id").primaryKey(),
+  workspaceId: uuid("workspace_id").notNull(),
+  data: text("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+});

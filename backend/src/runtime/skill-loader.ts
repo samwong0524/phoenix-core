@@ -322,3 +322,18 @@ export async function getSkillLoader(): Promise<SkillLoader> {
 
   return cachedPromise;
 }
+
+export function getSkillDirectory(): string {
+  const envDir = process.env.AGENT_SKILLS_DIR;
+  const candidates = [
+    envDir ? path.resolve(envDir) : null,
+    path.resolve(process.cwd(), "skills"),
+    path.resolve(process.cwd(), "backend", "skills"),
+  ].filter((value): value is string => Boolean(value));
+  return candidates.find((dir) => existsSync(dir)) ?? candidates[0];
+}
+
+export function invalidateSkillCache() {
+  cachedLoader = null;
+  cachedPromise = null;
+}

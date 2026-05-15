@@ -20,6 +20,7 @@ type RealtimeClient = {
 type StreamReadGroupResponse = Array<[string, Array<[string, Array<string>]>]>;
 
 let cachedClient: RedisClient | null = null;
+let cachedPromise: Promise<RedisClient> | null = null;
 
 function getRedisUrl() {
   return process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -30,12 +31,23 @@ export function isUpstashRealtimeConfigured() {
 }
 
 async function getRedisClient(): Promise<RedisClient> {
-  if (cachedClient) return cachedClient;
-  const client = createClient({ url: getRedisUrl() });
-  client.on("error", () => undefined);
-  await client.connect();
-  cachedClient = client;
-  return client;
+  if (cachedClient?.isOpen) return cachedClient;
+  if (cachedPromise) return cachedPromise;
+
+  cachedPromise = (async () => {
+    const client = createClient({ url: getRedisUrl() });
+    client.on("error", (err) => {
+      console.warn("[redis] connection error:", err.message);
+    });
+    client.on("reconnecting", () => {
+      console.info("[redis] reconnecting...");
+    });
+    await client.connect();
+    cachedClient = client;
+    return client;
+  })();
+
+  return cachedPromise;
 }
 
 async function createSubscriber(): Promise<RedisClient> {

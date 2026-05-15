@@ -7,12 +7,17 @@ import { createDeferred, safeJsonParse } from "./utils";
 import { getWorkspaceUIBus } from "./ui-bus";
 import { getMcpRegistry } from "./mcp";
 import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStreamEvent } from "./agent-logger";
-import { formatSkillPrompt, getSkillLoader } from "./skill-loader";
+import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache } from "./skill-loader";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
 type UUID = string;
+
+function uuid(): UUID {
+  return crypto.randomUUID();
+}
 
 type HistoryMessage =
   | {
@@ -33,13 +38,27 @@ type ToolCall = {
 const SKILLS_MARKER = "[skills:loaded]";
 const SEND_TOOL_NAMES = new Set(["send", "send_group_message", "send_direct_message"]);
 
-async function buildSkillsBlock(): Promise<string> {
+async function buildSkillsBlock(role?: string): Promise<string> {
   try {
     const loader = await getSkillLoader();
-    const skillsMetadata = await loader.getSkillsMetadataPrompt();
-    const autoSkills = await loader.listAutoLoadSkills();
-    const autoBlocks = autoSkills.map((skill) => formatSkillPrompt(skill)).join("\n\n");
-    const skillsParts = [skillsMetadata, autoBlocks].filter((part) => part && part.trim());
+    const allSkills = await loader.listAutoLoadSkills();
+    const roleFiltered = allSkills.filter((skill) => {
+      const skillRolesRaw = (skill.metadata as Record<string, unknown> | undefined)?.roles;
+      const skillRoles: string[] | undefined =
+        Array.isArray(skillRolesRaw)
+          ? skillRolesRaw as string[]
+          : typeof skillRolesRaw === "string"
+            ? skillRolesRaw.split(",").map((s) => s.trim())
+            : undefined;
+      if (!skillRoles || skillRoles.length === 0) return true;
+      if (!role) return true;
+      return skillRoles.some((r: string) => r.toLowerCase() === role.toLowerCase());
+    });
+    const skillsMeta = roleFiltered.length > 0
+      ? `## Available Skills\nYou have access to specialized skills. Load a skill using the get_skill tool when needed.\n\n${roleFiltered.map((s) => `- \`${s.name}\`: ${s.description}`).join("\n")}`
+      : "";
+    const autoBlocks = roleFiltered.map((skill) => formatSkillPrompt(skill)).join("\n\n");
+    const skillsParts = [skillsMeta, autoBlocks].filter((part) => part && part.trim());
     if (skillsParts.length === 0) return "";
     return `${SKILLS_MARKER}\n\n${skillsParts.join("\n\n")}`;
   } catch {
@@ -52,6 +71,30 @@ function historyHasSkills(history: HistoryMessage[]) {
     (msg) =>
       msg.role === "system" && typeof msg.content === "string" && msg.content.includes(SKILLS_MARKER)
   );
+}
+
+/**
+ * Compress old tool-call exchanges when history grows too large.
+ * Keep: system messages, last 8 messages, and the first user message.
+ * Replace middle tool/user/assistant blocks with a single summary placeholder.
+ */
+function compressHistory(history: HistoryMessage[]) {
+  if (history.length <= 10) return;
+
+  const systemMsgs = history.filter((m) => m.role === "system");
+  const nonSystem = history.filter((m) => m.role !== "system");
+
+  if (nonSystem.length <= 8) return;
+
+  const keepStart = nonSystem.slice(0, 1);
+  const keepEnd = nonSystem.slice(-8);
+  const summary: HistoryMessage = {
+    role: "system",
+    content: `[${nonSystem.length - 9} earlier messages were summarized to save context]`,
+  };
+
+  history.length = 0;
+  history.push(...systemMsgs, summary, ...keepStart, ...keepEnd);
 }
 
 function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, unknown>> {
@@ -114,6 +157,26 @@ const AGENT_TOOLS = [
           skill_name: { type: "string", description: "Skill name to retrieve" },
         },
         required: ["skill_name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_skill",
+      description:
+        "Create a new skill. Skills are markdown files with YAML frontmatter that teach agents how to handle specific tasks.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", description: "Skill name (kebab-case, e.g. 'data-analysis')" },
+          description: { type: "string", description: "One-line description of what this skill does" },
+          content: { type: "string", description: "Full skill content (markdown body, no frontmatter)" },
+          autoLoad: { type: "boolean", description: "Whether to auto-inject this skill into all agents' system prompts" },
+          roles: { type: "array", items: { type: "string" }, description: "Optional: restrict to specific agent roles (e.g. ['coordinator', 'coder'])" },
+        },
+        required: ["name", "description", "content"],
       },
     },
   },
@@ -250,6 +313,92 @@ const AGENT_TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_workflow",
+      description:
+        "Create a workflow with tasks. Only coordinator can use this. Returns {workflowId}.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          tasks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                description: { type: "string" },
+                assigneeRole: { type: "string" },
+                dependsOn: { type: "array", items: { type: "string" } },
+                expectedOutput: { type: "string" },
+                maxRevisions: { type: "number" },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        required: ["groupId", "name", "tasks"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task",
+      description:
+        "Update task status. Use 'in_progress' when starting, 'review' when done, 'done' when approved, 'failed' on error.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          taskId: { type: "string" },
+          status: { type: "string", enum: ["in_progress", "review", "done", "failed"] },
+          result: { type: "string" },
+          error: { type: "string" },
+        },
+        required: ["taskId", "status"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_workflow_status",
+      description: "Get workflow and task status for a group or workflow.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          workflowId: { type: "string" },
+          groupId: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "assign_agent",
+      description: "Assign or release an agent to/from a task in a workflow.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          agentId: { type: "string" },
+          groupId: { type: "string" },
+          workflowId: { type: "string" },
+          taskId: { type: "string" },
+          action: { type: "string", enum: ["assign", "release"] },
+        },
+        required: ["agentId", "groupId", "action"],
+      },
+    },
+  },
 ] as const;
 
 const BUILTIN_TOOL_NAMES = new Set(AGENT_TOOLS.map((tool) => tool.function.name));
@@ -276,11 +425,12 @@ function getGlmConfig() {
   return { apiKey, baseUrl, model };
 }
 
-type LlmProvider = "glm" | "openrouter";
+type LlmProvider = "glm" | "openrouter" | "anthropic";
 
 function getLlmProvider(): LlmProvider {
   const raw = (process.env.LLM_PROVIDER ?? "glm").toLowerCase();
   if (raw === "openrouter" || raw === "open-router" || raw === "or") return "openrouter";
+  if (raw === "anthropic" || raw === "anthropic-compatible") return "anthropic";
   return "glm";
 }
 
@@ -306,6 +456,18 @@ function getOpenRouterConfig() {
   }
 
   return { apiKey, baseUrl, model, httpReferer, appTitle };
+}
+
+function getAnthropicConfig() {
+  const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
+  const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "";
+  const model = process.env.ANTHROPIC_MODEL ?? "qwen3.6-plus";
+
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY");
+  }
+
+  return { apiKey, baseUrl, model };
 }
 
 class AgentRunner {
@@ -334,7 +496,7 @@ class AgentRunner {
       const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
       const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
       if (historyHasSkills(history)) return;
-      const skillsBlock = await buildSkillsBlock();
+      const skillsBlock = await buildSkillsBlock(agent.role);
       if (!skillsBlock) return;
       history.push({ role: "system", content: skillsBlock });
       await store.setAgentHistory({
@@ -433,6 +595,52 @@ class AgentRunner {
   ) {
     const workspaceId = await store.getGroupWorkspaceId({ groupId });
     const agent = await store.getAgent({ agentId: this.agentId });
+
+    // Check for active workflow in this group
+    const { getDb } = await import("@/db");
+    const { sql } = await import("drizzle-orm");
+    const db = getDb();
+    const wfRows = await db.execute(
+      sql`SELECT id, status, name FROM workflows WHERE group_id = ${groupId} AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`
+    );
+    const activeWf = (wfRows as unknown as Array<{ id: string; status: string; name: string }>)[0] ?? null;
+
+    const agentRole = agent.role;
+    const isCoordinator = agentRole === "coordinator" || agentRole === "assistant";
+
+    // If workflow is paused and this agent is not coordinator, skip
+    if (activeWf && activeWf.status === "paused" && !isCoordinator) return;
+
+    // If workflow active and this is the coordinator: check if human just spoke → auto-pause
+    if (activeWf && activeWf.status === "active" && isCoordinator) {
+      const senderIds = [...new Set(unreadMessages.map((m) => m.senderId))];
+      let humanSpoke = false;
+      for (const sid of senderIds) {
+        const rows = await db.execute(
+          sql`SELECT role FROM agents WHERE id = ${sid}`
+        );
+        const role = (rows as unknown as Array<{ role: string } | null>)[0]?.role;
+        if (role === "human") {
+          humanSpoke = true;
+          break;
+        }
+      }
+      if (humanSpoke) {
+        await db.execute(
+          sql`UPDATE workflows SET status = 'paused', updated_at = ${new Date().toISOString()} WHERE id = ${activeWf.id}`
+        );
+        return;
+      }
+    }
+
+    // If workflow is active and agent is not the assigned task owner, skip
+    if (activeWf && activeWf.status === "active" && !isCoordinator) {
+      const assignRows = await db.execute(
+        sql`SELECT id FROM agent_assignments WHERE agent_id = ${this.agentId} AND group_id = ${groupId} AND status = 'active' AND task_id IS NOT NULL LIMIT 1`
+      );
+      if ((assignRows as unknown as Array<{ id: string }>)[0] === undefined) return;
+    }
+
     const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
     const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
     const skillsBlock = await buildSkillsBlock();
@@ -440,6 +648,13 @@ class AgentRunner {
 
     if (history.length === 0) {
       const role = agent.role;
+      const workflowContext = activeWf
+        ? `\n\nThere is an active workflow: "${activeWf.name}" (status: ${activeWf.status}). ` +
+          (isCoordinator
+            ? "You are the coordinator. Monitor workflow progress, review task results, and assign next tasks."
+            : "You are a worker. Only execute when assigned a task by the coordinator. Check get_workflow_status before acting.")
+        : "";
+
       history.push({
         role: "system",
         content:
@@ -452,6 +667,7 @@ class AgentRunner {
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
           `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, send_group_message, send_direct_message, and get_group_messages.\n` +
           `If you need to run shell commands, use the bash tool.` +
+          workflowContext +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
     } else if (skillsBlock && !hasSkills) {
@@ -464,9 +680,6 @@ class AgentRunner {
     history.push({ role: "user", content: userContent });
 
     const lastId = unreadMessages[unreadMessages.length - 1]?.id;
-    if (lastId) {
-      await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
-    }
 
     const { assistantText, assistantThinking, didSend } = await this.runWithTools({
       groupId,
@@ -498,6 +711,9 @@ class AgentRunner {
         content: followup.assistantText,
         reasoning_content: followup.assistantThinking || undefined,
       });
+    }
+    if (lastId) {
+      await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
     await store.setAgentHistory({
       agentId: this.agentId,
@@ -585,6 +801,10 @@ class AgentRunner {
           tool_call_id: call.id,
           name: call.name,
         });
+        // Context compression: when a task is done, trim old tool exchanges
+        if ((result as Record<string, unknown> | undefined)?.taskDone === true) {
+          compressHistory(input.history);
+        }
       }
 
     }
@@ -648,6 +868,49 @@ class AgentRunner {
 
       emitToolDone(true);
       return { ok: true, content: formatSkillPrompt(skill) };
+    }
+
+    if (name === "create_skill") {
+      const args = safeJsonParse<{
+        name?: string;
+        description?: string;
+        content?: string;
+        autoLoad?: boolean;
+        roles?: string[];
+      }>(input.call.argumentsText, {});
+      const skillName = (args.name ?? "").trim();
+      const description = (args.description ?? "").trim();
+      const content = (args.content ?? "").trim();
+      if (!skillName || !description || !content) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing required fields: name, description, content" };
+      }
+
+      const skillsDir = getSkillDirectory();
+      const skillDir = path.join(skillsDir, skillName);
+
+      try {
+        await fs.mkdir(skillDir, { recursive: true });
+        const frontmatter = [
+          "---",
+          `name: ${skillName}`,
+          `description: ${description}`,
+          args.autoLoad ? "auto-load: true" : "",
+          args.roles && args.roles.length > 0 ? `metadata:\n  roles: [${args.roles.join(", ")}]` : "",
+          "---",
+          "",
+          content,
+        ].filter(Boolean).join("\n");
+
+        await fs.writeFile(path.join(skillDir, "SKILL.md"), frontmatter, "utf-8");
+        invalidateSkillCache();
+
+        emitToolDone(true);
+        return { ok: true, path: path.join(skillDir, "SKILL.md") };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to create skill" };
+      }
     }
 
     if (name === "bash") {
@@ -976,6 +1239,210 @@ class AgentRunner {
       return { ok: true, messages };
     }
 
+    if (name === "create_workflow") {
+      const args = safeJsonParse<{
+        groupId?: string;
+        name?: string;
+        description?: string;
+        tasks?: Array<{
+          name?: string;
+          description?: string;
+          assigneeRole?: string;
+          dependsOn?: string[];
+          expectedOutput?: string;
+          maxRevisions?: number;
+        }>;
+      }>(input.call.argumentsText, {});
+      const groupId = (args.groupId ?? "").trim();
+      const wfName = (args.name ?? "").trim();
+      if (!groupId || !wfName) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing groupId or name" };
+      }
+      const tasks = args.tasks ?? [];
+      if (tasks.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "tasks must have at least 1 item" };
+      }
+
+      const wfId = uuid();
+      const now = new Date();
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+
+      await db.execute(
+        sql`INSERT INTO workflows (id, group_id, name, description, creator_id, status, created_at, updated_at) VALUES (${wfId}, ${groupId}, ${wfName}, ${args.description ?? null}, ${this.agentId}, 'draft', ${now}, ${now})`
+      );
+
+      for (const t of tasks) {
+        const tId = uuid();
+        const dependsOn = (t.dependsOn ?? []).map((d) => d.trim()).filter(Boolean);
+        await db.execute(
+          sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${JSON.stringify(dependsOn)}, ${t.maxRevisions ?? 3}, ${now})`
+        );
+      }
+
+      emitToolDone(true);
+      return { ok: true, workflowId: wfId, taskCount: tasks.length };
+    }
+
+    if (name === "update_task") {
+      const args = safeJsonParse<{
+        taskId?: string;
+        status?: string;
+        result?: string;
+        error?: string;
+      }>(input.call.argumentsText, {});
+      const taskId = (args.taskId ?? "").trim();
+      const status = (args.status ?? "").trim();
+      if (!taskId || !status) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing taskId or status" };
+      }
+      const validStatuses = new Set(["in_progress", "review", "done", "failed"]);
+      if (!validStatuses.has(status)) {
+        emitToolDone(false);
+        return { ok: false, error: `Invalid status: ${status}` };
+      }
+
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      const now = new Date();
+
+      const updates: string[] = [`status = ${status}`];
+      if (status === "in_progress") updates.push(`started_at = ${now}`);
+      if (status === "review") updates.push(`reviewed_at = ${now}`);
+      if (status === "done") updates.push(`completed_at = ${now}`);
+      if (args.result) updates.push(`result = ${args.result}`);
+      if (args.error) updates.push(`error = ${args.error}`);
+      if (status === "review") updates.push(`review_count = review_count + 1`);
+
+      await db.execute(
+        sql`UPDATE tasks SET ${sql.raw(updates.join(", "))} WHERE id = ${taskId}`
+      );
+
+      // Log task status change
+      await db.execute(
+        sql`INSERT INTO task_logs (id, task_id, event_type, event_data, actor_id, created_at)
+            VALUES (gen_random_uuid(), ${taskId}, ${`task_${status}`},
+                    jsonb_build_object('status', ${status}, 'result', ${args.result ?? null}),
+                    ${this.agentId}, ${now})`
+      );
+
+      emitToolDone(true);
+      return { ok: true, taskId, status, taskDone: status === "done" };
+    }
+
+    if (name === "get_workflow_status") {
+      const args = safeJsonParse<{ workflowId?: string; groupId?: string }>(
+        input.call.argumentsText,
+        {}
+      );
+      let workflowId = (args.workflowId ?? "").trim();
+
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+
+      if (!workflowId) {
+        const groupId = (args.groupId ?? "").trim();
+        if (!groupId) {
+          emitToolDone(false);
+          return { ok: false, error: "Missing workflowId or groupId" };
+        }
+        const wfRows = await db.execute(
+          sql`SELECT id, status FROM workflows WHERE group_id = ${groupId} AND status IN ('draft', 'active', 'paused') ORDER BY created_at DESC LIMIT 1`
+        );
+        const wfArr = wfRows as unknown as Array<{ id: string; status: string }>;
+        if (wfArr.length === 0) {
+          emitToolDone(true);
+          return { ok: true, workflow: null };
+        }
+        workflowId = wfArr[0].id;
+      }
+
+      const wfRows = await db.execute(
+        sql`SELECT id, name, description, status, created_at, updated_at FROM workflows WHERE id = ${workflowId}`
+      );
+      const wfArr = wfRows as Array<Record<string, unknown>>;
+      if (wfArr.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "Workflow not found" };
+      }
+      const wf = wfArr[0];
+
+      const tRows = await db.execute(
+        sql`SELECT id, name, status, assignee_role, assignee_id, review_count, max_revisions, result, error FROM tasks WHERE workflow_id = ${workflowId} ORDER BY created_at`
+      );
+      const tasks = (tRows as Array<Record<string, unknown>>).map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        assigneeRole: t.assignee_role,
+        assigneeId: t.assignee_id,
+        reviewCount: t.review_count,
+        maxRevisions: t.max_revisions,
+        result: t.result,
+        error: t.error,
+      }));
+
+      emitToolDone(true);
+      return { ok: true, workflow: wf, tasks };
+    }
+
+    if (name === "assign_agent") {
+      const args = safeJsonParse<{
+        agentId?: string;
+        groupId?: string;
+        workflowId?: string;
+        taskId?: string;
+        action?: string;
+      }>(input.call.argumentsText, {});
+      const agentId = (args.agentId ?? "").trim();
+      const groupId = (args.groupId ?? "").trim();
+      const action = (args.action ?? "").trim();
+      if (!agentId || !groupId || !action) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing agentId, groupId, or action" };
+      }
+
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      const now = new Date();
+
+      if (action === "assign") {
+        const wfId = (args.workflowId ?? "").trim() || null;
+        const tId = (args.taskId ?? "").trim() || null;
+        const assignId = uuid();
+
+        // Release any existing assignment for this agent
+        await db.execute(
+          sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND status = 'active'`
+        );
+
+        await db.execute(
+          sql`INSERT INTO agent_assignments (id, agent_id, group_id, workflow_id, task_id, status, assigned_at) VALUES (${assignId}, ${agentId}, ${groupId}, ${wfId}, ${tId}, 'active', ${now})`
+        );
+
+        emitToolDone(true);
+        return { ok: true, assignmentId: assignId };
+      }
+
+      if (action === "release") {
+        await db.execute(
+          sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND group_id = ${groupId} AND status = 'active'`
+        );
+        emitToolDone(true);
+        return { ok: true };
+      }
+
+      emitToolDone(false);
+      return { ok: false, error: `Invalid action: ${action}` };
+    }
+
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);
     if (mcp.hasTool(name)) {
       const args = safeJsonParse<Record<string, unknown>>(input.call.argumentsText, {});
@@ -995,6 +1462,9 @@ class AgentRunner {
     const provider = getLlmProvider();
     if (provider === "openrouter") {
       return this.callOpenRouterStreaming(history, ctx);
+    }
+    if (provider === "anthropic") {
+      return this.callAnthropicStreaming(history, ctx);
     }
     return this.callGlmStreaming(history, ctx);
   }
@@ -1156,6 +1626,183 @@ class AgentRunner {
       assistantThinking,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason,
+    };
+  }
+
+  private async callAnthropicStreaming(
+    history: HistoryMessage[],
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ) {
+    const { apiKey, baseUrl, model } = getAnthropicConfig();
+
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.start",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+      },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "start",
+    });
+
+    const tools = await getAgentTools();
+    const messages = history.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    const payload: Record<string, unknown> = {
+      model,
+      messages,
+      max_tokens: 8192,
+      stream: true,
+    };
+    if (tools.length > 0) {
+      payload.tools = tools.map((t: any) => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters,
+      }));
+    }
+
+    const requestBody = JSON.stringify(payload);
+    void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
+
+    const headers: Record<string, string> = {
+      "x-api-key": apiKey,
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+    };
+
+    const upstream = await fetch(baseUrl, {
+      method: "POST",
+      headers,
+      body: requestBody,
+    });
+
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => "");
+      throw new Error(`Anthropic upstream error: ${upstream.status} ${text}`);
+    }
+
+    const decoder = new TextDecoder();
+    let contentDelta = "";
+    const toolCalls: ToolCall[] = [];
+    let currentToolId = "";
+    let currentToolName = "";
+    let currentToolArgs = "";
+    let buffer = "";
+
+    const reader = upstream.body.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+
+        try {
+          const data = JSON.parse(trimmed.slice(6));
+          if (data.type === "content_block_delta") {
+            if (data.delta?.type === "text_delta") {
+              contentDelta += data.delta.text;
+              this.bus.emit(this.agentId, {
+                event: "agent.stream",
+                data: { kind: "content", delta: data.delta.text },
+              });
+              void appendAgentStreamEvent({
+                agentId: this.agentId,
+                round: ctx.round,
+                kind: "content",
+                delta: data.delta.text,
+              });
+            } else if (data.delta?.type === "input_json_delta") {
+              currentToolArgs += data.delta.partial_json;
+            }
+          } else if (data.type === "content_block_start") {
+            if (data.content_block?.type === "tool_use") {
+              currentToolId = data.content_block.id;
+              currentToolName = data.content_block.name;
+              currentToolArgs = "";
+              this.bus.emit(this.agentId, {
+                event: "agent.stream",
+                data: {
+                  kind: "tool_calls",
+                  delta: JSON.stringify({ name: currentToolName, id: currentToolId }),
+                  tool_call_id: currentToolId,
+                  tool_call_name: currentToolName,
+                },
+              });
+              void appendAgentStreamEvent({
+                agentId: this.agentId,
+                round: ctx.round,
+                kind: "tool_calls",
+                delta: JSON.stringify({ name: currentToolName, id: currentToolId }),
+                tool_call_id: currentToolId,
+                tool_call_name: currentToolName,
+              });
+            }
+          } else if (data.type === "content_block_stop") {
+            if (currentToolId && currentToolName) {
+              toolCalls.push({
+                index: toolCalls.length,
+                id: currentToolId,
+                name: currentToolName,
+                argumentsText: currentToolArgs,
+              });
+            }
+            currentToolId = "";
+            currentToolName = "";
+            currentToolArgs = "";
+          } else if (data.type === "message_delta") {
+            // stop_reason available here
+          } else if (data.type === "message_start") {
+            // message started
+          }
+        } catch {
+          // skip malformed SSE data
+        }
+      }
+    }
+    reader.releaseLock();
+
+    const finishReason = toolCalls.length > 0 ? "tool_calls" : "stop";
+
+    this.bus.emit(this.agentId, {
+      event: "agent.done",
+      data: { finishReason },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "done",
+      finishReason,
+    });
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.done",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+        finishReason,
+      },
+    });
+
+    return {
+      assistantText: contentDelta,
+      assistantThinking: "",
+      toolCalls,
+      finishReason,
     };
   }
 
@@ -1396,9 +2043,13 @@ export class AgentRuntime {
 
     for (const memberId of memberIds) {
       if (memberId === senderId) continue;
-      const role = await store.getAgentRole({ agentId: memberId }).catch(() => null);
-      if (role === "human" || role === null) continue;
-      this.ensureRunner(memberId).wakeup("group_message");
+      try {
+        const role = await store.getAgentRole({ agentId: memberId });
+        if (role === "human" || role === null) continue;
+        this.ensureRunner(memberId).wakeup("group_message");
+      } catch (err) {
+        console.error(`[wakeAgentsForGroup] Failed to wake agent ${memberId}:`, err);
+      }
     }
   }
 
