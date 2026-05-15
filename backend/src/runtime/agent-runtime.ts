@@ -823,7 +823,11 @@ class AgentRunner {
       const hasDirectMention = unreadMessages.some(
         (m) => m.content.includes(myAgentId)
       );
-      if (!hasDirectMention) {
+      // @所有人 / @everyone / @all should wake all agents
+      const hasBroadcastMention = unreadMessages.some(
+        (m) => /@所有人|@everyone|@all/i.test(m.content)
+      );
+      if (!hasDirectMention && !hasBroadcastMention) {
         return;
       }
     }
