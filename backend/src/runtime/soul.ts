@@ -31,6 +31,7 @@ export async function getRoleTemplate(role: string): Promise<string> {
 const BEHAVIOR_ROLES = [
   "coordinator", "worker", "assistant",
   "reviewer", "researcher", "specialist",
+  "creator", "editor",
 ];
 
 // Keyword → behavior role mapping.
@@ -97,6 +98,27 @@ const ROLE_KEYWORDS: [string, string][] = [
   ["后端", "specialist"],
   ["设计", "specialist"],
   ["工程师", "specialist"],
+  // creator
+  ["content", "creator"],
+  ["writer", "creator"],
+  ["copywriter", "creator"],
+  ["copy", "creator"],
+  ["script", "creator"],
+  ["creative", "creator"],
+  ["operation", "creator"],
+  ["operations", "creator"],
+  ["social", "creator"],
+  ["social media", "creator"],
+  ["运营", "creator"],
+  ["策划", "creator"],
+  ["文案", "creator"],
+  // editor
+  ["editing", "editor"],
+  ["editor", "editor"],
+  ["video", "editor"],
+  ["post", "editor"],
+  ["剪辑", "editor"],
+  ["后期", "editor"],
 ];
 
 /**
