@@ -2528,7 +2528,7 @@ class AgentRunner {
         const nowIso = now.toISOString();
 
         const tagsArray = tagsArr.length > 0
-          ? sql`ARRAY[${sql.join(tagsArr.map(t => sql`${t}` as typeof sql), sql`,`)}]::text[]`
+          ? sql`ARRAY[${sql.join(tagsArr, sql`,`)}]::text[]`
           : sql`ARRAY[]::text[]`;
 
         await db.execute(
@@ -2790,8 +2790,8 @@ class AgentRunner {
 
     if (name === "create_backup") {
       try {
-        const { backupWorkspace } = await import("@/lib/storage");
-        const result = await backupWorkspace({ workspaceId });
+        const { store } = await import("@/lib/storage");
+        const result = await store.backupWorkspace({ workspaceId });
         emitToolDone(true);
         return { ok: true, backupId: result.id, createdAt: result.createdAt };
       } catch (err: unknown) {
@@ -2802,8 +2802,8 @@ class AgentRunner {
 
     if (name === "list_backups") {
       try {
-        const { listBackups } = await import("@/lib/storage");
-        const backups = await listBackups({ workspaceId });
+        const { store } = await import("@/lib/storage");
+        const backups = await store.listBackups({ workspaceId });
         emitToolDone(true);
         return { ok: true, backups };
       } catch (err: unknown) {
@@ -2825,8 +2825,8 @@ class AgentRunner {
       }
 
       try {
-        const { restoreBackup } = await import("@/lib/storage");
-        const result = await restoreBackup({ backupId });
+        const { store } = await import("@/lib/storage");
+        const result = await store.restoreBackup({ backupId });
         emitToolDone(true);
         return { ok: true, workspaceId: result.workspaceId, restoredAt: result.restoredAt };
       } catch (err: unknown) {

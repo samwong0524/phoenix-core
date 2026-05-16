@@ -12,13 +12,13 @@ export async function GET(req: Request) {
     return Response.json({
       id: data.id,
       workspaceId: data.workspaceId,
-      createdAt: data.createdAt.toISOString(),
+      createdAt: data.createdAt,
       data: data.data,
     });
   }
 
   const backups = await store.listBackups(
-    workspaceId ? { workspaceId } : undefined
+    workspaceId ? { workspaceId } : {}
   );
   return Response.json({ backups });
 }
