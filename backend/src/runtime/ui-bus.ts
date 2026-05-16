@@ -80,6 +80,12 @@ export type UIEvent =
   | {
       id: number;
       at: number;
+      event: "ui.agent.deleted";
+      data: { workspaceId: string; agentId: string; role: string };
+    }
+  | {
+      id: number;
+      at: number;
       event: "ui.db.write";
       data: {
         workspaceId: string;

@@ -361,6 +361,29 @@ const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "delete_agent",
+      description:
+        "Delete a direct child agent that you created. Only your own sub-agents can be deleted (agents whose parent is you). The target agent must have no sub-agents of its own — delete those first. This operation is irreversible and removes all associated P2P groups and workflows.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          agentRole: {
+            type: "string",
+            description: "The role name of the agent to delete (e.g. 'frontend', 'CTO'). Use role names from list_agents, not UUIDs.",
+          },
+          confirm: {
+            type: "boolean",
+            description: "Must be true to confirm deletion. This operation is irreversible.",
+          },
+        },
+        required: ["agentRole", "confirm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "send_group_message",
       description: "Send a message to a group.",
       parameters: {
@@ -621,7 +644,8 @@ class AgentRunner {
     private readonly agentId: UUID,
     private readonly bus: AgentEventBus,
     private readonly ensureRunner: (agentId: UUID) => void,
-    private readonly wakeAgent: (agentId: UUID) => void
+    private readonly wakeAgent: (agentId: UUID) => void,
+    private readonly stopRunner: (agentId: UUID) => void
   ) {}
 
   start() {
@@ -1455,6 +1479,118 @@ class AgentRunner {
       });
       emitToolDone(true);
       return { ok: true, groupId, addedMembers: newMembers };
+    }
+
+    if (name === "delete_agent") {
+      const args = safeJsonParse<{ agentRole?: string; confirm?: boolean }>(
+        input.call.argumentsText,
+        {}
+      );
+      const agentRole = (args.agentRole ?? "").trim();
+      if (!agentRole) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing agentRole" };
+      }
+      if (!args.confirm) {
+        emitToolDone(false);
+        return { ok: false, error: "Must set confirm=true to delete. This operation is irreversible." };
+      }
+
+      const db = getDb();
+      const agents = await store.listAgentsMeta({ workspaceId });
+
+      // Resolve role name to UUID
+      const resolved = this.resolveAgentIds([agentRole], agents);
+      if (resolved.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: `Agent not found: "${agentRole}"` };
+      }
+      const targetId = resolved[0]!;
+
+      // Cannot delete human
+      const targetAgent = agents.find((a) => a.id === targetId);
+      if (!targetAgent) {
+        emitToolDone(false);
+        return { ok: false, error: "Agent not found" };
+      }
+      if (targetAgent.role === "human") {
+        emitToolDone(false);
+        return { ok: false, error: "Cannot delete the human agent" };
+      }
+
+      // Authorization: target must be a direct child of the calling agent
+      const targetParentId = agents.find((a) => a.id === targetId)?.parentId;
+      if (targetParentId !== this.agentId) {
+        emitToolDone(false);
+        return { ok: false, error: "Access denied: you can only delete agents that you created" };
+      }
+
+      // Check if target has sub-agents
+      const subAgents = agents.filter((a) => a.parentId === targetId);
+      if (subAgents.length > 0) {
+        emitToolDone(false);
+        return { ok: false, error: `Cannot delete: this agent has ${subAgents.length} sub-agent(s). Delete them first.` };
+      }
+
+      // Collect all groups this agent is a member of
+      const allGroups = await store.listGroups({ workspaceId, agentId: targetId });
+      const groupIds = allGroups.map((g) => g.id);
+
+      // For multi-member groups, only remove membership (don't delete the group)
+      // For P2P groups where this agent is one of two members, delete the entire group
+      const multiMemberGroupIds: string[] = [];
+      const p2pGroupIds: string[] = [];
+      for (const g of allGroups) {
+        if (g.memberIds.length === 2) {
+          p2pGroupIds.push(g.id);
+        } else {
+          multiMemberGroupIds.push(g.id);
+        }
+      }
+
+      try {
+        await db.transaction(async (tx) => {
+          // 1. Delete workflows and their tasks/task_logs for P2P groups
+          for (const gid of p2pGroupIds) {
+            await tx.execute(sql`DELETE FROM task_logs WHERE task_id IN (SELECT id FROM tasks WHERE workflow_id IN (SELECT id FROM workflows WHERE group_id = ${gid}))`);
+            await tx.execute(sql`DELETE FROM tasks WHERE workflow_id IN (SELECT id FROM workflows WHERE group_id = ${gid})`);
+            await tx.execute(sql`DELETE FROM agent_assignments WHERE group_id = ${gid}`);
+            await tx.execute(sql`DELETE FROM workflows WHERE group_id = ${gid}`);
+            await tx.execute(sql`DELETE FROM messages WHERE group_id = ${gid}`);
+            await tx.execute(sql`DELETE FROM group_members WHERE group_id = ${gid}`);
+            await tx.execute(sql`DELETE FROM groups WHERE id = ${gid}`);
+          }
+
+          // 2. For multi-member groups: remove membership only
+          for (const gid of multiMemberGroupIds) {
+            await tx.execute(sql`DELETE FROM group_members WHERE group_id = ${gid} AND user_id = ${targetId}`);
+          }
+
+          // 3. Delete workflows where this agent is the creator (in any remaining group)
+          await tx.execute(sql`DELETE FROM task_logs WHERE task_id IN (SELECT id FROM tasks WHERE workflow_id IN (SELECT id FROM workflows WHERE creator_id = ${targetId}))`);
+          await tx.execute(sql`DELETE FROM tasks WHERE workflow_id IN (SELECT id FROM workflows WHERE creator_id = ${targetId})`);
+          await tx.execute(sql`DELETE FROM agent_assignments WHERE workflow_id IN (SELECT id FROM workflows WHERE creator_id = ${targetId})`);
+          await tx.execute(sql`DELETE FROM workflows WHERE creator_id = ${targetId}`);
+
+          // 4. Delete the agent
+          await tx.execute(sql`DELETE FROM agents WHERE id = ${targetId}`);
+        });
+
+        // Stop the agent's runner if it's running
+        this.stopRunner(targetId);
+
+        getWorkspaceUIBus().emit(workspaceId, {
+          event: "ui.agent.deleted",
+          data: { workspaceId, agentId: targetId, role: targetAgent.role },
+        });
+
+        emitToolDone(true);
+        return { ok: true, agentId: targetId, role: targetAgent.role, message: "Agent deleted" };
+      } catch (err) {
+        console.error(`[delete_agent] Transaction failed for agent=${targetId}:`, err);
+        emitToolDone(false);
+        return { ok: false, error: "Failed to delete agent" };
+      }
     }
 
     if (name === "delete_group") {
@@ -2613,6 +2749,9 @@ export class AgentRuntime {
       },
       (id) => {
         this.ensureRunner(id).wakeup("manual");
+      },
+      (id) => {
+        this.stopRunner(id);
       }
     );
     this.runners.set(agentId, runner);
@@ -2656,6 +2795,14 @@ export class AgentRuntime {
     }
 
     return { interrupted: agentIds.length, agentIds };
+  }
+
+  stopRunner(agentId: UUID) {
+    const runner = this.runners.get(agentId);
+    if (runner) {
+      runner.requestInterrupt();
+      this.runners.delete(agentId);
+    }
   }
 }
 
