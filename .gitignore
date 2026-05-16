@@ -16,3 +16,6 @@ backend/.agent_llm_requests/
 tmp/
 .gemini/
 .mcp.json
+backend/mcp.json
+backend/dev-server.log
+backend/dev-server-error.log

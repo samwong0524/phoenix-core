@@ -120,7 +120,7 @@ async function persistAgentEvent(agentId: string, evt: AgentEvent) {
       at: evt.at,
       data: evt.data,
     });
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn("[emitToUpstash] event publish failed:", err);
   }
 }

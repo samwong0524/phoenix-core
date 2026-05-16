@@ -122,4 +122,63 @@ export async function ensureSchema() {
       created_at timestamptz not null
     );
   `;
+
+  await sql/* sql */ `
+    create table if not exists skill_usage (
+      id uuid primary key,
+      skill_name text not null,
+      agent_id uuid not null,
+      success boolean not null,
+      used_at timestamptz not null,
+      version text default '1.0',
+      status text default 'active'
+    );
+  `;
+
+  await sql/* sql */ `
+    create table if not exists memories (
+      id uuid primary key,
+      agent_id uuid not null,
+      workspace_id uuid references workspaces(id),
+      content text not null,
+      tags text[] default '{}',
+      created_at timestamptz not null,
+      accessed_at timestamptz,
+      importance integer default 1,
+      source text
+    );
+  `;
+
+  await sql/* sql */ `
+    create table if not exists session_archive (
+      id uuid primary key,
+      agent_id uuid not null,
+      workspace_id uuid not null,
+      group_id uuid references groups(id),
+      archived_at timestamptz not null,
+      content text not null,
+      tags text[] default '{}',
+      summary text
+    );
+  `;
+
+  await sql/* sql */ `
+    create table if not exists agent_forum (
+      id uuid primary key,
+      agent_id uuid not null,
+      content text not null,
+      created_at timestamptz not null,
+      updated_at timestamptz
+    );
+  `;
+
+  await sql/* sql */ `
+    create table if not exists agent_diary (
+      id uuid primary key,
+      agent_id uuid not null,
+      entry text not null,
+      mood text,
+      created_at timestamptz not null
+    );
+  `;
 }

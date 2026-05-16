@@ -35,7 +35,10 @@ async function getRedisClient(): Promise<RedisClient> {
   if (cachedPromise) return cachedPromise;
 
   cachedPromise = (async () => {
-    const client = createClient({ url: getRedisUrl() });
+    const client = createClient({
+      url: getRedisUrl(),
+      socket: { reconnectStrategy: (retries: number) => Math.min(retries * 50, 3000) },
+    });
     client.on("error", (err) => {
       console.warn("[redis] connection error:", err.message);
     });
@@ -51,7 +54,10 @@ async function getRedisClient(): Promise<RedisClient> {
 }
 
 async function createSubscriber(): Promise<RedisClient> {
-  const client = createClient({ url: getRedisUrl() });
+  const client = createClient({
+    url: getRedisUrl(),
+    socket: { reconnectStrategy: (retries: number) => Math.min(retries * 50, 3000) },
+  });
   client.on("error", () => undefined);
   await client.connect();
   return client;

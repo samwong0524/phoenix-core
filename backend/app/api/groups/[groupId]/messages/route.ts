@@ -55,7 +55,11 @@ export async function POST(
   });
 
   const runtime = getAgentRuntime();
-  await runtime.wakeAgentsForGroup(groupId, body.senderId);
+  try {
+    await runtime.wakeAgentsForGroup(groupId, body.senderId);
+  } catch (err) {
+    console.error("[messages.route.ts] wakeAgentsForGroup failed:", err);
+  }
 
   return Response.json(result, { status: 201 });
 }

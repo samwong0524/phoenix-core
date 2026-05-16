@@ -9,7 +9,7 @@
                 "tavily-mcp@0.2.3"
             ],
             "env": {
-                "TAVILY_API_KEY": "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"
+                "TAVILY_API_KEY": ""
             },
             "disabled": false
         },

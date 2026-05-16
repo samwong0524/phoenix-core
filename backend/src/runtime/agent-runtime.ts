@@ -85,7 +85,19 @@ async function buildSkillsBlock(role?: string): Promise<string> {
   try {
     const loader = await getSkillLoader();
     const allSkills = await loader.listAutoLoadSkills();
-    const roleFiltered = allSkills.filter((skill) => {
+    const allNames = new Set(allSkills.map((s) => s.name));
+
+    const withDepsOk = allSkills.filter((skill) => {
+      if (!skill.requires || skill.requires.length === 0) return true;
+      const missing = skill.requires.filter((dep) => !allNames.has(dep));
+      if (missing.length > 0) {
+        console.warn(`[buildSkillsBlock] skill "${skill.name}" missing dependencies: ${missing.join(", ")}`);
+        return false;
+      }
+      return true;
+    });
+
+    const roleFiltered = withDepsOk.filter((skill) => {
       const skillRolesRaw = (skill.metadata as Record<string, unknown> | undefined)?.roles;
       const skillRoles: string[] | undefined =
         Array.isArray(skillRolesRaw)
@@ -111,6 +123,14 @@ async function buildSkillsBlock(role?: string): Promise<string> {
 
 let cachedSoul: string | null = null;
 let soulLoadAttempted = false;
+
+/**
+ * Invalidate the soul cache so the next loadSoulMd() reads from disk.
+ */
+function invalidateSoulCache() {
+  cachedSoul = null;
+  soulLoadAttempted = false;
+}
 
 async function loadSoulMd(): Promise<string> {
   if (soulLoadAttempted) return cachedSoul ?? "";
@@ -142,26 +162,44 @@ function historyHasSkills(history: HistoryMessage[]) {
 
 /**
  * Compress old tool-call exchanges when history grows too large.
- * Keep: system messages, last 8 messages, and the first user message.
- * Replace middle tool/user/assistant blocks with a single summary placeholder.
+ * Keep: first 2 system messages (soul + skills), last 8 messages, and the first user message.
+ * Replace middle tool/user/assistant blocks with a structured summary.
  */
 function compressHistory(history: HistoryMessage[]) {
   if (history.length <= 10) return;
 
+  // Protect the first 2 system messages (soul constitution, skills block)
   const systemMsgs = history.filter((m) => m.role === "system");
-  const nonSystem = history.filter((m) => m.role !== "system");
+  const protectedSystems = systemMsgs.slice(0, 2);
 
+  // Build non-system view
+  const nonSystem = history.filter((m) => m.role !== "system");
   if (nonSystem.length <= 8) return;
 
   const keepStart = nonSystem.slice(0, 1);
   const keepEnd = nonSystem.slice(-8);
+  const compressed = nonSystem.slice(1, nonSystem.length - 8);
+
+  // Build structured summary from compressed messages
+  const toolCalls = compressed.filter((m) => m.role === "tool" || (m as Record<string, unknown>).tool_calls);
+  const userMsgs = compressed.filter((m) => m.role === "user");
+  const assistantMsgs = compressed.filter((m) => m.role === "assistant");
+
   const summary: HistoryMessage = {
     role: "system",
-    content: `[${nonSystem.length - 9} earlier messages were summarized to save context]`,
+    content:
+      `[Compressed ${compressed.length} messages: ` +
+      `${assistantMsgs.length} assistant replies, ` +
+      `${toolCalls.length} tool calls (${toolCalls.map((m) => {
+        const tc = (m as Record<string, unknown>).tool_calls;
+        if (Array.isArray(tc)) return tc.map((t: Record<string, unknown>) => (t.function as Record<string, unknown>)?.name ?? "unknown").join(", ");
+        return ((m as Record<string, unknown>).name as string) ?? "tool_result";
+      }).flat().slice(0, 5).join(", ") || "results"}), ` +
+      `${userMsgs.length} user messages]`,
   };
 
   history.length = 0;
-  history.push(...systemMsgs, summary, ...keepStart, ...keepEnd);
+  history.push(...protectedSystems, summary, ...keepStart, ...keepEnd);
 }
 
 function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, unknown>> {
@@ -268,6 +306,7 @@ const AGENT_TOOLS = [
           content: { type: "string", description: "Full skill content (markdown body, no frontmatter)" },
           autoLoad: { type: "boolean", description: "Whether to auto-inject this skill into all agents' system prompts" },
           roles: { type: "array", items: { type: "string" }, description: "Optional: restrict to specific agent roles (e.g. ['coordinator', 'coder'])" },
+          requires: { type: "array", items: { type: "string" }, description: "Optional: list of skill names this skill depends on" },
         },
         required: ["name", "description", "content"],
       },
@@ -478,6 +517,7 @@ const AGENT_TOOLS = [
               required: ["name"],
             },
           },
+          autoActivate: { type: "boolean", description: "Set to true to activate workflow immediately" },
         },
         required: ["groupId", "name", "tasks"],
       },
@@ -550,6 +590,147 @@ const AGENT_TOOLS = [
           confirm: { type: "boolean", description: "Set to true to confirm deletion" },
         },
         required: ["groupId", "confirm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reload_soul",
+      description:
+        "Reload the agent soul.md and role templates from disk. Use after the soul file has been edited, or when the agent's behavior seems outdated.",
+      parameters: { type: "object", additionalProperties: false, properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "memory_add",
+      description:
+        "Save a fact, decision, or pattern to long-term memory. Use for important context that should persist across sessions.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          content: { type: "string", description: "The memory content" },
+          tags: { type: "array", items: { type: "string" }, description: "Optional tags for categorization" },
+          importance: { type: "number", description: "Importance 1-5 (default 3)" },
+          source: { type: "string", description: "Where this memory came from (e.g. 'discussion', 'decision', 'bugfix')" },
+        },
+        required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "memory_search",
+      description:
+        "Search long-term memory for relevant context. Use when starting a new task or when you need historical context.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "Search query" },
+          tags: { type: "array", items: { type: "string" }, description: "Optional tag filter" },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "memory_replace",
+      description:
+        "Update an existing memory's content and/or tags. Use when information has changed or needs correction.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", description: "Memory UUID" },
+          content: { type: "string", description: "New content" },
+          tags: { type: "array", items: { type: "string" }, description: "New tags (replaces old)" },
+        },
+        required: ["id", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "memory_remove",
+      description:
+        "Delete a memory permanently. Use when information is obsolete or incorrect.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", description: "Memory UUID" },
+        },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "session_search",
+      description:
+        "Search archived sessions for past conversations and decisions. Use when looking for historical context about a topic.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "Search query" },
+          agentId: { type: "string", description: "Optional: filter by agent" },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_backup",
+      description:
+        "Create a snapshot of the current workspace (agents, groups, members, messages). Returns a backup ID for later restore. Use before making risky changes.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_backups",
+      description:
+        "List available backups for the current workspace. Returns backup IDs and creation times.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "restore_backup",
+      description:
+        "Restore a workspace from a backup. This deletes all current workspace data and replaces it with the backup snapshot. IRREVERSIBLE — use list_backups first to confirm the backup ID.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          backupId: { type: "string", description: "The backup UUID to restore from" },
+          confirm: { type: "boolean", description: "Must be true to confirm. This operation is irreversible." },
+        },
+        required: ["backupId", "confirm"],
       },
     },
   },
@@ -639,6 +820,17 @@ class AgentRunner {
   private running = false;
   private interruptRequested = false;
   private static readonly MAX_PROCESS_ITERATIONS = 3;
+  private turnToolFailures = new Map<string, number>();
+  // Guardrail: same tool + same params连续失败计数
+  private exactFailureCount = new Map<string, number>();
+  // Guardrail: same tool总失败计数
+  private sameToolFailureCount = new Map<string, number>();
+  // Tools blocked due to exact failures >= 5
+  private blockedTools = new Set<string>();
+  // Agent paused due to total failures >= 8
+  private agentPaused = false;
+  // Free mode memory search cache: query -> results (design doc §6.5)
+  private memoryCache = new Map<string, Array<Record<string, unknown>>>();
 
   constructor(
     private readonly agentId: UUID,
@@ -675,6 +867,8 @@ class AgentRunner {
 
   wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" = "manual") {
     console.info(`[AgentRunner:wakeup] agent=${this.agentId} reason=${reason}`);
+    // Run skill evaluation on wakeup — async, non-blocking (design doc §11.4)
+    void this.evaluateSkills();
     this.wake.resolve();
     this.wake = createDeferred<void>();
     this.bus.emit(this.agentId, {
@@ -701,8 +895,10 @@ class AgentRunner {
       await this.wake.promise;
       if (this.running) continue;
       this.running = true;
+      const iterationStart = Date.now();
+      let hadWork = false;
       try {
-        await this.processUntilIdle();
+        hadWork = await this.processUntilIdle();
       } catch (err) {
         this.bus.emit(this.agentId, {
           event: "agent.error",
@@ -717,22 +913,33 @@ class AgentRunner {
       } finally {
         this.running = false;
       }
+      // Hermes idle timeout: 450s idle (no messages) / 1200s active (processing).
+      // If processUntilIdle did no work and total elapsed exceeds idle budget, stop.
+      const elapsed = Date.now() - iterationStart;
+      if (!hadWork && elapsed >= 450_000) {
+        console.info(`[AgentRunner:loop] idle timeout after ${elapsed}ms, stopping runner`);
+        this.stopRunner(this.agentId);
+      } else if (hadWork && elapsed >= 1_200_000) {
+        console.info(`[AgentRunner:loop] active timeout after ${elapsed}ms, stopping runner`);
+        this.stopRunner(this.agentId);
+      }
     }
   }
 
-  private async processUntilIdle() {
+  private async processUntilIdle(): Promise<boolean> {
     const role = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
-    if (role === "human" || role === null) return;
-    if (this.consumeInterruptRequest()) return;
+    if (role === "human" || role === null) return false;
+    if (this.consumeInterruptRequest()) return false;
     let iterations = 0;
+    let hadWork = false;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) return;
+      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) return hadWork;
       iterations++;
-      if (this.consumeInterruptRequest()) return;
+      if (this.consumeInterruptRequest()) return hadWork;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
       console.info(`[processUntilIdle] agent=${this.agentId} iterations=${iterations} batches=${batches.length}`);
-      if (batches.length === 0) return;
+      if (batches.length === 0) return hadWork;
 
       this.bus.emit(this.agentId, {
         event: "agent.unread",
@@ -747,14 +954,15 @@ class AgentRunner {
 
       for (const batch of batches) {
         console.info(`[processUntilIdle] Processing batch group=${batch.groupId} messages=${batch.messages.length}`);
-        if (this.consumeInterruptRequest()) return;
+        if (this.consumeInterruptRequest()) return hadWork;
         try {
           await this.processGroupUnread(batch.groupId, batch.messages);
+          hadWork = true;
         } catch (err) {
           console.error(`[processUntilIdle] Error processing group=${batch.groupId}:`, err);
         }
         console.info(`[processUntilIdle] Done processing batch group=${batch.groupId}`);
-        if (this.consumeInterruptRequest()) return;
+        if (this.consumeInterruptRequest()) return hadWork;
       }
     }
   }
@@ -877,6 +1085,7 @@ class AgentRunner {
           `CRITICAL: When creating groups with create_group, always include 'human' in memberIds so the human user can see progress. 'human' is a valid agent role from list_agents. Without it, workflow controls and cascade prevention will fail.\n` +
           `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
           `If you need to run shell commands, use the bash tool.` +
+          `CRITICAL: When you solve a non-trivial problem (multi-step fix, new pattern, repeated failure), save it as a skill using create_skill. Skills become permanent knowledge for future-you and other agents.` +
           workflowContext +
           (skillsBlock ? `\n\n${skillsBlock}` : ""),
       });
@@ -914,9 +1123,14 @@ class AgentRunner {
     if (hasHumanSender) {
       groupAgentTurnCount.set(groupId, 0);
     } else {
-      const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
-      if (currentTurns >= MAX_AGENT_TURNS) {
-        return;
+      // Skip cascade counter when workflow is active — workflow has its own coordinator review
+      if (activeWf && activeWf.status === "active") {
+        // Active workflow: managed by coordinator, no cascade limit needed
+      } else {
+        const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
+        if (currentTurns >= MAX_AGENT_TURNS) {
+          return;
+        }
       }
       // Free mode: allow agents to respond naturally without requiring direct mentions.
       // The LLM decides based on context. The turn counter (MAX_AGENT_TURNS) is the
@@ -1003,6 +1217,10 @@ class AgentRunner {
       llmHistory: JSON.stringify(history),
       workspaceId,
     });
+
+    // Session archive: archive the conversation for cross-session FTS search (design doc §6.3).
+    void this.archiveSessionToDb(history, groupId, workspaceId);
+
     try {
       await appendAgentHistorySnapshot({
         agentId: this.agentId,
@@ -1019,6 +1237,43 @@ class AgentRunner {
     });
   }
 
+  /**
+   * Archive the current LLM history to session_archive for cross-session FTS search.
+   * Async, best-effort — does not block the main loop.
+   */
+  private async archiveSessionToDb(
+    history: HistoryMessage[],
+    groupId: string,
+    workspaceId: string,
+  ) {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      const content = history.map((m) => `[${m.role}] ${m.content}`).join("\n");
+      const summary = history
+        .filter((m) => m.role === "assistant")
+        .map((m) => m.content.slice(0, 200))
+        .join(" ");
+      await db.execute(
+        sql`INSERT INTO session_archive (id, agent_id, workspace_id, group_id, archived_at, content, summary)
+            VALUES (gen_random_uuid(), ${this.agentId}, ${workspaceId}, ${groupId}, ${new Date().toISOString()}, ${content}, ${summary})`
+      );
+    } catch {
+      // best-effort; table may not exist yet
+    }
+  }
+
+  /**
+   * Reset per-turn guardrail state. Called at the start of each runWithTools round.
+   */
+  private resetForTurn() {
+    this.turnToolFailures.clear();
+    this.exactFailureCount.clear();
+    this.sameToolFailureCount.clear();
+    this.memoryCache.clear();
+  }
+
   private async runWithTools(input: {
     groupId: UUID;
     workspaceId: UUID;
@@ -1028,6 +1283,7 @@ class AgentRunner {
     let assistantText = "";
     let assistantThinking = "";
     let didSend = false;
+    this.resetForTurn();
 
     for (let round = 0; round < maxToolRounds; round++) {
       const res = await this.callLlmStreaming(input.history, {
@@ -1054,6 +1310,23 @@ class AgentRunner {
       });
 
       for (const call of res.toolCalls) {
+        if (this.agentPaused) {
+          input.history.push({
+            role: "system",
+            content: `Agent is paused due to repeated tool failures. Do not attempt further tool calls until the issue is resolved.`,
+          });
+          break;
+        }
+        // Check if this specific tool+params combo is blocked
+        const callKey = `${call.name}:${JSON.stringify(safeJsonParse(call.argumentsText, {}))}`;
+        if (call.name && this.blockedTools.has(callKey)) {
+          input.history.push({
+            role: "system",
+            content: `Tool "${call.name}" with these parameters has failed too many times and is blocked. Use different parameters or a different approach.`,
+          });
+          continue;
+        }
+
         if (call.name && SEND_TOOL_NAMES.has(call.name)) {
           didSend = true;
         }
@@ -1061,6 +1334,37 @@ class AgentRunner {
           groupId: input.groupId,
           call,
         });
+
+        // Record skill usage for self-evolution tracking
+        const toolOk = (result as Record<string, unknown> | undefined)?.ok !== false;
+        if (!toolOk && call.name) {
+          const prev = this.turnToolFailures.get(call.name) ?? 0;
+          this.turnToolFailures.set(call.name, prev + 1);
+
+          // Guardrail: exact failure (same tool + same params)
+          const callKey = `${call.name}:${JSON.stringify(safeJsonParse(call.argumentsText, {}))}`;
+          const exactPrev = this.exactFailureCount.get(callKey) ?? 0;
+          this.exactFailureCount.set(callKey, exactPrev + 1);
+          if (exactPrev + 1 >= 5) {
+            this.blockedTools.add(callKey);
+            console.warn(`[AgentRunner] blocked tool ${callKey} after 5 exact failures`);
+          }
+
+          // Guardrail: same tool total failures
+          const sameToolPrev = this.sameToolFailureCount.get(call.name) ?? 0;
+          this.sameToolFailureCount.set(call.name, sameToolPrev + 1);
+          if (sameToolPrev + 1 >= 8) {
+            this.agentPaused = true;
+            console.warn(`[AgentRunner] agent paused after 8 total failures of ${call.name}`);
+          }
+        }
+
+        // Persist skill usage
+        const ok = (result as Record<string, unknown> | undefined)?.ok ?? true;
+        if (call.name) {
+          void this.recordSkillUsage(call.name, ok === true);
+        }
+
         this.bus.emit(this.agentId, {
           event: "agent.stream",
           data: {
@@ -1087,6 +1391,17 @@ class AgentRunner {
         // Context compression: when a task is done, trim old tool exchanges
         if ((result as Record<string, unknown> | undefined)?.taskDone === true) {
           compressHistory(input.history);
+        }
+      }
+
+      // Inject failure alert when a tool keeps failing — triggers agent self-learning
+      for (const [toolName, count] of this.turnToolFailures) {
+        if (count >= 3) {
+          input.history.push({
+            role: "system",
+            content: `Tool "${toolName}" has failed ${count} times in this turn. Consider creating a skill with \`create_skill\` documenting the fix pattern, or try a different approach.`,
+          });
+          break;
         }
       }
 
@@ -1123,6 +1438,79 @@ class AgentRunner {
       }
     }
     return result;
+  }
+
+  /**
+   * Record a skill/tool usage for self-evolution tracking.
+   * Best-effort — failures are silently ignored.
+   */
+  private async recordSkillUsage(skillName: string, success: boolean) {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      await db.execute(
+        sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at)
+            VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, ${success}, ${new Date()})`
+      );
+    } catch {
+      // best-effort; table may not exist yet in fresh databases
+    }
+  }
+
+  /**
+   * Evaluate all skills based on usage history and classify them into tiers.
+   * Bayesian smoothed scoring: score = (success + 1) / (total + 2)
+   * Tiers: >90% excellent, 70-90% good, 30-70% needs_improve, <30% deprecated
+   * Design doc §11.4 skill evolution loop.
+   */
+  private async evaluateSkills() {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+
+      // Aggregate success/failure per skill
+      const rows = await db.execute(
+        sql`SELECT skill_name,
+                   COUNT(*) FILTER (WHERE success = true) as success_count,
+                   COUNT(*) FILTER (WHERE success = false) as failure_count
+            FROM skill_usage
+            GROUP BY skill_name`
+      );
+
+      const skillStats = rows as Array<Record<string, unknown>>;
+      for (const row of skillStats) {
+        const skillName = row.skill_name as string;
+        const successCount = Number(row.success_count ?? 0);
+        const failureCount = Number(row.failure_count ?? 0);
+        const total = successCount + failureCount;
+        if (total === 0) continue;
+
+        // Bayesian smoothing
+        const score = (successCount + 1) / (total + 2);
+        const percentage = score * 100;
+
+        let newStatus: string;
+        if (percentage > 90) {
+          newStatus = "active";
+        } else if (percentage >= 70) {
+          newStatus = "active";
+        } else if (percentage >= 30) {
+          newStatus = "improving";
+        } else {
+          newStatus = "deprecated";
+        }
+
+        // Update status for this agent's records
+        await db.execute(
+          sql`UPDATE skill_usage SET status = ${newStatus}
+              WHERE skill_name = ${skillName} AND status = 'active' AND agent_id = ${this.agentId}`
+        );
+      }
+    } catch {
+      // best-effort; table may not exist
+    }
   }
 
   private async executeToolCall(input: { groupId: UUID; call: ToolCall }) {
@@ -1190,6 +1578,7 @@ class AgentRunner {
         content?: string;
         autoLoad?: boolean;
         roles?: string[];
+        requires?: string[];
       }>(input.call.argumentsText, {});
       const skillName = (args.name ?? "").trim();
       const description = (args.description ?? "").trim();
@@ -1199,10 +1588,46 @@ class AgentRunner {
         return { ok: false, error: "Missing required fields: name, description, content" };
       }
 
+      // Frequency limit: max 3 skills per day per agent (design doc §11.4)
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+        const rows = await db.execute(
+          sql`SELECT COUNT(*) as cnt FROM skill_usage WHERE agent_id = ${this.agentId} AND used_at >= NOW() - INTERVAL '24 hours'`
+        );
+        const count = (rows as Array<Record<string, unknown>>)[0]?.cnt as number;
+        if (count >= 3) {
+          emitToolDone(false);
+          return { ok: false, error: "Daily skill creation limit reached (3 per day). Try again tomorrow." };
+        }
+      } catch {
+        // best-effort; table may not exist — proceed without limit
+      }
+
       const skillsDir = getSkillDirectory();
       const skillDir = path.join(skillsDir, skillName);
 
       try {
+        // Conflict detection: check if skill already exists
+        const existing = await fs.stat(skillDir).catch(() => null);
+        if (existing?.isDirectory()) {
+          // Mark conflict in skill_usage table
+          try {
+            const { getDb } = await import("@/db");
+            const { sql } = await import("drizzle-orm");
+            const db = getDb();
+            await db.execute(
+              sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
+                  VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, false, ${new Date().toISOString()}, 'conflict')`
+            );
+          } catch {
+            // best-effort
+          }
+          emitToolDone(false);
+          return { ok: false, error: `Skill "${skillName}" already exists. Status: conflict. Use a different name or update the existing skill.`, conflict: true };
+        }
+
         await fs.mkdir(skillDir, { recursive: true });
         const frontmatter = [
           "---",
@@ -1210,6 +1635,7 @@ class AgentRunner {
           `description: ${description}`,
           args.autoLoad ? "auto-load: true" : "",
           args.roles && args.roles.length > 0 ? `metadata:\n  roles: [${args.roles.join(", ")}]` : "",
+          args.requires && args.requires.length > 0 ? `requires: [${args.requires.join(", ")}]` : "",
           "---",
           "",
           content,
@@ -1814,6 +2240,7 @@ class AgentRunner {
           expectedOutput?: string;
           maxRevisions?: number;
         }>;
+        autoActivate?: boolean;
       }>(input.call.argumentsText, {});
       const groupId = (args.groupId ?? "").trim();
       const wfName = (args.name ?? "").trim();
@@ -1829,24 +2256,55 @@ class AgentRunner {
 
       const wfId = uuid();
       const now = new Date();
+      const initialStatus = args.autoActivate ? "active" : "draft";
       const { getDb } = await import("@/db");
       const { sql } = await import("drizzle-orm");
       const db = getDb();
 
-      await db.execute(
-        sql`INSERT INTO workflows (id, group_id, name, description, creator_id, status, created_at, updated_at) VALUES (${wfId}, ${groupId}, ${wfName}, ${args.description ?? null}, ${this.agentId}, 'draft', ${now}, ${now})`
-      );
-
-      for (const t of tasks) {
-        const tId = uuid();
-        const dependsOn = (t.dependsOn ?? []).map((d) => d.trim()).filter(Boolean);
+      try {
         await db.execute(
-          sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${JSON.stringify(dependsOn)}, ${t.maxRevisions ?? 3}, ${now})`
+          sql`INSERT INTO workflows (id, group_id, name, description, creator_id, status, created_at, updated_at) VALUES (${wfId}, ${groupId}, ${wfName}, ${args.description ?? null}, ${this.agentId}, ${initialStatus}, ${now}, ${now})`
         );
+
+        for (const t of tasks) {
+          const tId = uuid();
+          const dependsOn = (t.dependsOn ?? []).map((d) => d.trim()).filter(Boolean);
+          await db.execute(
+            sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${JSON.stringify(dependsOn)}, ${t.maxRevisions ?? 3}, ${now})`
+          );
+        }
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to create workflow" };
       }
 
       emitToolDone(true);
-      return { ok: true, workflowId: wfId, taskCount: tasks.length };
+      const result: Record<string, unknown> = { ok: true, workflowId: wfId, taskCount: tasks.length };
+
+      // Auto-retrieve relevant memories for this workflow (design doc §6.5)
+      try {
+        const searchQuery = [wfName, args.description ?? ""].filter(Boolean).join(" ");
+        const memRows = await db.execute(
+          sql`SELECT id, content, tags, importance, source FROM memories
+              WHERE agent_id = ${this.agentId}
+              AND content ILIKE ${`%${searchQuery}%`}
+              ORDER BY importance DESC, created_at DESC
+              LIMIT 5`
+        );
+        const relatedMemories = (memRows as Array<Record<string, unknown>>).map((r) => ({
+          id: r.id,
+          content: r.content,
+          tags: r.tags,
+          importance: r.importance,
+        }));
+        if (relatedMemories.length > 0) {
+          result.relatedMemories = relatedMemories;
+        }
+      } catch {
+        // best-effort; table may not exist
+      }
+
+      return result;
     }
 
     if (name === "update_task") {
@@ -1862,7 +2320,7 @@ class AgentRunner {
         emitToolDone(false);
         return { ok: false, error: "Missing taskId or status" };
       }
-      const validStatuses = new Set(["in_progress", "review", "done", "failed"]);
+      const validStatuses = new Set(["in_progress", "review", "done", "failed", "approved", "rejected", "blocked"]);
       if (!validStatuses.has(status)) {
         emitToolDone(false);
         return { ok: false, error: `Invalid status: ${status}` };
@@ -1877,24 +2335,30 @@ class AgentRunner {
       if (status === "in_progress") updates.push(`started_at = ${now}`);
       if (status === "review") updates.push(`reviewed_at = ${now}`);
       if (status === "done") updates.push(`completed_at = ${now}`);
+      if (status === "approved") updates.push(`completed_at = ${now}`);
       if (args.result) updates.push(`result = ${args.result}`);
       if (args.error) updates.push(`error = ${args.error}`);
       if (status === "review") updates.push(`review_count = review_count + 1`);
 
-      await db.execute(
-        sql`UPDATE tasks SET ${sql.raw(updates.join(", "))} WHERE id = ${taskId}`
-      );
+      try {
+        await db.execute(
+          sql`UPDATE tasks SET ${sql.raw(updates.join(", "))} WHERE id = ${taskId}`
+        );
 
-      // Log task status change
-      await db.execute(
-        sql`INSERT INTO task_logs (id, task_id, event_type, event_data, actor_id, created_at)
-            VALUES (gen_random_uuid(), ${taskId}, ${`task_${status}`},
-                    jsonb_build_object('status', ${status}, 'result', ${args.result ?? null}),
-                    ${this.agentId}, ${now})`
-      );
+        // Log task status change
+        await db.execute(
+          sql`INSERT INTO task_logs (id, task_id, event_type, event_data, actor_id, created_at)
+              VALUES (gen_random_uuid(), ${taskId}, ${`task_${status}`},
+                      jsonb_build_object('status', ${status}, 'result', ${args.result ?? null}),
+                      ${this.agentId}, ${now})`
+        );
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to update task" };
+      }
 
       emitToolDone(true);
-      return { ok: true, taskId, status, taskDone: status === "done" };
+      return { ok: true, taskId, status, taskDone: status === "done" || status === "approved" };
     }
 
     if (name === "get_workflow_status") {
@@ -1980,29 +2444,395 @@ class AgentRunner {
         const tId = (args.taskId ?? "").trim() || null;
         const assignId = uuid();
 
-        // Release any existing assignment for this agent
-        await db.execute(
-          sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND status = 'active'`
-        );
+        try {
+          // Release any existing assignment for this agent
+          await db.execute(
+            sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND status = 'active'`
+          );
 
-        await db.execute(
-          sql`INSERT INTO agent_assignments (id, agent_id, group_id, workflow_id, task_id, status, assigned_at) VALUES (${assignId}, ${agentId}, ${groupId}, ${wfId}, ${tId}, 'active', ${now})`
-        );
+          await db.execute(
+            sql`INSERT INTO agent_assignments (id, agent_id, group_id, workflow_id, task_id, status, assigned_at) VALUES (${assignId}, ${agentId}, ${groupId}, ${wfId}, ${tId}, 'active', ${now})`
+          );
+        } catch (err: unknown) {
+          emitToolDone(false);
+          return { ok: false, error: err instanceof Error ? err.message : "Failed to assign agent" };
+        }
 
         emitToolDone(true);
         return { ok: true, assignmentId: assignId };
       }
 
       if (action === "release") {
-        await db.execute(
-          sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND group_id = ${groupId} AND status = 'active'`
-        );
+        try {
+          await db.execute(
+            sql`UPDATE agent_assignments SET status = 'released', released_at = ${now} WHERE agent_id = ${agentId} AND group_id = ${groupId} AND status = 'active'`
+          );
+        } catch (err: unknown) {
+          emitToolDone(false);
+          return { ok: false, error: err instanceof Error ? err.message : "Failed to release agent" };
+        }
         emitToolDone(true);
         return { ok: true };
       }
 
       emitToolDone(false);
       return { ok: false, error: `Invalid action: ${action}` };
+    }
+
+    if (name === "reload_soul") {
+      invalidateSoulCache();
+      invalidateSkillCache();
+      const newSoul = await loadSoulMd();
+      const loader = await getSkillLoader();
+      invalidateSkillCache();
+      await loader.discoverSkills();
+      emitToolDone(true);
+      return { ok: true, message: "Soul and skills reloaded from disk" };
+    }
+
+    // --- Memory tools (C Module) ---
+
+    if (name === "memory_add") {
+      const args = safeJsonParse<{
+        content?: string;
+        tags?: string[];
+        importance?: number;
+        source?: string;
+      }>(input.call.argumentsText, {});
+      const content = (args.content ?? "").trim();
+      if (!content) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing content" };
+      }
+
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+        const memId = uuid();
+        const now = new Date();
+        const tagsArr = args.tags ?? [];
+        const importance = Math.min(5, Math.max(1, args.importance ?? 3));
+        const source = (args.source ?? "").trim() || null;
+
+        // First get workspace_id
+        const wsRows = await db.execute(
+          sql`SELECT workspace_id FROM agents WHERE id = ${this.agentId} LIMIT 1`
+        );
+        const ws = (wsRows as unknown as Array<{ workspace_id: string }>)[0];
+        if (!ws) {
+          emitToolDone(false);
+          return { ok: false, error: "Agent not found" };
+        }
+
+        const nowIso = now.toISOString();
+
+        const tagsArray = tagsArr.length > 0
+          ? sql`ARRAY[${sql.join(tagsArr.map(t => sql`${t}` as typeof sql), sql`,`)}]::text[]`
+          : sql`ARRAY[]::text[]`;
+
+        await db.execute(
+          sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsArray}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
+        );
+
+        emitToolDone(true);
+        return { ok: true, id: memId };
+      } catch (err: unknown) {
+        console.error("[memory_add] INSERT failed:", err);
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to add memory" };
+      }
+    }
+
+    if (name === "memory_search") {
+      const args = safeJsonParse<{
+        query?: string;
+        tags?: string[];
+        limit?: number;
+      }>(input.call.argumentsText, {});
+      const query = (args.query ?? "").trim();
+      if (!query) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing query" };
+      }
+
+      // Free mode: check cache to avoid repeated searches in same cycle (design doc §6.5)
+      const cacheKey = `${query}:${(args.tags ?? []).sort().join(",")}:${args.limit ?? 10}`;
+      const cached = this.memoryCache.get(cacheKey);
+      if (cached) {
+        emitToolDone(true);
+        return { ok: true, memories: cached, count: cached.length, cached: true };
+      }
+
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+        const limit = Math.min(50, args.limit ?? 10);
+        const filterTags = args.tags ?? [];
+
+        // Layer 1: Keyword + tag exact match (design doc §6.1)
+        let layer1Rows;
+        if (filterTags.length > 0) {
+          layer1Rows = await db.execute(
+            sql`SELECT id, content, tags, importance, source, created_at
+                FROM memories WHERE agent_id = ${this.agentId}
+                AND (content ILIKE ${`%${query}%`} OR tags && ${filterTags})
+                ORDER BY importance DESC, created_at DESC`
+          );
+        } else {
+          layer1Rows = await db.execute(
+            sql`SELECT id, content, tags, importance, source, created_at
+                FROM memories WHERE agent_id = ${this.agentId}
+                AND content ILIKE ${`%${query}%`}
+                ORDER BY importance DESC, created_at DESC`
+          );
+        }
+
+        const layer1 = (layer1Rows as Array<Record<string, unknown>>).map((r) => ({
+          id: String(r.id),
+          content: String(r.content),
+          tags: r.tags as string[] | null,
+          importance: Number(r.importance ?? 1),
+          source: r.source as string | null,
+        }));
+
+        // Layer 2: TagMemo Spike propagation — tag co-occurrence expansion (design doc §6.2)
+        // Extract tags from layer 1 results, find memories with co-occurring tags
+        const layer1Tags = new Set<string>();
+        for (const mem of layer1) {
+          if (Array.isArray(mem.tags)) {
+            for (const t of mem.tags) layer1Tags.add(t);
+          }
+        }
+
+        let layer2: typeof layer1 = [];
+        if (layer1Tags.size > 0) {
+          const tagArr = Array.from(layer1Tags);
+          // Find memories sharing tags with layer 1 results, excluding layer 1 itself
+          const layer1Ids = layer1.map((m) => m.id);
+          const spikeThreshold = Math.max(2, Math.floor(limit * 0.3)); // up to 30% extra from spike
+
+          if (layer1Ids.length > 0) {
+            // Build exclusion list for SQL
+            const placeholders = layer1Ids.map(() => sql`${layer1Ids[layer1Ids.indexOf(layer1Ids[0] ?? "")]}`).join(", ");
+            // Safer approach: use array containment
+            const layer2Rows = await db.execute(
+              sql`SELECT id, content, tags, importance, source, created_at
+                  FROM memories WHERE agent_id = ${this.agentId}
+                  AND id NOT IN (${layer1Ids.slice(0, 50).map((id) => sql`${id}`).join(", ")})
+                  AND tags && ${tagArr}
+                  ORDER BY importance DESC, created_at DESC
+                  LIMIT ${spikeThreshold}`
+            );
+            layer2 = (layer2Rows as Array<Record<string, unknown>>).map((r) => ({
+              id: String(r.id),
+              content: String(r.content),
+              tags: r.tags as string[] | null,
+              importance: Number(r.importance ?? 1),
+              source: r.source as string | null,
+            }));
+          }
+        }
+
+        // Merge layer 1 + layer 2, then residual pyramid (dedup by content similarity)
+        const merged = [...layer1, ...layer2];
+        const seenIds = new Set<string>();
+        const deduped: typeof merged = [];
+        for (const mem of merged) {
+          if (seenIds.has(mem.id)) continue;
+          // Simple content dedup: skip if content prefix (first 50 chars) already seen
+          const contentKey = mem.content.slice(0, 50).toLowerCase();
+          const isDuplicate = deduped.some((d) => d.content.slice(0, 50).toLowerCase() === contentKey);
+          if (!isDuplicate) {
+            seenIds.add(mem.id);
+            deduped.push(mem);
+          }
+        }
+
+        // Apply limit, sort by importance desc
+        const final = deduped
+          .sort((a, b) => b.importance - a.importance)
+          .slice(0, limit);
+
+        const resultMemories = final.map((m) => ({
+          id: m.id,
+          content: m.content,
+          tags: m.tags,
+          importance: m.importance,
+          source: m.source,
+        }));
+
+        // Cache for free-mode reuse (design doc §6.5)
+        this.memoryCache.set(cacheKey, resultMemories);
+
+        emitToolDone(true);
+        return {
+          ok: true,
+          memories: resultMemories,
+          count: resultMemories.length,
+        };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to search memories", memories: [] };
+      }
+    }
+
+    if (name === "memory_replace") {
+      const args = safeJsonParse<{
+        id?: string;
+        content?: string;
+        tags?: string[];
+      }>(input.call.argumentsText, {});
+      const id = (args.id ?? "").trim();
+      const content = (args.content ?? "").trim();
+      if (!id || !content) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing id or content" };
+      }
+
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+
+        if (args.tags) {
+          await db.execute(
+            sql`UPDATE memories SET content = ${content}, tags = ${args.tags} WHERE id = ${id} AND agent_id = ${this.agentId}`
+          );
+        } else {
+          await db.execute(
+            sql`UPDATE memories SET content = ${content} WHERE id = ${id} AND agent_id = ${this.agentId}`
+          );
+        }
+
+        emitToolDone(true);
+        return { ok: true, id };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to update memory" };
+      }
+    }
+
+    if (name === "memory_remove") {
+      const args = safeJsonParse<{ id?: string }>(input.call.argumentsText, {});
+      const id = (args.id ?? "").trim();
+      if (!id) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing id" };
+      }
+
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+        await db.execute(
+          sql`DELETE FROM memories WHERE id = ${id} AND agent_id = ${this.agentId}`
+        );
+        emitToolDone(true);
+        return { ok: true, id };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to remove memory" };
+      }
+    }
+
+    if (name === "session_search") {
+      const args = safeJsonParse<{
+        query?: string;
+        agentId?: string;
+        limit?: number;
+      }>(input.call.argumentsText, {});
+      const query = (args.query ?? "").trim();
+      if (!query) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing query" };
+      }
+
+      try {
+        const { getDb } = await import("@/db");
+        const { sql } = await import("drizzle-orm");
+        const db = getDb();
+        const limit = Math.min(50, args.limit ?? 10);
+        const searchAgentId = (args.agentId ?? "").trim() || null;
+
+        let rows;
+        if (searchAgentId) {
+          rows = await db.execute(
+            sql`SELECT id, content, summary, tags, archived_at
+                FROM session_archive WHERE agent_id = ${searchAgentId}
+                AND (content ILIKE ${`%${query}%`} OR summary ILIKE ${`%${query}%`})
+                ORDER BY archived_at DESC LIMIT ${limit}`
+          );
+        } else {
+          rows = await db.execute(
+            sql`SELECT id, content, summary, tags, archived_at
+                FROM session_archive
+                WHERE content ILIKE ${`%${query}%`} OR summary ILIKE ${`%${query}%`}
+                ORDER BY archived_at DESC LIMIT ${limit}`
+          );
+        }
+
+        const sessions = (rows as Array<Record<string, unknown>>).map((r) => ({
+          id: r.id,
+          content: r.content,
+          summary: r.summary,
+          tags: r.tags,
+        }));
+
+        emitToolDone(true);
+        return { ok: true, sessions, count: sessions.length };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to search sessions", sessions: [] };
+      }
+    }
+
+    if (name === "create_backup") {
+      try {
+        const { backupWorkspace } = await import("@/lib/storage");
+        const result = await backupWorkspace({ workspaceId });
+        emitToolDone(true);
+        return { ok: true, backupId: result.id, createdAt: result.createdAt };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to create backup" };
+      }
+    }
+
+    if (name === "list_backups") {
+      try {
+        const { listBackups } = await import("@/lib/storage");
+        const backups = await listBackups({ workspaceId });
+        emitToolDone(true);
+        return { ok: true, backups };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to list backups" };
+      }
+    }
+
+    if (name === "restore_backup") {
+      const args = safeJsonParse<{ backupId?: string; confirm?: boolean }>(input.call.argumentsText, {});
+      const backupId = (args.backupId ?? "").trim();
+      if (!backupId) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing backupId" };
+      }
+      if (!args.confirm) {
+        emitToolDone(false);
+        return { ok: false, error: "Must set confirm=true to restore. This operation is irreversible." };
+      }
+
+      try {
+        const { restoreBackup } = await import("@/lib/storage");
+        const result = await restoreBackup({ backupId });
+        emitToolDone(true);
+        return { ok: true, workspaceId: result.workspaceId, restoredAt: result.restoredAt };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to restore backup" };
+      }
     }
 
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);

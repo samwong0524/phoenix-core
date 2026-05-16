@@ -171,7 +171,7 @@ async function persistUIEvent(workspaceId: string, evt: UIEvent) {
       at: evt.at,
       data: evt.data,
     });
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn("[emitUiToUpstash] UI event publish failed:", err);
   }
 }

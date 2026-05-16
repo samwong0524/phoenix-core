@@ -8,7 +8,8 @@ export type SkillFrontmatter = {
   "allowed-tools"?: string[];
   "auto-load"?: string | boolean;
   auto_load?: string | boolean;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  requires?: string[];
 };
 
 export type Skill = {
@@ -20,7 +21,8 @@ export type Skill = {
   license?: string;
   allowedTools?: string[];
   autoLoad?: boolean;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  requires?: string[];  // design doc §11.4: skill dependencies
 };
 
 const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
@@ -78,7 +80,14 @@ function parseFrontmatter(text: string): SkillFrontmatter | null {
       const metaMatch = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
       if (metaMatch) {
         result.metadata = result.metadata ?? {};
-        result.metadata[metaMatch[1]] = parseScalar(metaMatch[2]);
+        const metaValue = metaMatch[2] ?? "";
+        // Support inline YAML arrays: roles: [frontend, backend]
+        if (metaValue.startsWith("[") && metaValue.endsWith("]")) {
+          const inner = metaValue.slice(1, -1).trim();
+          result.metadata[metaMatch[1]] = inner.length > 0 ? parseInlineList(metaValue) : [];
+        } else {
+          result.metadata[metaMatch[1]] = parseScalar(metaValue);
+        }
       }
       continue;
     }
@@ -105,6 +114,12 @@ function parseFrontmatter(text: string): SkillFrontmatter | null {
     if (key === "allowed-tools") {
       const inlineList = parseInlineList(value);
       result["allowed-tools"] = inlineList ?? [parseScalar(value)];
+      continue;
+    }
+
+    if (key === "requires") {
+      const inlineList = parseInlineList(value);
+      result["requires"] = inlineList ?? [parseScalar(value)];
       continue;
     }
 
@@ -218,6 +233,12 @@ export class SkillLoader {
               (frontmatter as Record<string, unknown>)["auto_load"]
           );
 
+          // Parse requires from frontmatter (top-level key)
+          const requiresRaw = (frontmatter as Record<string, unknown>)["requires"];
+          const requires: string[] | undefined = Array.isArray(requiresRaw)
+            ? requiresRaw as string[]
+            : undefined;
+
           const skill: Skill = {
             name: frontmatter.name,
             description: frontmatter.description,
@@ -228,6 +249,7 @@ export class SkillLoader {
             allowedTools: frontmatter["allowed-tools"],
             autoLoad,
             metadata: frontmatter.metadata,
+            requires,
           };
 
           this.skills.set(skill.name, skill);

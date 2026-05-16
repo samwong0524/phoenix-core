@@ -20,15 +20,15 @@ export async function DELETE(
     const groupRows = await db.execute(
       sql`SELECT id FROM "groups" WHERE workspace_id = ${workspaceId}`
     );
-    const groupIds = (groupRows as Array<{ id: string }>).map((r) => r.id);
+    const groupIds = ((groupRows as unknown) as Array<{ id: string }>).map((r) => r.id);
 
     // Collect all workflows for cascade
     const allWorkflowRows = groupIds.length > 0
       ? await db.execute(
           sql`SELECT id FROM workflows WHERE group_id IN (${sql.join(groupIds, sql`, `)})`
         )
-      : { rows: [] };
-    const workflowIds = (allWorkflowRows as Array<{ id: string }>).map((r) => r.id);
+      : [];
+    const workflowIds = (allWorkflowRows as unknown as Array<{ id: string }>).map((r) => r.id);
 
     // Cascade delete within groups
     await db.transaction(async (tx) => {
@@ -46,6 +46,10 @@ export async function DELETE(
           sql`DELETE FROM agent_assignments WHERE workflow_id IN (${sql.join(workflowIds, sql`, `)})`
         );
       }
+      // session_archive (FK group_id → groups — MUST delete before groups)
+      await tx.execute(
+        sql`DELETE FROM session_archive WHERE workspace_id = ${workspaceId}`
+      );
       // agent_assignments by group_id
       if (groupIds.length > 0) {
         await tx.execute(
@@ -63,23 +67,36 @@ export async function DELETE(
         await tx.execute(
           sql`DELETE FROM workflows WHERE group_id IN (${sql.join(groupIds, sql`, `)})`
         );
-        // groups
+        // groups (after session_archive, agent_assignments, messages, group_members, workflows)
         await tx.execute(
           sql`DELETE FROM "groups" WHERE workspace_id = ${workspaceId}`
         );
       }
+      // skill_usage (no FK, but agent-scoped)
+      const agentRows = await tx.execute(
+        sql`SELECT id FROM agents WHERE workspace_id = ${workspaceId}`
+      );
+      const agentIds = ((agentRows as unknown) as Array<{ id: string }>).map((r) => r.id);
+      if (agentIds.length > 0) {
+        await tx.execute(
+          sql`DELETE FROM skill_usage WHERE agent_id IN (${sql.join(agentIds, sql`, `)})`
+        );
+      }
+      // agents
+      await tx.execute(
+        sql`DELETE FROM agents WHERE workspace_id = ${workspaceId}`
+      );
       // backups
       await tx.execute(
         sql`DELETE FROM backups WHERE workspace_id = ${workspaceId}`
       );
+      // memories (FK workspace_id → workspaces)
+      await tx.execute(
+        sql`DELETE FROM memories WHERE workspace_id = ${workspaceId}`
+      );
     });
 
-    // Delete all agents in this workspace (llm_history is stored in the same row)
-    await db.execute(
-      sql`DELETE FROM agents WHERE workspace_id = ${workspaceId}`
-    );
-
-    // Delete workspace
+    // Delete workspace (all dependent rows already removed in transaction)
     await db.execute(
       sql`DELETE FROM workspaces WHERE id = ${workspaceId}`
     );
