@@ -277,7 +277,7 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "list_agents",
-      description: "List all agents in the current workspace (role names + UUIDs). Use role names (not UUIDs) when calling create_group or add_group_members.",
+      description: "List all agents in the current workspace (role names + UUIDs). This includes the 'human' agent (the human user). Use role names (not UUIDs) when calling create_group or add_group_members.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
     },
   },
@@ -325,12 +325,12 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "create_group",
-      description: "Create a group with the given member role names. Returns the groupId (UUID) and name. Use this groupId when calling send_group_message.",
+      description: "Create a group with the given member role names. Returns the groupId (UUID) and name. memberIds accepts agent role names from list_agents — this includes 'human' (the human user), which you should include in any group where a human needs to see progress. Use this groupId when calling send_group_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs" },
+          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names from list_agents (e.g. frontend/backend/CTO/human). Always include 'human' if the human user needs to see progress and coordinate. NOT UUIDs" },
           name: { type: "string" },
         },
         required: ["memberIds"],
@@ -850,6 +850,7 @@ class AgentRunner {
           `Act strictly as this role when replying. Be concise and helpful.\n` +
           `Your replies are NOT automatically delivered to humans.\n` +
           `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
+          `CRITICAL: When creating groups with create_group, always include 'human' in memberIds so the human user can see progress. 'human' is a valid agent role from list_agents. Without it, workflow controls and cascade prevention will fail.\n` +
           `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
           `If you need to run shell commands, use the bash tool.` +
           workflowContext +
