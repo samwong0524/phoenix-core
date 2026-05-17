@@ -1347,7 +1347,9 @@ class AgentRunner {
       input.history.push({
         role: "system",
         content:
-          `[Rules] Never create new agents or new groups without human explicit approval. Use existing agents and groups for delegation. ` +
+          `[Rules] Never create new agents or groups without human approval. ` +
+          `You can use bash to check files, run commands, and verify project state. ` +
+          `Use existing agents and groups for delegation. ` +
           `Max ${MAX_MSGS} turns per group (current: ${currentTurns}). ` +
           `Stay silent if no new input. One action, one message.`,
       });
