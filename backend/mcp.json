@@ -14,13 +14,13 @@
             "disabled": false
         },
         "chrome-devtools": {
-            "description": "Chrome DevTools - Browser automation and web scraping",
+            "description": "Chrome DevTools - Browser automation and web scraping (local Edge)",
             "type": "stdio",
             "command": "npx",
             "args": [
                 "-y",
                 "chrome-devtools-mcp@latest",
-                "--browserUrl=http://109.244.159.17:9999"
+                "--browserUrl=http://localhost:9222"
             ],
             "disabled": false
         },

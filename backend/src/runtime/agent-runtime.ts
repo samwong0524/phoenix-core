@@ -15,6 +15,33 @@ import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+const MAX_LLM_RETRIES = 3;
+const LLM_RETRY_BASE_MS = 2000;
+
+async function fetchWithRetry(url: string, init: RequestInit, label: string = "LLM"): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt <= MAX_LLM_RETRIES; attempt++) {
+    const resp = await fetch(url, init);
+    if (resp.status !== 429) return resp;
+
+    lastResponse = resp;
+    const retryAfter = resp.headers.get("retry-after");
+    const baseDelay = retryAfter
+      ? parseInt(retryAfter, 10) * 1000
+      : LLM_RETRY_BASE_MS * Math.pow(2, attempt);
+    // Add 0-500ms random jitter to avoid all agents retrying simultaneously
+    const jitter = Math.floor(Math.random() * 500);
+    const delayMs = baseDelay + jitter;
+
+    console.warn(`[fetchWithRetry] ${label} got 429, attempt ${attempt + 1}/${MAX_LLM_RETRIES}, retrying in ${delayMs}ms`);
+    await new Promise(r => setTimeout(r, delayMs));
+  }
+
+  // Return the last 429 response to let the caller handle the error
+  return lastResponse!;
+}
+
 type UUID = string;
 
 function uuid(): UUID {
@@ -162,11 +189,12 @@ function historyHasSkills(history: HistoryMessage[]) {
 
 /**
  * Compress old tool-call exchanges when history grows too large.
- * Keep: first 2 system messages (soul + skills), last 8 messages, and the first user message.
- * Replace middle tool/user/assistant blocks with a structured summary.
+ * Trigger at >8 messages (was >10) to prevent context bloat.
+ * Keep: first 2 system messages (soul + skills), last 6 messages, and the first user message.
+ * Replace middle tool/user/assistant blocks with a compact structured summary.
  */
 function compressHistory(history: HistoryMessage[]) {
-  if (history.length <= 10) return;
+  if (history.length <= 8) return; // trigger earlier
 
   // Protect the first 2 system messages (soul constitution, skills block)
   const systemMsgs = history.filter((m) => m.role === "system");
@@ -174,32 +202,50 @@ function compressHistory(history: HistoryMessage[]) {
 
   // Build non-system view
   const nonSystem = history.filter((m) => m.role !== "system");
-  if (nonSystem.length <= 8) return;
+  if (nonSystem.length <= 6) return; // keep fewer recent messages
 
   const keepStart = nonSystem.slice(0, 1);
-  const keepEnd = nonSystem.slice(-8);
-  const compressed = nonSystem.slice(1, nonSystem.length - 8);
+  const keepEnd = nonSystem.slice(-6); // was -8
+  const compressed = nonSystem.slice(1, nonSystem.length - 6);
 
-  // Build structured summary from compressed messages
+  // Build compact summary
   const toolCalls = compressed.filter((m) => m.role === "tool" || (m as Record<string, unknown>).tool_calls);
   const userMsgs = compressed.filter((m) => m.role === "user");
   const assistantMsgs = compressed.filter((m) => m.role === "assistant");
 
+  // Extract just tool names (not full args/results) for compactness
+  const toolNames = toolCalls
+    .map((m) => {
+      const tc = (m as Record<string, unknown>).tool_calls;
+      if (Array.isArray(tc)) return tc.map((t: Record<string, unknown>) => (t.function as Record<string, unknown>)?.name ?? "?");
+      return [(m as Record<string, unknown>).name ?? "?"];
+    })
+    .flat();
+
+  // Count unique tool names, not every invocation
+  const uniqueTools = [...new Set(toolNames)];
+
+  // Truncate long content from kept messages to prevent bloat
+  const MAX_CONTENT_LEN = 2000; // cap individual message length
+  const trimmed = [...keepStart, ...keepEnd].map((m) => {
+    if (typeof m.content === "string" && m.content.length > MAX_CONTENT_LEN) {
+      return { ...m, content: m.content.slice(0, MAX_CONTENT_LEN) + "\n...[truncated]" };
+    }
+    return m;
+  });
+  const trimmedStart = trimmed.slice(0, keepStart.length);
+  const trimmedEnd = trimmed.slice(keepStart.length);
+
   const summary: HistoryMessage = {
     role: "system",
     content:
-      `[Compressed ${compressed.length} messages: ` +
-      `${assistantMsgs.length} assistant replies, ` +
-      `${toolCalls.length} tool calls (${toolCalls.map((m) => {
-        const tc = (m as Record<string, unknown>).tool_calls;
-        if (Array.isArray(tc)) return tc.map((t: Record<string, unknown>) => (t.function as Record<string, unknown>)?.name ?? "unknown").join(", ");
-        return ((m as Record<string, unknown>).name as string) ?? "tool_result";
-      }).flat().slice(0, 5).join(", ") || "results"}), ` +
-      `${userMsgs.length} user messages]`,
+      `[${compressed.length}msgs compressed: ${assistantMsgs.length} replies, ` +
+      `${uniqueTools.length} tools(${uniqueTools.slice(0, 6).join(",")}), ` +
+      `${userMsgs.length} user msgs]`,
   };
 
   history.length = 0;
-  history.push(...protectedSystems, summary, ...keepStart, ...keepEnd);
+  history.push(...protectedSystems, summary, ...trimmedStart, ...trimmedEnd);
 }
 
 function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, unknown>> {
@@ -1044,6 +1090,13 @@ class AgentRunner {
 
     const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
     const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
+
+    // Proactive compression: trim bloated history before LLM call to reduce token usage
+    if (history.length > 8) {
+      compressHistory(history);
+      console.info(`[processGroupUnread] compressed history: ${history.length} messages`);
+    }
+
     const skillsBlock = await buildSkillsBlock();
     const soulBlock = await loadSoulMd();
     const hasSkills = historyHasSkills(history);
@@ -1172,19 +1225,26 @@ class AgentRunner {
           message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
         },
       });
-      for (const memberId of members) {
-        if (memberId === this.agentId) continue;
-        const role = await store.getAgentRole({ agentId: memberId }).catch(() => null);
+      for (let i = 0; i < members.length; i++) {
+        if (members[i] === this.agentId) continue;
+        const role = await store.getAgentRole({ agentId: members[i] }).catch(() => null);
         if (role === "human" || role === null) continue;
-        this.ensureRunner(memberId);
-        this.wakeAgent(memberId);
+        const idx = i;
+        const delay = 500 * idx + Math.floor(Math.random() * 500);
+        (async () => {
+          await new Promise((r) => setTimeout(r, delay));
+          this.ensureRunner(members[idx]);
+          this.wakeAgent(members[idx]);
+        })();
       }
       didSend = true;
       const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
       groupAgentTurnCount.set(groupId, currentTurns + 1);
     }
 
-    // If agent created agents but never successfully replied to a group, force a reminder
+    // If agent created agents but never successfully replied to a group, inject a reminder
+    // into history WITHOUT calling LLM again (saves an entire LLM call cycle).
+    // The next wakeup will see the reminder and act on it.
     const needsHumanReply = historyHasTool(history, CREATE_TOOL_NAMES) &&
       !historyHasSuccessfulTool(history, REPLY_TOOL_NAMES);
 
@@ -1196,18 +1256,7 @@ class AgentRunner {
         role: "user",
         content: reminder,
       });
-
-      const followup = await this.runWithTools({
-        groupId,
-        workspaceId,
-        history,
-      });
-
-      history.push({
-        role: "assistant",
-        content: followup.assistantText,
-        reasoning_content: followup.assistantThinking || undefined,
-      });
+      console.info(`[processGroupUnread] injected reminder (no LLM call) for agent ${this.agentId}`);
     }
     if (lastId) {
       await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
@@ -1286,6 +1335,23 @@ class AgentRunner {
     this.resetForTurn();
 
     for (let round = 0; round < maxToolRounds; round++) {
+      // Reinforce critical constraints before each LLM call.
+      // LLM attention to early system messages degrades in long conversations;
+      // appending to end ensures the rules are actually "seen".
+      const lastIdx = input.history.length - 1;
+      if (input.history[lastIdx] && input.history[lastIdx].content.startsWith("[Rules]")) {
+        input.history.splice(lastIdx, 1);
+      }
+      const MAX_MSGS = 10;
+      const currentTurns = groupAgentTurnCount.get(input.groupId) ?? 0;
+      input.history.push({
+        role: "system",
+        content:
+          `[Rules] Never create new agents without human explicit approval. Use existing agents for delegation. ` +
+          `Max ${MAX_MSGS} turns per group (current: ${currentTurns}). ` +
+          `Stay silent if no new input. One action, one message.`,
+      });
+
       const res = await this.callLlmStreaming(input.history, {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
@@ -1665,6 +1731,36 @@ class AgentRunner {
         return { ok: false, error: "Missing command" };
       }
 
+      // Destructive/dangerous command blacklist — code-level guard, cannot be bypassed by prompt
+      const DENIED_COMMANDS: RegExp[] = [
+        /\brm\s+(-[a-zA-Z]*rf?)/,           // rm -rf
+        /\bdel\s+\/[sfa]/i,                  // del /s /q /f
+        /\bformat\b/,                        // format disk
+        /\bmkfs\b/,                          // format filesystem
+        /\bshutdown\b/,                      // shutdown system
+        /\breboot\b/,                        // reboot
+        /\bpowershell\s+.*-[eE]x/,           // powershell -exec bypass
+        /\bcurl\s+.*\|\s*(bash|sh\b|pwsh|powershell)/, // curl | bash (remote code execution)
+        /\bchmod\s+777\b/,                   // chmod 777
+        /\bsudo\b/,                          // sudo (privilege escalation)
+        /\bnet\s+user\b/,                    // create/delete Windows users
+        /\bschtasks\b/,                      // scheduled tasks
+        /\btaskkill\b/,                      // kill running processes
+        /\bStop-Process\b/,                  // PowerShell kill
+      ];
+
+      for (const pattern of DENIED_COMMANDS) {
+        if (pattern.test(command)) {
+          emitToolDone(false);
+          return { ok: false, error: `Command blocked: potentially destructive pattern detected. Use safer alternatives.` };
+        }
+      }
+
+      // Audit log: record every bash attempt before execution
+      const auditLogPath = path.join(process.cwd(), ".agent_stream_logs", "bash-audit.log");
+      const auditLine = `${new Date().toISOString()} | ${this.agentId.substring(0, 8)} | ${command.slice(0, 200).replace(/\n/g, "\\n")} | PENDING\n`;
+      void fs.appendFile(auditLogPath, auditLine);
+
       const workspaceRoot = process.env.AGENT_WORKDIR ?? process.cwd();
       const requestedCwd = (args.cwd ?? "").trim();
       let finalCwd = workspaceRoot;
@@ -1692,6 +1788,8 @@ class AgentRunner {
           maxBuffer,
           shell: process.platform === "win32" ? "bash" : "/bin/bash",
         });
+        const successLine = `${new Date().toISOString()} | ${this.agentId.substring(0, 8)} | ${command.slice(0, 200).replace(/\n/g, "\\n")} | OK | exit:0\n`;
+        void fs.appendFile(auditLogPath, successLine);
         emitToolDone(true);
         return { ok: true, stdout, stderr, exitCode: 0, cwd: finalCwd };
       } catch (err: any) {
@@ -1699,6 +1797,8 @@ class AgentRunner {
         const stderr = err?.stderr ?? "";
         const exitCode = typeof err?.code === "number" ? err.code : null;
         const signal = typeof err?.signal === "string" ? err.signal : null;
+        const errorLine = `${new Date().toISOString()} | ${this.agentId.substring(0, 8)} | ${command.slice(0, 200).replace(/\n/g, "\\n")} | FAIL | exit:${exitCode ?? "null"}\n`;
+        void fs.appendFile(auditLogPath, errorLine);
         emitToolDone(false);
         return {
           ok: false,
@@ -1713,6 +1813,17 @@ class AgentRunner {
     }
 
     if (name === "create") {
+      // CODE-LEVEL GUARD: Only the human user can create new agents.
+      // Prompt constraints are lost in long conversations; code cannot be ignored.
+      const callerRole = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
+      if (callerRole !== "human") {
+        emitToolDone(false);
+        return {
+          ok: false,
+          error: "Permission denied: only the human user can create new agents. Ask the human to create them for you, or delegate to existing agents.",
+        };
+      }
+
       const args = safeJsonParse<{ role?: string; guidance?: string }>(input.call.argumentsText, {});
       const role = (args.role ?? "").trim();
       const guidance = (args.guidance ?? "").trim();
@@ -2908,11 +3019,11 @@ class AgentRunner {
     const requestBody = JSON.stringify(payload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetch(baseUrl, {
+    const upstream = await fetchWithRetry(baseUrl, {
       method: "POST",
       headers,
       body: requestBody,
-    });
+    }, "OpenRouter");
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3074,11 +3185,11 @@ class AgentRunner {
       "anthropic-version": "2023-06-01",
     };
 
-    const upstream = await fetch(baseUrl, {
+    const upstream = await fetchWithRetry(baseUrl, {
       method: "POST",
       headers,
       body: requestBody,
-    });
+    }, "Anthropic");
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3233,14 +3344,14 @@ class AgentRunner {
     const requestBody = JSON.stringify(glmPayload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetch(baseUrl, {
+    const upstream = await fetchWithRetry(baseUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: requestBody,
-    });
+    }, "GLM");
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3389,13 +3500,13 @@ class AgentRunner {
     const requestBody = JSON.stringify(payload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetch(baseUrl, {
+    const upstream = await fetchWithRetry(baseUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: requestBody,
-    });
+    }, "Ollama");
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3594,16 +3705,58 @@ export class AgentRuntime {
     const memberIds = await store.listGroupMemberIds({ groupId });
     console.info(`[wakeAgentsForGroup] group=${groupId}, members=${memberIds.join(",")}, sender=${senderId}`);
 
-    for (const memberId of memberIds) {
-      if (memberId === senderId) continue;
+    // Separate coordinator from workers to wake coordinator first
+    const coordinatorId = await this.findCoordinator(groupId);
+    const workers = memberIds.filter((m) => m !== senderId && m !== coordinatorId);
+
+    // Wake coordinator immediately
+    if (coordinatorId && coordinatorId !== senderId) {
       try {
-        const role = await store.getAgentRole({ agentId: memberId });
-        if (role === "human" || role === null) continue;
-        console.info(`[wakeAgentsForGroup] Waking agent ${memberId} (${role})`);
-        this.ensureRunner(memberId).wakeup("group_message");
+        const role = await store.getAgentRole({ agentId: coordinatorId });
+        if (role !== "human" && role !== null) {
+          console.info(`[wakeAgentsForGroup] Waking coordinator ${coordinatorId} (${role}) immediately`);
+          this.ensureRunner(coordinatorId).wakeup("group_message");
+        }
       } catch (err) {
-        console.error(`[wakeAgentsForGroup] Failed to wake agent ${memberId}:`, err);
+        console.error(`[wakeAgentsForGroup] Failed to wake coordinator ${coordinatorId}:`, err);
       }
+    }
+
+    // Wake workers with staggered delay: base 500-2000ms + random jitter 0-1000ms
+    for (let i = 0; i < workers.length; i++) {
+      const memberId = workers[i];
+      // Each worker waits baseDelay * (i+1) + randomJitter
+      const baseDelay = 500 + (i * 500); // 500ms, 1000ms, 1500ms...
+      const jitter = Math.floor(Math.random() * 1000); // 0-1000ms random
+      const delayMs = Math.min(baseDelay + jitter, 3000); // cap at 3s
+
+      (async () => {
+        await new Promise((r) => setTimeout(r, delayMs));
+        try {
+          const role = await store.getAgentRole({ agentId: memberId });
+          if (role === "human" || role === null) return;
+          console.info(`[wakeAgentsForGroup] Waking worker ${memberId} (${role}) after ${delayMs}ms`);
+          this.ensureRunner(memberId).wakeup("group_message");
+        } catch (err) {
+          console.error(`[wakeAgentsForGroup] Failed to wake agent ${memberId}:`, err);
+        }
+      })();
+    }
+  }
+
+  /**
+   * Find the coordinator (group creator) for a given group.
+   */
+  private async findCoordinator(groupId: UUID): Promise<string | null> {
+    try {
+      const db = getDb();
+      const rows = await db.execute(
+        sql`SELECT creator_id FROM groups WHERE id = ${groupId} LIMIT 1`
+      );
+      const result = (rows as unknown as Array<{ creator_id: string }>)[0];
+      return result?.creator_id ?? null;
+    } catch {
+      return null;
     }
   }
 
