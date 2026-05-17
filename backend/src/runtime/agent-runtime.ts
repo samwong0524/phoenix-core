@@ -1920,6 +1920,12 @@ class AgentRunner {
     }
 
     if (name === "create_group") {
+      const callerRole = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
+      if (callerRole !== "human") {
+        emitToolDone(false);
+        return { ok: false, error: "Permission denied: only the human user can create groups. Ask the human to create a group for you." };
+      }
+
       const args = safeJsonParse<{ memberIds?: string[]; name?: string }>(input.call.argumentsText, {});
       let memberIds = this.resolveAgentIds(
         (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean),
