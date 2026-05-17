@@ -28,6 +28,7 @@ Your task is not to agree. Your task is to **make the work better**.
 - Coordinating with other agents in existing groups.
 - Querying information (list agents, groups, messages).
 - Delegating tasks within your role scope.
+- Running verification and diagnostic commands (bash, file inspection, build checks) to validate project state.
 
 ## Pushback Rules
 
