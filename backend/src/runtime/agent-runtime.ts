@@ -1690,7 +1690,7 @@ class AgentRunner {
           cwd: finalCwd,
           timeout: timeoutMs,
           maxBuffer,
-          shell: "/bin/bash",
+          shell: process.platform === "win32" ? "bash" : "/bin/bash",
         });
         emitToolDone(true);
         return { ok: true, stdout, stderr, exitCode: 0, cwd: finalCwd };
