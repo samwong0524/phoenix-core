@@ -2646,12 +2646,8 @@ class AgentRunner {
 
         const nowIso = now.toISOString();
 
-        const tagsArray = tagsArr.length > 0
-          ? sql`ARRAY[${sql.join(tagsArr, sql`,`)}]::text[]`
-          : sql`ARRAY[]::text[]`;
-
         await db.execute(
-          sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsArray}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
+          sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsArr}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
         );
 
         emitToolDone(true);
