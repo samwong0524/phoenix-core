@@ -2565,7 +2565,7 @@ class AgentRunner {
       );
       const wfIds = (workflowIds as unknown as Array<{ id: string }>).map((r) => r.id);
 
-      // Cascade delete: task_logs → tasks → agent_assignments → workflows → messages → group_members → groups
+      // Cascade delete: task_logs → tasks → agent_assignments → workflows → messages → group_members → session_archive → groups
       try {
         await db.transaction(async (tx) => {
           if (wfIds.length > 0) {
@@ -2586,7 +2586,9 @@ class AgentRunner {
           await tx.execute(sql`DELETE FROM messages WHERE group_id = ${groupId}`);
           // 6. group_members
           await tx.execute(sql`DELETE FROM group_members WHERE group_id = ${groupId}`);
-          // 7. group
+          // 7. session_archive
+          await tx.execute(sql`DELETE FROM session_archive WHERE group_id = ${groupId}`);
+          // 8. group
           await tx.execute(sql`DELETE FROM groups WHERE id = ${groupId}`);
         });
       } catch (err) {
