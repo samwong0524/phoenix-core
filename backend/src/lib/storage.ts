@@ -83,6 +83,9 @@ export const store = {
     if (rows.length === 0) return null;
 
     const preferred = (input.preferredName ?? null) || null;
+    const toDate = (v: Date | string | undefined | null): Date =>
+      v instanceof Date ? v : v ? new Date(v) : new Date(0);
+
     rows.sort((x, y) => {
       const xName = x.name ?? null;
       const yName = y.name ?? null;
@@ -94,11 +97,11 @@ export const store = {
       const yNamed = yName ? 1 : 0;
       if (xNamed !== yNamed) return yNamed - xNamed;
 
-      const xUpdated = (x.lastMessageTime ?? x.createdAt).getTime();
-      const yUpdated = (y.lastMessageTime ?? y.createdAt).getTime();
+      const xUpdated = toDate(x.lastMessageTime ?? x.createdAt).getTime();
+      const yUpdated = toDate(y.lastMessageTime ?? y.createdAt).getTime();
       if (xUpdated !== yUpdated) return yUpdated - xUpdated;
 
-      return y.createdAt.getTime() - x.createdAt.getTime();
+      return toDate(y.createdAt).getTime() - toDate(x.createdAt).getTime();
     });
 
     return rows[0]!.id;
@@ -137,6 +140,9 @@ export const store = {
       const preferred = (input.preferredName ?? null) || null;
 
       const pickBest = (candidates: typeof rows) => {
+        const toDate = (v: Date | string | undefined | null): Date =>
+          v instanceof Date ? v : v ? new Date(v) : new Date(0);
+
         const sorted = [...candidates];
         sorted.sort((x, y) => {
           const xName = x.name ?? null;
@@ -149,11 +155,11 @@ export const store = {
           const yNamed = yName ? 1 : 0;
           if (xNamed !== yNamed) return yNamed - xNamed;
 
-          const xUpdated = (x.lastMessageTime ?? x.createdAt).getTime();
-          const yUpdated = (y.lastMessageTime ?? y.createdAt).getTime();
+          const xUpdated = toDate(x.lastMessageTime ?? x.createdAt).getTime();
+          const yUpdated = toDate(y.lastMessageTime ?? y.createdAt).getTime();
           if (xUpdated !== yUpdated) return yUpdated - xUpdated;
 
-          return y.createdAt.getTime() - x.createdAt.getTime();
+          return toDate(y.createdAt).getTime() - toDate(x.createdAt).getTime();
         });
         return sorted[0]!;
       };
@@ -169,8 +175,8 @@ export const store = {
           createdAt,
         });
         await tx.insert(groupMembers).values([
-          { groupId: keepId, userId: a, lastReadMessageId: null, joinedAt: createdAt },
-          { groupId: keepId, userId: b, lastReadMessageId: null, joinedAt: createdAt },
+          { groupId: keepId, userId: a, joinedAt: createdAt },
+          { groupId: keepId, userId: b, joinedAt: createdAt },
         ]);
         return keepId;
       }
@@ -330,13 +336,11 @@ export const store = {
         {
           groupId: defaultGroupId,
           userId: humanAgentId,
-          lastReadMessageId: null,
           joinedAt: createdAt,
         },
         {
           groupId: defaultGroupId,
           userId: assistantAgentId,
-          lastReadMessageId: null,
           joinedAt: createdAt,
         },
       ]);
@@ -553,13 +557,11 @@ export const store = {
         {
           groupId,
           userId: humanAgentId,
-          lastReadMessageId: null,
           joinedAt: createdAt,
         },
         {
           groupId,
           userId: agentId,
-          lastReadMessageId: null,
           joinedAt: createdAt,
         },
       ]);
@@ -606,7 +608,6 @@ export const store = {
         input.userIds.map((userId) => ({
           groupId: input.groupId,
           userId,
-          lastReadMessageId: null,
           joinedAt,
         }))
       )
@@ -637,7 +638,6 @@ export const store = {
         input.memberIds.map((userId) => ({
           groupId,
           userId,
-          lastReadMessageId: null,
           joinedAt: createdAt,
         }))
       );
