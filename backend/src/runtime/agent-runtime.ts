@@ -62,8 +62,14 @@ const llmScheduler = {
   },
 };
 
-async function fetchWithRetry(url: string, init: RequestInit, label: string = "LLM"): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  label: string = "LLM",
+  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string }
+): Promise<Response> {
   let lastResponse: Response | null = null;
+  let switchedModel = false;
 
   for (let attempt = 0; attempt <= MAX_LLM_RETRIES; attempt++) {
     const controller = new AbortController();
@@ -80,6 +86,22 @@ async function fetchWithRetry(url: string, init: RequestInit, label: string = "L
     const jitter = Math.floor(Math.random() * 1500);
     const delayMs = baseDelay + jitter;
 
+    // On first 429, switch to backup model if available
+    if (!switchedModel && options?.backupModel && options?.modelSwapFn && init.body && typeof init.body === "string") {
+      try {
+        const body = JSON.parse(init.body);
+        if (body.model && body.model !== options.backupModel) {
+          const oldModel = body.model;
+          body.model = options.backupModel;
+          init.body = JSON.stringify(body);
+          switchedModel = true;
+          console.warn(`[fetchWithRetry] ${label} got 429, switching from ${oldModel} to ${options.backupModel}`);
+        }
+      } catch {
+        // body parse failed, continue with original retry logic
+      }
+    }
+
     console.warn(`[fetchWithRetry] ${label} got 429, attempt ${attempt + 1}/${MAX_LLM_RETRIES}, retrying in ${delayMs}ms`);
     await new Promise(r => setTimeout(r, delayMs));
   }
@@ -91,10 +113,15 @@ async function fetchWithRetry(url: string, init: RequestInit, label: string = "L
 
 /** Wrapper: acquires the global rate-limited scheduler slot before calling fetchWithRetry,
  *  then releases. Ensures LLM calls are paced (~50 QPM max) to avoid 429 throttling. */
-async function llmFetch(url: string, init: RequestInit, label: string = "LLM"): Promise<Response> {
+async function llmFetch(
+  url: string,
+  init: RequestInit,
+  label: string = "LLM",
+  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string }
+): Promise<Response> {
   await llmScheduler.acquire();
   try {
-    return await fetchWithRetry(url, init, label);
+    return await fetchWithRetry(url, init, label, options);
   } finally {
     llmScheduler.release();
   }
@@ -974,12 +1001,13 @@ function getGlmConfig() {
     process.env.GLM_BASE_URL ??
     "https://open.bigmodel.cn/api/paas/v4/chat/completions";
   const model = process.env.GLM_MODEL ?? "glm-4.7";
+  const backupModel = process.env.GLM_BACKUP_MODEL ?? "";
 
   if (!apiKey) {
     throw new Error("Missing GLM API key (set GLM_API_KEY or ZHIPUAI_API_KEY)");
   }
 
-  return { apiKey, baseUrl, model };
+  return { apiKey, baseUrl, model, backupModel };
 }
 
 type LlmProvider = "glm" | "openrouter" | "ollama" | "anthropic";
@@ -1049,6 +1077,7 @@ function getOpenRouterConfig() {
     process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions"
   );
   const model = process.env.OPENROUTER_MODEL ?? "";
+  const backupModel = process.env.OPENROUTER_BACKUP_MODEL ?? "";
   const httpReferer = process.env.OPENROUTER_HTTP_REFERER ?? "";
   const appTitle = process.env.OPENROUTER_APP_TITLE ?? "";
 
@@ -1056,19 +1085,20 @@ function getOpenRouterConfig() {
     throw new Error("Missing OPENROUTER_API_KEY");
   }
 
-  return { apiKey, baseUrl, model, httpReferer, appTitle };
+  return { apiKey, baseUrl, model, backupModel, httpReferer, appTitle };
 }
 
 function getAnthropicConfig() {
   const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
   const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "";
   const model = process.env.ANTHROPIC_MODEL ?? "qwen3.6-plus";
+  const backupModel = process.env.ANTHROPIC_BACKUP_MODEL ?? "";
 
   if (!apiKey) {
     throw new Error("Missing ANTHROPIC_API_KEY");
   }
 
-  return { apiKey, baseUrl, model };
+  return { apiKey, baseUrl, model, backupModel };
 }
 
 function getOllamaConfig() {
@@ -1076,7 +1106,8 @@ function getOllamaConfig() {
     process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1/chat/completions"
   );
   const model = process.env.OLLAMA_MODEL ?? "qwen3:8b";
-  return { baseUrl, model };
+  const backupModel = process.env.OLLAMA_BACKUP_MODEL ?? "";
+  return { baseUrl, model, backupModel };
 }
 
 class AgentRunner {
@@ -3496,7 +3527,7 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model, httpReferer, appTitle } = getOpenRouterConfig();
+    const { apiKey, baseUrl, model, backupModel, httpReferer, appTitle } = getOpenRouterConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3540,7 +3571,7 @@ class AgentRunner {
       method: "POST",
       headers,
       body: requestBody,
-    }, "OpenRouter");
+    }, "OpenRouter", { backupModel });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3656,7 +3687,7 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model } = getAnthropicConfig();
+    const { apiKey, baseUrl, model, backupModel } = getAnthropicConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3706,7 +3737,7 @@ class AgentRunner {
       method: "POST",
       headers,
       body: requestBody,
-    }, "Anthropic");
+    }, "Anthropic", { backupModel });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3833,7 +3864,7 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model } = getGlmConfig();
+    const { apiKey, baseUrl, model, backupModel } = getGlmConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3868,7 +3899,7 @@ class AgentRunner {
         "Content-Type": "application/json",
       },
       body: requestBody,
-    }, "GLM");
+    }, "GLM", { backupModel });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3985,7 +4016,7 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { baseUrl, model } = getOllamaConfig();
+    const { baseUrl, model, backupModel } = getOllamaConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -4023,7 +4054,7 @@ class AgentRunner {
         "Content-Type": "application/json",
       },
       body: requestBody,
-    }, "Ollama");
+    }, "Ollama", { backupModel });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
