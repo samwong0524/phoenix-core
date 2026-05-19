@@ -2172,7 +2172,7 @@ class AgentRunner {
           cwd: finalCwd,
           timeout: timeoutMs,
           maxBuffer,
-          shell: process.platform === "win32" ? "bash" : "/bin/bash",
+          shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash",
         });
         const successLine = `${new Date().toISOString()} | ${this.agentId.substring(0, 8)} | ${command.slice(0, 200).replace(/\n/g, "\\n")} | OK | exit:0\n`;
         void fs.appendFile(auditLogPath, successLine);
