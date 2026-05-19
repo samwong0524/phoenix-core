@@ -32,19 +32,34 @@ export async function GET(
       const sendKeepalive = () => controller.enqueue(new TextEncoder().encode(`: ping\n\n`));
 
       let upstashUnsubscribe: (() => void) | null = null;
+      let inMemoryUnsubscribe: (() => void) | null = null;
 
-      const channel = getUpstashRealtime().channel(`agent:${agentId}`);
-      upstashUnsubscribe = await channel.subscribe({
-        events: ["agent.wakeup", "agent.unread", "agent.stream", "agent.done", "agent.error"],
-        history: { start: "-" as any, end: "+" as any, limit: 2000 },
-        onData: (evt) => {
-          // evt shape: { id: string, channel: string, event: string, data: unknown }
-          const payload = {
-            event: evt.event,
-            data: (evt.data as any)?.data ?? evt.data,
-          };
-          controller.enqueue(sseWithId((evt as any).id, payload));
-        },
+      // Redis channel (primary)
+      try {
+        const channel = getUpstashRealtime().channel(`agent:${agentId}`);
+        upstashUnsubscribe = await channel.subscribe({
+          events: ["agent.wakeup", "agent.unread", "agent.stream", "agent.done", "agent.error"],
+          history: { start: "-" as any, end: "+" as any, limit: 2000 },
+          onData: (evt) => {
+            const payload = {
+              event: evt.event,
+              data: (evt.data as any)?.data ?? evt.data,
+            };
+            controller.enqueue(sseWithId((evt as any).id, payload));
+          },
+        });
+      } catch {
+        // Redis unavailable — memory bus will serve as fallback
+      }
+
+      // Memory event bus fallback (design doc §12.2 E24)
+      const bus = runtime.bus;
+      const history = bus.getSince(agentId, 0);
+      for (const evt of history) {
+        controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
+      }
+      inMemoryUnsubscribe = bus.subscribe(agentId, (evt) => {
+        controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
       });
 
       const keepalive = setInterval(sendKeepalive, 15_000);
@@ -52,7 +67,12 @@ export async function GET(
       const abortHandler = async () => {
         clearInterval(keepalive);
         upstashUnsubscribe?.();
-        controller.close();
+        inMemoryUnsubscribe?.();
+        try {
+          controller.close();
+        } catch {
+          // ignore double-close
+        }
       };
 
       if (req.signal.aborted) void abortHandler();

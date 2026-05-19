@@ -1,14 +1,18 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+type MultimodalContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 type HistoryMessage =
   | {
       role: "system" | "user" | "assistant";
-      content: string;
+      content: string | MultimodalContentPart[];
       tool_calls?: unknown;
       reasoning_content?: string;
     }
-  | { role: "tool"; content: string; tool_call_id?: string; name?: string };
+  | { role: "tool"; content: string | MultimodalContentPart[]; tool_call_id?: string; name?: string };
 
 type HistorySnapshot = {
   at: string;

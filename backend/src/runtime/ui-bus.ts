@@ -49,6 +49,12 @@ export type UIEvent =
   | {
       id: number;
       at: number;
+      event: "ui.agent.llm.fallback";
+      data: { workspaceId: string; agentId: string; groupId: string; from: string; to: string };
+    }
+  | {
+      id: number;
+      at: number;
       event: "ui.agent.history.persisted";
       data: { workspaceId: string; agentId: string; groupId: string; historyLength: number };
     }

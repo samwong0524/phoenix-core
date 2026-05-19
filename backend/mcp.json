@@ -1,5 +1,15 @@
 {
     "mcpServers": {
+        "computer-use": {
+            "description": "Windows Computer Use - Desktop automation (screenshot, click, type, scroll, list windows)",
+            "type": "stdio",
+            "command": "python",
+            "args": ["F:\\swarm-ide\\backend\\computer-use-mcp\\server.py"],
+            "env": {
+                "COMPUTER_USE_SCREENSHOT_DIR": "F:\\swarm-ide\\backend\\.computer-use-screenshots"
+            },
+            "disabled": false
+        },
         "tavily": {
             "description": "Tavily Search - Advanced web search and content analysis",
             "type": "stdio",

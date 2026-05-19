@@ -15,14 +15,60 @@ import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-const MAX_LLM_RETRIES = 3;
-const LLM_RETRY_BASE_MS = 2000;
+const MAX_LLM_RETRIES = 5;
+const LLM_RETRY_BASE_MS = 3000;
+const LLM_REQUEST_TIMEOUT_MS = 60000; // 60s max per request
+const MAX_CONCURRENT_LLM = 1;
+const MIN_LLM_INTERVAL_MS = 1200; // minimum gap between LLM calls (~50 QPM ceiling)
+
+/**
+ * Global LLM request scheduler.
+ * Ensures at most 1 concurrent LLM request with a minimum gap between calls,
+ * forming a natural rate limiter (~50 requests/minute ceiling).
+ * All agents share this single queue — when one agent's LLM call is retrying
+ * on 429, others wait their turn instead of compounding the rate-limit.
+ */
+const llmScheduler = {
+  active: 0,
+  queue: [] as Array<() => void>,
+  lastCallTime: 0,
+
+  async acquire(): Promise<void> {
+    // Wait for the concurrency slot (FIFO queue)
+    if (this.active >= MAX_CONCURRENT_LLM || this.queue.length > 0) {
+      await new Promise<void>((resolve) => {
+        this.queue.push(resolve);
+      });
+    }
+    this.active++;
+
+    // Enforce minimum inter-request delay
+    const now = Date.now();
+    const elapsed = now - this.lastCallTime;
+    if (elapsed < MIN_LLM_INTERVAL_MS) {
+      const wait = MIN_LLM_INTERVAL_MS - elapsed;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+    this.lastCallTime = Date.now();
+  },
+
+  release(): void {
+    this.active--;
+    if (this.queue.length > 0) {
+      const next = this.queue.shift()!;
+      // Small delay before waking the next waiter to avoid back-to-back releases
+      setImmediate(next);
+    }
+  },
+};
 
 async function fetchWithRetry(url: string, init: RequestInit, label: string = "LLM"): Promise<Response> {
   let lastResponse: Response | null = null;
 
   for (let attempt = 0; attempt <= MAX_LLM_RETRIES; attempt++) {
-    const resp = await fetch(url, init);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LLM_REQUEST_TIMEOUT_MS);
+    const resp = await fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
     if (resp.status !== 429) return resp;
 
     lastResponse = resp;
@@ -30,16 +76,28 @@ async function fetchWithRetry(url: string, init: RequestInit, label: string = "L
     const baseDelay = retryAfter
       ? parseInt(retryAfter, 10) * 1000
       : LLM_RETRY_BASE_MS * Math.pow(2, attempt);
-    // Add 0-500ms random jitter to avoid all agents retrying simultaneously
-    const jitter = Math.floor(Math.random() * 500);
+    // Add 0-1500ms random jitter to avoid all agents retrying simultaneously
+    const jitter = Math.floor(Math.random() * 1500);
     const delayMs = baseDelay + jitter;
 
     console.warn(`[fetchWithRetry] ${label} got 429, attempt ${attempt + 1}/${MAX_LLM_RETRIES}, retrying in ${delayMs}ms`);
     await new Promise(r => setTimeout(r, delayMs));
   }
 
+  console.error(`[fetchWithRetry] ${label} exhausted ${MAX_LLM_RETRIES + 1} attempts, all 429`);
   // Return the last 429 response to let the caller handle the error
   return lastResponse!;
+}
+
+/** Wrapper: acquires the global rate-limited scheduler slot before calling fetchWithRetry,
+ *  then releases. Ensures LLM calls are paced (~50 QPM max) to avoid 429 throttling. */
+async function llmFetch(url: string, init: RequestInit, label: string = "LLM"): Promise<Response> {
+  await llmScheduler.acquire();
+  try {
+    return await fetchWithRetry(url, init, label);
+  } finally {
+    llmScheduler.release();
+  }
 }
 
 type UUID = string;
@@ -48,14 +106,18 @@ function uuid(): UUID {
   return crypto.randomUUID();
 }
 
+type MultimodalContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 type HistoryMessage =
   | {
       role: "system" | "user" | "assistant";
-      content: string;
+      content: string | MultimodalContentPart[];
       tool_calls?: unknown;
       reasoning_content?: string;
     }
-  | { role: "tool"; content: string; tool_call_id?: string; name?: string };
+  | { role: "tool"; content: string | MultimodalContentPart[]; tool_call_id?: string; name?: string };
 
 type ToolCall = {
   index: number;
@@ -66,6 +128,7 @@ type ToolCall = {
 
 const SKILLS_MARKER = "[skills:loaded]";
 const SOUL_MARKER = "[soul:loaded]";
+const MAX_TOOL_RESULT_CHARS = 200_000; // guardrail: support large results (screenshot paths + metadata, vision content)
 const SEND_TOOL_NAMES = new Set(["send", "send_group_message", "send_direct_message"]);
 const CREATE_TOOL_NAMES = new Set(["create"]);
 const REPLY_TOOL_NAMES = new Set(["send_group_message"]);
@@ -97,8 +160,10 @@ function historyHasSuccessfulTool(history: HistoryMessage[], toolNames: Set<stri
     // Check the following tool result(s) for ok:true
     for (let j = i + 1; j < history.length; j++) {
       if (history[j].role !== "tool") break;
+      const rawContent = history[j].content;
+      const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
       try {
-        const parsed = JSON.parse(history[j].content);
+        const parsed = JSON.parse(contentStr);
         if (parsed.ok === true) return true;
       } catch {
         // skip parse errors
@@ -139,8 +204,8 @@ async function buildSkillsBlock(role?: string): Promise<string> {
     const skillsMeta = roleFiltered.length > 0
       ? `## Available Skills\nYou have access to specialized skills. Load a skill using the get_skill tool when needed.\n\n${roleFiltered.map((s) => `- \`${s.name}\`: ${s.description}`).join("\n")}`
       : "";
-    const autoBlocks = roleFiltered.map((skill) => formatSkillPrompt(skill)).join("\n\n");
-    const skillsParts = [skillsMeta, autoBlocks].filter((part) => part && part.trim());
+    // Design doc §11.5: only inject name+description (~200 chars), not full skill content
+    const skillsParts = [skillsMeta].filter((part) => part && part.trim());
     if (skillsParts.length === 0) return "";
     return `${SKILLS_MARKER}\n\n${skillsParts.join("\n\n")}`;
   } catch {
@@ -187,6 +252,94 @@ function historyHasSkills(history: HistoryMessage[]) {
   );
 }
 
+function shortId(id: unknown): string {
+  const s = String(id ?? "");
+  return s.length > 8 ? s.slice(0, 8) + "..." : s;
+}
+
+function extractToolFact(msg: Extract<HistoryMessage, { role: "tool" }>): string | null {
+  const contentStr = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+  const result = safeJsonParse<Record<string, unknown>>(contentStr, {});
+  const ok = result?.ok !== false;
+  const name = msg.name ?? "unknown";
+
+  // Trivial tools -- skip
+  if (name === "self" || name === "get_skill") return null;
+
+  switch (name) {
+    case "create":
+      return ok
+        ? `Created agent(role="${result.role}", id="${shortId(result.agentId)}")`
+        : `Create agent failed: ${result.error ?? "unknown"}`;
+
+    case "create_skill":
+      return ok
+        ? `Created skill at "${result.path}"`
+        : `Create skill failed: ${result.error ?? "unknown"}`;
+
+    case "create_group":
+      return ok
+        ? `Created group(name="${result.name}", id="${shortId(result.groupId)}")`
+        : `Create group failed: ${result.error ?? "unknown"}`;
+
+    case "add_group_members":
+      return ok
+        ? `Added ${(result.addedMembersIds as string[] | undefined)?.length ?? "?"} members to group ${shortId(result.groupId)}`
+        : `Add members failed: ${result.error ?? "unknown"}`;
+
+    case "delete_agent":
+      return ok
+        ? `Deleted agent(role="${result.role}")`
+        : `Delete agent failed: ${result.error ?? "unknown"}`;
+
+    case "delete_group":
+      return ok
+        ? `Deleted group(id="${shortId(result.groupId)}")`
+        : `Delete group failed: ${result.error ?? "unknown"}`;
+
+    case "send":
+    case "send_group_message":
+    case "send_direct_message":
+      return ok ? `Sent message to ${shortId(String(result.groupId ?? result.toId ?? result.channel ?? "?"))}` : null;
+
+    case "bash": {
+      const exit = result.exitCode !== undefined ? result.exitCode : (result.signal ? `signal ${result.signal}` : "?");
+      return `bash: exit ${exit}`;
+    }
+
+    case "list_agents":
+      return ok ? `Listed ${(result.agents as unknown[] | undefined)?.length ?? "?"} agents` : null;
+
+    case "list_groups":
+      return ok ? `Listed ${(result.groups as unknown[] | undefined)?.length ?? "?"} groups` : null;
+
+    case "list_group_members":
+      return ok ? `Listed ${(result.members as unknown[] | undefined)?.length ?? "?"} members` : null;
+
+    case "get_group_messages":
+      return ok ? `Read ${(result.messages as unknown[] | undefined)?.length ?? "?"} messages from group ${shortId(result.groupId)}` : null;
+
+    case "get_workflow_status": {
+      const wf = result.workflow as Record<string, unknown> | null | undefined;
+      if (wf) {
+        return `Workflow: ${wf.name} (status=${wf.status}, tasks=${(result.tasks as unknown[] | undefined)?.length ?? "?"})`;
+      }
+      return "No workflow found";
+    }
+
+    default:
+      return ok ? `${name}: ok` : `${name}: failed`;
+  }
+}
+
+function summarizeUserMessage(content: string): string {
+  const MAX = 120;
+  if (content.length <= MAX) return content;
+  const dot = content.indexOf(".");
+  if (dot > 0 && dot < MAX) return content.slice(0, dot + 1);
+  return content.slice(0, MAX) + "...";
+}
+
 /**
  * Compress old tool-call exchanges when history grows too large.
  * Trigger at >8 messages (was >10) to prevent context bloat.
@@ -208,23 +361,6 @@ function compressHistory(history: HistoryMessage[]) {
   const keepEnd = nonSystem.slice(-6); // was -8
   const compressed = nonSystem.slice(1, nonSystem.length - 6);
 
-  // Build compact summary
-  const toolCalls = compressed.filter((m) => m.role === "tool" || (m as Record<string, unknown>).tool_calls);
-  const userMsgs = compressed.filter((m) => m.role === "user");
-  const assistantMsgs = compressed.filter((m) => m.role === "assistant");
-
-  // Extract just tool names (not full args/results) for compactness
-  const toolNames = toolCalls
-    .map((m) => {
-      const tc = (m as Record<string, unknown>).tool_calls;
-      if (Array.isArray(tc)) return tc.map((t: Record<string, unknown>) => (t.function as Record<string, unknown>)?.name ?? "?");
-      return [(m as Record<string, unknown>).name ?? "?"];
-    })
-    .flat();
-
-  // Count unique tool names, not every invocation
-  const uniqueTools = [...new Set(toolNames)];
-
   // Truncate long content from kept messages to prevent bloat
   const MAX_CONTENT_LEN = 2000; // cap individual message length
   const trimmed = [...keepStart, ...keepEnd].map((m) => {
@@ -236,12 +372,36 @@ function compressHistory(history: HistoryMessage[]) {
   const trimmedStart = trimmed.slice(0, keepStart.length);
   const trimmedEnd = trimmed.slice(keepStart.length);
 
+  // Build structured summary with extracted facts
+  const facts: string[] = [];
+  for (const msg of compressed) {
+    if (msg.role === "tool") {
+      const toolMsg = msg as Extract<HistoryMessage, { role: "tool" }>;
+      const fact = extractToolFact(toolMsg);
+      if (fact) facts.push(`  - ${fact}`);
+    } else if (msg.role === "user") {
+      const snippet = summarizeUserMessage(typeof msg.content === "string" ? msg.content : "");
+      if (snippet) facts.push(`  - User: ${snippet}`);
+    } else if (msg.role === "assistant") {
+      const text = typeof msg.content === "string" ? msg.content.trim() : "";
+      if (text.length > 0 && !text.startsWith("[")) {
+        const snippet = text.length > 100 ? text.slice(0, 100) + "..." : text;
+        facts.push(`  - Assistant: ${snippet}`);
+      }
+    }
+  }
+
+  const summaryLines = [`[${compressed.length} messages compressed]`];
+  if (facts.length > 0) {
+    summaryLines.push(...facts);
+  } else {
+    summaryLines.push("  (no significant outcomes in this region)");
+  }
+  const summaryText = summaryLines.join("\n").slice(0, 2000);
+
   const summary: HistoryMessage = {
     role: "system",
-    content:
-      `[${compressed.length}msgs compressed: ${assistantMsgs.length} replies, ` +
-      `${uniqueTools.length} tools(${uniqueTools.slice(0, 6).join(",")}), ` +
-      `${userMsgs.length} user msgs]`,
+    content: summaryText,
   };
 
   history.length = 0;
@@ -505,14 +665,30 @@ const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "get_group_messages",
-      description: "Fetch full message history for a group.",
+      description: "Fetch recent message summary for a group. Returns a card list with sender, time, type, and preview. Use get_message_detail to read full content of a specific message.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           groupId: { type: "string" },
+          limit: { type: "number", description: "Number of recent messages to return (default 20)" },
         },
         required: ["groupId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_message_detail",
+      description: "Fetch full content of a single message by ID. Use after get_group_messages to read details.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          messageId: { type: "string" },
+        },
+        required: ["messageId"],
       },
     },
   },
@@ -574,13 +750,13 @@ const AGENT_TOOLS = [
     function: {
       name: "update_task",
       description:
-        "Update task status. Use 'in_progress' when starting, 'review' when done, 'done' when approved, 'failed' on error.",
+        "Update task status. 'in_progress': starting work. 'review': submit for coordinator review. 'done': coordinator approved. 'approved': coordinator approval. 'rejected': coordinator rejected. 'blocked': exceeded max revisions. 'failed': error occurred.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           taskId: { type: "string" },
-          status: { type: "string", enum: ["in_progress", "review", "done", "failed"] },
+          status: { type: "string", enum: ["in_progress", "review", "done", "failed", "approved", "rejected", "blocked"] },
           result: { type: "string" },
           error: { type: "string" },
         },
@@ -816,6 +992,49 @@ function getLlmProvider(): LlmProvider {
   return "glm";
 }
 
+/** Returns whether each LLM provider has the required env vars configured. */
+function isProviderConfigured(provider: LlmProvider): boolean {
+  switch (provider) {
+    case "openrouter": return !!process.env.OPENROUTER_API_KEY;
+    case "anthropic": return !!process.env.ANTHROPIC_API_KEY;
+    case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY);
+    case "ollama": return true; // local, always available
+  }
+}
+
+/**
+ * Returns the ordered provider chain for LLM calls.
+ * Primary = LLM_PROVIDER env var (or "glm" default).
+ * Fallbacks = other providers with configured API keys, tried in order after the primary fails with 429.
+ * LLM_FALLBACK_PROVIDERS env var can override the fallback order (comma-separated).
+ */
+function getProviderChain(): LlmProvider[] {
+  const primary = getLlmProvider();
+  const chain: LlmProvider[] = [primary];
+  const all: LlmProvider[] = ["openrouter", "glm", "anthropic", "ollama"];
+
+  const overrideRaw = process.env.LLM_FALLBACK_PROVIDERS ?? "";
+  if (overrideRaw) {
+    // User-specified fallback order
+    for (const name of overrideRaw.split(",").map((s) => s.trim().toLowerCase())) {
+      if (name === "openrouter" || name === "or") { if (name !== primary && isProviderConfigured("openrouter")) chain.push("openrouter"); }
+      else if (name === "glm") { if (name !== primary && isProviderConfigured("glm")) chain.push("glm"); }
+      else if (name === "anthropic") { if (name !== primary && isProviderConfigured("anthropic")) chain.push("anthropic"); }
+      else if (name === "ollama" || name === "o" || name === "local") { if (name !== primary && isProviderConfigured("ollama")) chain.push("ollama"); }
+    }
+  } else {
+    // Auto-discover fallbacks: try other configured providers in a sensible default order
+    const defaults: LlmProvider[] = ["openrouter", "glm", "anthropic", "ollama"];
+    for (const p of defaults) {
+      if (p !== primary && isProviderConfigured(p)) {
+        chain.push(p);
+      }
+    }
+  }
+
+  return chain;
+}
+
 function normalizeOpenRouterUrl(value: string) {
   if (!value) return "https://openrouter.ai/api/v1/chat/completions";
   if (value.endsWith("/chat/completions")) return value;
@@ -878,6 +1097,85 @@ class AgentRunner {
   // Free mode memory search cache: query -> results (design doc §6.5)
   private memoryCache = new Map<string, Array<Record<string, unknown>>>();
 
+  /**
+   * Record a structured decision event for self-learning.
+   * Design: extract structured events at decision points, not from raw history.
+   * Inspired by human memory: encode at the moment of decision, not replay later.
+   */
+  async recordDecision(input: {
+    groupId?: string;
+    decisionType: string;
+    targetType?: string;
+    targetId?: string;
+    inputSummary?: string;
+    outputSummary?: string;
+    success?: boolean;
+  }) {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const { v4: uuid } = await import("uuid");
+      const db = getDb();
+      // Get workspace_id
+      const wsRows = await db.execute(
+        sql`SELECT workspace_id FROM agents WHERE id = ${this.agentId} LIMIT 1`
+      );
+      const ws = (wsRows as unknown as Array<{ workspace_id: string }>)[0];
+      if (!ws) return;
+
+      const MAX_SUMMARY = 200;
+      await db.execute(
+        sql`INSERT INTO agent_decisions (id, agent_id, group_id, workspace_id, decision_type, target_type, target_id, input_summary, output_summary, success, created_at)
+            VALUES (${uuid()}, ${this.agentId}, ${input.groupId ?? null}, ${ws.workspace_id}, ${input.decisionType}, ${input.targetType ?? null}, ${input.targetId ?? null}, ${(input.inputSummary ?? "").slice(0, MAX_SUMMARY)}, ${(input.outputSummary ?? "").slice(0, MAX_SUMMARY)}, ${input.success ?? null}, ${new Date()})`
+      );
+    } catch {
+      // best-effort — table may not exist or decision extraction is non-critical
+    }
+  }
+
+  /**
+   * Archive a completed session — generate summary and clear llm_history.
+   * Inspired by human episodic memory: distill events into a structured summary,
+   * don't keep the raw conversation forever.
+   */
+  async archiveSession(input: {
+    groupId: string;
+    sessionType: string;
+    title: string;
+    summary: string;
+    keyDecisions?: Record<string, unknown>[];
+  }) {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const { v4: uuid } = await import("uuid");
+      const db = getDb();
+      const wsRows = await db.execute(
+        sql`SELECT workspace_id FROM agents WHERE id = ${this.agentId} LIMIT 1`
+      );
+      const ws = (wsRows as unknown as Array<{ workspace_id: string }>)[0];
+      if (!ws) return;
+
+      await db.execute(
+        sql`INSERT INTO session_archives (id, group_id, workspace_id, session_type, title, summary, key_decisions, archived_at)
+            VALUES (${uuid()}, ${input.groupId}, ${ws.workspace_id}, ${input.sessionType}, ${input.title.slice(0,100)}, ${input.summary.slice(0,2000)}, ${JSON.stringify(input.keyDecisions ?? [])}, ${new Date()})`
+      );
+
+      // Clear llm_history but keep system messages (soul, skills, rules)
+      const agent = await store.getAgent({ agentId: this.agentId });
+      const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
+      const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
+      const systemMsgs = history.filter((m) => m.role === "system").slice(-3);
+      await store.setAgentHistory({
+        agentId: this.agentId,
+        llmHistory: JSON.stringify(systemMsgs),
+      });
+      console.info(`[archiveSession] archived "${input.title}" for group ${input.groupId.slice(0,8)}`);
+    } catch (err) {
+      console.warn(`[archiveSession] failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   constructor(
     private readonly agentId: UUID,
     private readonly bus: AgentEventBus,
@@ -938,7 +1236,18 @@ class AgentRunner {
   private async loop() {
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      await this.wake.promise;
+      // Safety timeout: if no wakeup within 600s, agent is orphaned — stop
+      const timeoutMs = 600_000;
+      let woke = false;
+      await Promise.race([
+        this.wake.promise.then(() => { woke = true; }),
+        new Promise<void>((r) => setTimeout(r, timeoutMs)),
+      ]);
+      if (!woke) {
+        console.info(`[AgentRunner:loop] wakeup timeout ${timeoutMs}ms, stopping runner`);
+        this.stopRunner(this.agentId);
+      }
+      if (!this.started) continue; // stopRunner set started=false
       if (this.running) continue;
       this.running = true;
       const iterationStart = Date.now();
@@ -1093,8 +1402,12 @@ class AgentRunner {
 
     // Proactive compression: trim bloated history before LLM call to reduce token usage
     if (history.length > 8) {
-      compressHistory(history);
-      console.info(`[processGroupUnread] compressed history: ${history.length} messages`);
+      try {
+        compressHistory(history);
+        console.info(`[processGroupUnread] compressed history: ${history.length} messages`);
+      } catch (err) {
+        console.warn(`[processGroupUnread] compression failed: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     const skillsBlock = await buildSkillsBlock();
@@ -1116,6 +1429,15 @@ class AgentRunner {
         .map((m) => `${m.id.substring(0, 8)}(${m.role})`)
         .join(", ");
 
+      // Load role template from disk (design doc §11.1 D20)
+      const roleTemplatePath = path.join(__dirname, "..", "prompts", "roles", `${role}.md`);
+      let roleContent = "";
+      try {
+        roleContent = await fs.readFile(roleTemplatePath, "utf-8");
+      } catch {
+        // No template for this role — continue with default prompt
+      }
+
       const workflowContext = activeWf
         ? `\n\nThere is an active workflow: "${activeWf.name}" (status: ${activeWf.status}). ` +
           (isCoordinator
@@ -1123,24 +1445,31 @@ class AgentRunner {
             : "You are a worker. Only execute when assigned a task by the coordinator. Check get_workflow_status before acting.")
         : "";
 
+      const systemContent =
+        `You are an agent in an IM system.\n` +
+        `Your agent_id is: ${this.agentId}.\n` +
+        `Your workspace_id is: ${workspaceId}.\n` +
+        `Your role is: ${role}.\n` +
+        `This group has ${members.length} members: [${membersList}]. ` +
+        `Only reference these agents by their roles — do not invent other roles.\n` +
+        `Act strictly as this role when replying. Be concise and helpful.\n` +
+        `Your replies are NOT automatically delivered to humans.\n` +
+        `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
+        `CRITICAL: When creating groups with create_group, always include 'human' in memberIds so the human user can see progress. 'human' is a valid agent role from list_agents. Without it, workflow controls and cascade prevention will fail.\n` +
+        `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
+        `If you need to run shell commands, use the bash tool.` +
+        `CRITICAL: When you solve a non-trivial problem (multi-step fix, new pattern, repeated failure), save it as a skill using create_skill. Skills become permanent knowledge for future-you and other agents.` +
+        workflowContext +
+        (skillsBlock ? `\n\n${skillsBlock}` : "");
+
+      // Inject role template before the system prompt if available
+      const finalSystemContent = roleContent
+        ? `${roleContent}\n\n---\n\n${systemContent}`
+        : systemContent;
+
       history.push({
         role: "system",
-        content:
-          `You are an agent in an IM system.\n` +
-          `Your agent_id is: ${this.agentId}.\n` +
-          `Your workspace_id is: ${workspaceId}.\n` +
-          `Your role is: ${role}.\n` +
-          `This group has ${members.length} members: [${membersList}]. ` +
-          `Only reference these agents by their roles — do not invent other roles.\n` +
-          `Act strictly as this role when replying. Be concise and helpful.\n` +
-          `Your replies are NOT automatically delivered to humans.\n` +
-          `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
-          `CRITICAL: When creating groups with create_group, always include 'human' in memberIds so the human user can see progress. 'human' is a valid agent role from list_agents. Without it, workflow controls and cascade prevention will fail.\n` +
-          `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
-          `If you need to run shell commands, use the bash tool.` +
-          `CRITICAL: When you solve a non-trivial problem (multi-step fix, new pattern, repeated failure), save it as a skill using create_skill. Skills become permanent knowledge for future-you and other agents.` +
-          workflowContext +
-          (skillsBlock ? `\n\n${skillsBlock}` : ""),
+        content: finalSystemContent,
       });
     } else {
       if (soulBlock && !hasSoul) {
@@ -1190,11 +1519,46 @@ class AgentRunner {
       // ultimate safety net against infinite loops.
     }
 
-    let { assistantText, assistantThinking, didSend } = await this.runWithTools({
-      groupId,
-      workspaceId,
-      history,
-    });
+    let assistantText = "";
+    let assistantThinking = "";
+    let didSend = false;
+
+    try {
+      const result = await this.runWithTools({
+        groupId,
+        workspaceId,
+        history,
+        hasHumanSender,
+      });
+      assistantText = result.assistantText;
+      assistantThinking = result.assistantThinking;
+      didSend = result.didSend;
+    } catch (llmErr) {
+      const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+      console.error(`[processGroupUnread] LLM call failed for agent ${this.agentId}: ${errMsg}`);
+      // When LLM is unavailable (429 quota, etc.), send a short notice to human so they
+      // aren't left wondering why the agent is silently BUSY.
+      if (hasHumanSender && !this.interruptRequested) {
+        assistantText = `[系统: LLM 服务暂不可用 (${errMsg.slice(0, 80)}), 请稍后再试]`;
+        await store.sendMessage({
+          groupId,
+          senderId: this.agentId,
+          content: assistantText,
+          contentType: "text",
+        });
+      }
+      // Still save what we have so the agent can retry on next wake
+      history.push({
+        role: "assistant",
+        content: assistantText || "[LLM call failed]",
+      });
+      await store.setAgentHistory({
+        agentId: this.agentId,
+        llmHistory: JSON.stringify(history),
+        workspaceId,
+      });
+      return;
+    }
 
     if (didSend) {
       const currentTurns = groupAgentTurnCount.get(groupId) ?? 0;
@@ -1207,13 +1571,16 @@ class AgentRunner {
       reasoning_content: assistantThinking || undefined,
     });
 
-    // If the message was from a human and agent didn't send any reply, auto-send the assistant text
-    if (hasHumanSender && !didSend && assistantText.trim() && !this.interruptRequested) {
+    // If the message was from a human and agent didn't send any reply, auto-send the assistant text.
+    // When assistantText is empty, send a short system notice so the human isn't left waiting.
+    if (hasHumanSender && !didSend && !this.interruptRequested) {
+      const content = assistantText.trim()
+        || `[系统: ${this.agentId.substring(0, 8)} 本轮无法回复，请检查上下文或重试]`;
       const members = await store.listGroupMemberIds({ groupId });
       const result = await store.sendMessage({
         groupId,
         senderId: this.agentId,
-        content: assistantText,
+        content,
         contentType: "text",
       });
       getWorkspaceUIBus().emit(workspaceId, {
@@ -1287,8 +1654,9 @@ class AgentRunner {
   }
 
   /**
-   * Archive the current LLM history to session_archive for cross-session FTS search.
+   * Archive the current LLM history to session_archives for cross-session retrieval.
    * Async, best-effort — does not block the main loop.
+   * Called after every LLM turn (design doc §6.3).
    */
   private async archiveSessionToDb(
     history: HistoryMessage[],
@@ -1298,15 +1666,23 @@ class AgentRunner {
     try {
       const { getDb } = await import("@/db");
       const { sql } = await import("drizzle-orm");
+      const { v4: uuid } = await import("uuid");
       const db = getDb();
-      const content = history.map((m) => `[${m.role}] ${m.content}`).join("\n");
-      const summary = history
-        .filter((m) => m.role === "assistant")
-        .map((m) => m.content.slice(0, 200))
-        .join(" ");
+
+      // Extract key actions from history
+      const assistantMsgs = history.filter((m) => m.role === "assistant" && m.content);
+      const toolMsgs = history.filter((m) => m.role === "tool");
+      const keyActions = toolMsgs
+        .filter((m) => m.name && !["list_groups", "list_agents"].includes(m.name as string))
+        .slice(-5)
+        .map((m) => ({ tool: m.name, result: (m.content as string)?.slice(0, 100) }));
+
+      const summary = assistantMsgs.map((m) => (m.content as string).slice(0, 200)).join(" ");
+      const startTime = history[0]?.content ? new Date().toISOString() : null;
+
       await db.execute(
-        sql`INSERT INTO session_archive (id, agent_id, workspace_id, group_id, archived_at, content, summary)
-            VALUES (gen_random_uuid(), ${this.agentId}, ${workspaceId}, ${groupId}, ${new Date().toISOString()}, ${content}, ${summary})`
+        sql`INSERT INTO session_archives (id, group_id, workspace_id, session_type, title, summary, key_decisions, start_time, end_time, archived_at)
+            VALUES (${uuid()}, ${groupId}, ${workspaceId}, 'llm_turn', 'Auto archive', ${summary.slice(0, 2000)}, ${JSON.stringify(keyActions)}, ${startTime}, ${new Date()}, ${new Date()})`
       );
     } catch {
       // best-effort; table may not exist yet
@@ -1327,8 +1703,9 @@ class AgentRunner {
     groupId: UUID;
     workspaceId: UUID;
     history: HistoryMessage[];
+    hasHumanSender?: boolean; // when true, agent MUST reply to the human
   }) {
-    const maxToolRounds = 3;
+    const maxToolRounds = 10;
     let assistantText = "";
     let assistantThinking = "";
     let didSend = false;
@@ -1339,11 +1716,14 @@ class AgentRunner {
       // LLM attention to early system messages degrades in long conversations;
       // appending to end ensures the rules are actually "seen".
       const lastIdx = input.history.length - 1;
-      if (input.history[lastIdx] && input.history[lastIdx].content.startsWith("[Rules]")) {
+      if (input.history[lastIdx] && typeof input.history[lastIdx].content === "string" && input.history[lastIdx].content.startsWith("[Rules]")) {
         input.history.splice(lastIdx, 1);
       }
       const MAX_MSGS = 10;
       const currentTurns = groupAgentTurnCount.get(input.groupId) ?? 0;
+      const senderRule = input.hasHumanSender
+        ? "A human is waiting for your reply. You MUST use send_group_message to respond."
+        : "Stay silent if no new input.";
       input.history.push({
         role: "system",
         content:
@@ -1351,7 +1731,7 @@ class AgentRunner {
           `You can use bash to check files, run commands, and verify project state. ` +
           `Use existing agents and groups for delegation. ` +
           `Max ${MAX_MSGS} turns per group (current: ${currentTurns}). ` +
-          `Stay silent if no new input. One action, one message.`,
+          `${senderRule} One action, one message.`,
       });
 
       const res = await this.callLlmStreaming(input.history, {
@@ -1450,15 +1830,19 @@ class AgentRunner {
           tool_call_id: call.id,
           tool_call_name: call.name,
         });
+        const resultStr = JSON.stringify(result);
+        const truncatedResult = resultStr.length > MAX_TOOL_RESULT_CHARS
+          ? resultStr.slice(0, MAX_TOOL_RESULT_CHARS) + `\n...[truncated, ${resultStr.length - MAX_TOOL_RESULT_CHARS} chars omitted. Use more specific tool parameters or get_message_detail for full content.]`
+          : resultStr;
         input.history.push({
           role: "tool",
-          content: JSON.stringify(result),
+          content: truncatedResult,
           tool_call_id: call.id,
           name: call.name,
         });
         // Context compression: when a task is done, trim old tool exchanges
         if ((result as Record<string, unknown> | undefined)?.taskDone === true) {
-          compressHistory(input.history);
+          try { compressHistory(input.history); } catch { /* best-effort */ }
         }
       }
 
@@ -1747,8 +2131,8 @@ class AgentRunner {
         /\bsudo\b/,                          // sudo (privilege escalation)
         /\bnet\s+user\b/,                    // create/delete Windows users
         /\bschtasks\b/,                      // scheduled tasks
-        /\btaskkill\b/,                      // kill running processes
-        /\bStop-Process\b/,                  // PowerShell kill
+        /\btaskkill\b(?!.*\/IM\s+.*LOStudio)/,   // kill running processes (except LOStudio restart)
+        /(?<!LOStudio.*)\bStop-Process\b/,        // PowerShell kill (except LOStudio restart)
       ];
 
       for (const pattern of DENIED_COMMANDS) {
@@ -2330,7 +2714,7 @@ class AgentRunner {
     }
 
     if (name === "get_group_messages") {
-      const args = safeJsonParse<{ groupId?: string }>(input.call.argumentsText, {});
+      const args = safeJsonParse<{ groupId?: string; limit?: number }>(input.call.argumentsText, {});
       const groupId = (args.groupId ?? "").trim();
       if (!groupId) {
         emitToolDone(false);
@@ -2341,9 +2725,49 @@ class AgentRunner {
         emitToolDone(false);
         return { ok: false, error: "Access denied" };
       }
-      const messages = await store.listMessages({ groupId });
+      const msgLimit = args.limit && args.limit > 0 && args.limit <= 50 ? args.limit : 20;
+      const messages = await store.listMessages({ groupId, limit: msgLimit });
+
+      // Return summary cards (library catalog pattern — metadata only, not full content)
+      const cards = messages.map(m => ({
+        id: m.id,
+        sender: m.senderId,
+        time: m.sendTime,
+        type: m.contentType,
+        preview: m.content.length > 100 ? m.content.slice(0, 100) + "..." : m.content,
+      }));
       emitToolDone(true);
-      return { ok: true, messages };
+      return { ok: true, messages: cards, total: cards.length };
+    }
+
+    if (name === "get_message_detail") {
+      const args = safeJsonParse<{ messageId?: string }>(input.call.argumentsText, {});
+      const messageId = (args.messageId ?? "").trim();
+      if (!messageId) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing messageId" };
+      }
+      const msg = await store.getMessage({ messageId });
+      if (!msg) {
+        emitToolDone(false);
+        return { ok: false, error: "Message not found" };
+      }
+      // Verify access: check if agent is in the group this message belongs to
+      const groupRows = await getDb().execute(
+        sql`SELECT group_id FROM messages WHERE id = ${messageId}`
+      );
+      const msgGroup = (groupRows as unknown as Array<{ group_id: string }>)[0];
+      if (!msgGroup) {
+        emitToolDone(false);
+        return { ok: false, error: "Message not found" };
+      }
+      const members = await store.listGroupMemberIds({ groupId: msgGroup.group_id });
+      if (!members.includes(this.agentId)) {
+        emitToolDone(false);
+        return { ok: false, error: "Access denied" };
+      }
+      emitToolDone(true);
+      return { ok: true, message: msg };
     }
 
     if (name === "create_workflow") {
@@ -2400,6 +2824,17 @@ class AgentRunner {
       emitToolDone(true);
       const result: Record<string, unknown> = { ok: true, workflowId: wfId, taskCount: tasks.length };
 
+      // Record decision: workflow creation
+      void this.recordDecision({
+        groupId: input.groupId,
+        decisionType: "create",
+        targetType: "workflow",
+        targetId: wfId,
+        inputSummary: `Created workflow "${wfName}" with ${tasks.length} tasks`,
+        outputSummary: `Workflow ${wfId} created, status: ${initialStatus}`,
+        success: true,
+      });
+
       // Auto-retrieve relevant memories for this workflow (design doc §6.5)
       try {
         const searchQuery = [wfName, args.description ?? ""].filter(Boolean).join(" ");
@@ -2450,14 +2885,31 @@ class AgentRunner {
       const db = getDb();
       const now = new Date();
 
-      const updates: string[] = [`status = ${status}`];
-      if (status === "in_progress") updates.push(`started_at = ${now}`);
-      if (status === "review") updates.push(`reviewed_at = ${now}`);
-      if (status === "done") updates.push(`completed_at = ${now}`);
-      if (status === "approved") updates.push(`completed_at = ${now}`);
+      // When submitting for review, check max_revisions before allowing
+      let finalStatus = status;
+      if (status === "review") {
+        const taskRows = await db.execute(
+          sql`SELECT review_count, max_revisions FROM tasks WHERE id = ${taskId}`
+        );
+        const taskArr = taskRows as Array<Record<string, unknown>>;
+        if (taskArr.length > 0) {
+          const currentReviewCount = (taskArr[0].review_count as number) ?? 0;
+          const maxRevisions = (taskArr[0].max_revisions as number) ?? 3;
+          if (currentReviewCount + 1 >= maxRevisions) {
+            finalStatus = "blocked";
+          }
+        }
+      }
+
+      const updates: string[] = [`status = ${finalStatus}`];
+      if (finalStatus === "in_progress") updates.push(`started_at = ${now}`);
+      if (finalStatus === "review") updates.push(`reviewed_at = ${now}`);
+      if (finalStatus === "done") updates.push(`completed_at = ${now}`);
+      if (finalStatus === "approved") updates.push(`completed_at = ${now}`);
       if (args.result) updates.push(`result = ${args.result}`);
       if (args.error) updates.push(`error = ${args.error}`);
-      if (status === "review") updates.push(`review_count = review_count + 1`);
+      if (finalStatus === "review") updates.push(`review_count = review_count + 1`);
+      if (finalStatus === "blocked") updates.push(`review_count = review_count + 1`);
 
       try {
         await db.execute(
@@ -2467,8 +2919,8 @@ class AgentRunner {
         // Log task status change
         await db.execute(
           sql`INSERT INTO task_logs (id, task_id, event_type, event_data, actor_id, created_at)
-              VALUES (gen_random_uuid(), ${taskId}, ${`task_${status}`},
-                      jsonb_build_object('status', ${status}, 'result', ${args.result ?? null}),
+              VALUES (gen_random_uuid(), ${taskId}, ${`task_${finalStatus}`},
+                      jsonb_build_object('status', ${finalStatus}, 'result', ${args.result ?? null}),
                       ${this.agentId}, ${now})`
         );
       } catch (err: unknown) {
@@ -2477,7 +2929,22 @@ class AgentRunner {
       }
 
       emitToolDone(true);
-      return { ok: true, taskId, status, taskDone: status === "done" || status === "approved" };
+      // Record decision: task status change (approve/reject/fix)
+      const decisionMap: Record<string, string> = {
+        done: "approve", approved: "approve", rejected: "reject",
+        failed: "fix", blocked: "escalate", review: "approve",
+      };
+      const decisionType = decisionMap[finalStatus] ?? "fix";
+      void this.recordDecision({
+        groupId: input.groupId,
+        decisionType,
+        targetType: "task",
+        targetId: taskId,
+        inputSummary: `Task ${taskId} → ${finalStatus}`,
+        outputSummary: args.result?.slice(0, 200) ?? finalStatus,
+        success: finalStatus === "done" || finalStatus === "approved",
+      });
+      return { ok: true, taskId, status: finalStatus, taskDone: finalStatus === "done" || finalStatus === "approved" };
     }
 
     if (name === "get_workflow_status") {
@@ -2578,6 +3045,16 @@ class AgentRunner {
         }
 
         emitToolDone(true);
+        // Record decision: agent delegation
+        void this.recordDecision({
+          groupId,
+          decisionType: "delegate",
+          targetType: "agent",
+          targetId: agentId,
+          inputSummary: `Assign ${agentId} to group ${groupId.slice(0,8)} task ${(args.taskId ?? "").slice(0,8) || "(none)"}`,
+          outputSummary: `Assigned, assignmentId: ${assignId.slice(0,8)}`,
+          success: true,
+        });
         return { ok: true, assignmentId: assignId };
       }
 
@@ -2868,31 +3345,31 @@ class AgentRunner {
         const { getDb } = await import("@/db");
         const { sql } = await import("drizzle-orm");
         const db = getDb();
+        const wsRows = await db.execute(
+          sql`SELECT workspace_id FROM agents WHERE id = ${this.agentId} LIMIT 1`
+        );
+        const ws = (wsRows as unknown as Array<{ workspace_id: string }>)[0];
+        if (!ws) {
+          emitToolDone(false);
+          return { ok: false, error: "Agent not found" };
+        }
         const limit = Math.min(50, args.limit ?? 10);
-        const searchAgentId = (args.agentId ?? "").trim() || null;
 
         let rows;
-        if (searchAgentId) {
-          rows = await db.execute(
-            sql`SELECT id, content, summary, tags, archived_at
-                FROM session_archive WHERE agent_id = ${searchAgentId}
-                AND (content ILIKE ${`%${query}%`} OR summary ILIKE ${`%${query}%`})
-                ORDER BY archived_at DESC LIMIT ${limit}`
-          );
-        } else {
-          rows = await db.execute(
-            sql`SELECT id, content, summary, tags, archived_at
-                FROM session_archive
-                WHERE content ILIKE ${`%${query}%`} OR summary ILIKE ${`%${query}%`}
-                ORDER BY archived_at DESC LIMIT ${limit}`
-          );
-        }
+        rows = await db.execute(
+          sql`SELECT id, group_id, summary, key_decisions, archived_at
+              FROM session_archives
+              WHERE workspace_id = ${ws.workspace_id}
+              AND (summary ILIKE ${`%${query}%`} OR session_type ILIKE ${`%${query}%`})
+              ORDER BY archived_at DESC LIMIT ${limit}`
+        );
 
         const sessions = (rows as Array<Record<string, unknown>>).map((r) => ({
           id: r.id,
-          content: r.content,
+          groupId: r.group_id,
           summary: r.summary,
-          tags: r.tags,
+          keyDecisions: r.key_decisions,
+          archivedAt: r.archived_at,
         }));
 
         emitToolDone(true);
@@ -2966,17 +3443,47 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const provider = getLlmProvider();
-    if (provider === "ollama") {
-      return this.callOllamaStreaming(history, ctx);
+    const chain = getProviderChain();
+    const errors: string[] = [];
+
+    for (const provider of chain) {
+      try {
+        const result = await this.callLlmProvider(provider, history, ctx);
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const is429 = msg.includes("429") || msg.includes("upstream error");
+        if (!is429) throw err; // non-429 errors are fatal
+        errors.push(`${provider}: ${msg}`);
+        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" → ")}`);
+        // Keep streaming to the UI so the user sees the fallback
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "ui.agent.llm.fallback",
+          data: {
+            workspaceId: ctx.workspaceId,
+            agentId: this.agentId,
+            groupId: ctx.groupId,
+            from: provider,
+            to: chain[chain.indexOf(provider) + 1] ?? "none",
+          },
+        });
+      }
     }
-    if (provider === "openrouter") {
-      return this.callOpenRouterStreaming(history, ctx);
+
+    throw new Error(`All providers returned 429: ${errors.join("; ")}`);
+  }
+
+  private async callLlmProvider(
+    provider: LlmProvider,
+    history: HistoryMessage[],
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ) {
+    switch (provider) {
+      case "ollama": return this.callOllamaStreaming(history, ctx);
+      case "openrouter": return this.callOpenRouterStreaming(history, ctx);
+      case "anthropic": return this.callAnthropicStreaming(history, ctx);
+      case "glm": return this.callGlmStreaming(history, ctx);
     }
-    if (provider === "anthropic") {
-      return this.callAnthropicStreaming(history, ctx);
-    }
-    return this.callGlmStreaming(history, ctx);
   }
 
   private async callOpenRouterStreaming(
@@ -3023,7 +3530,7 @@ class AgentRunner {
     const requestBody = JSON.stringify(payload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetchWithRetry(baseUrl, {
+    const upstream = await llmFetch(baseUrl, {
       method: "POST",
       headers,
       body: requestBody,
@@ -3189,7 +3696,7 @@ class AgentRunner {
       "anthropic-version": "2023-06-01",
     };
 
-    const upstream = await fetchWithRetry(baseUrl, {
+    const upstream = await llmFetch(baseUrl, {
       method: "POST",
       headers,
       body: requestBody,
@@ -3348,7 +3855,7 @@ class AgentRunner {
     const requestBody = JSON.stringify(glmPayload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetchWithRetry(baseUrl, {
+    const upstream = await llmFetch(baseUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -3504,7 +4011,7 @@ class AgentRunner {
     const requestBody = JSON.stringify(payload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
 
-    const upstream = await fetchWithRetry(baseUrl, {
+    const upstream = await llmFetch(baseUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

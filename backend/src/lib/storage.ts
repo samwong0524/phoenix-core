@@ -77,7 +77,7 @@ export const store = {
       .where(eq(groups.workspaceId, input.workspaceId))
       .groupBy(groups.id)
       .having(
-        dsql`count(*) = 2 and sum(case when ${groupMembers.userId} = ${a} or ${groupMembers.userId} = ${b} then 1 else 0 end) = 2`
+        dsql`count(distinct ${groupMembers.userId}) = 2 and sum(case when ${groupMembers.userId} = ${a} or ${groupMembers.userId} = ${b} then 1 else 0 end) = 2`
       );
 
     if (rows.length === 0) return null;
@@ -131,7 +131,7 @@ export const store = {
         .where(eq(groups.workspaceId, input.workspaceId))
         .groupBy(groups.id)
         .having(
-          dsql`count(*) = 2 and sum(case when ${groupMembers.userId} = ${a} or ${groupMembers.userId} = ${b} then 1 else 0 end) = 2`
+          dsql`count(distinct ${groupMembers.userId}) = 2 and sum(case when ${groupMembers.userId} = ${a} or ${groupMembers.userId} = ${b} then 1 else 0 end) = 2`
         );
 
       const preferred = (input.preferredName ?? null) || null;
@@ -676,7 +676,7 @@ export const store = {
       .where(and(eq(groups.workspaceId, input.workspaceId), inArray(groupMembers.userId, ids)))
       .groupBy(groups.id)
       .having(
-        dsql`count(distinct ${groupMembers.userId}) = ${ids.length} and count(*) = ${ids.length}`
+        dsql`count(distinct ${groupMembers.userId}) = ${ids.length}`
       )
       .orderBy(desc(dsql`coalesce(max(${messages.sendTime}), ${groups.createdAt})`))
       .limit(1);
@@ -684,7 +684,40 @@ export const store = {
     return rows[0]?.id ?? null;
   },
 
-  async listMessages(input: { groupId: UUID }) {
+  async listMessages(input: { groupId: UUID; limit?: number; since?: string }) {
+    const db = getDb();
+    // Use DESC order + limit, then reverse to return oldest-first for chat UI
+    const rows = await (input.since
+      ? db
+          .select({
+            id: messages.id,
+            senderId: messages.senderId,
+            content: messages.content,
+            contentType: messages.contentType,
+            sendTime: messages.sendTime,
+          })
+          .from(messages)
+          .where(and(eq(messages.groupId, input.groupId), gt(messages.sendTime, new Date(input.since))))
+          .orderBy(desc(messages.sendTime))
+          .limit(input.limit ?? 200)
+      : db
+          .select({
+            id: messages.id,
+            senderId: messages.senderId,
+            content: messages.content,
+            contentType: messages.contentType,
+            sendTime: messages.sendTime,
+          })
+          .from(messages)
+          .where(eq(messages.groupId, input.groupId))
+          .orderBy(desc(messages.sendTime))
+          .limit(input.limit ?? 200)
+    );
+    // Reverse to chronological order (oldest first)
+    return rows.reverse().map((m) => ({ ...m, sendTime: m.sendTime.toISOString() }));
+  },
+
+  async getMessage(input: { messageId: UUID }) {
     const db = getDb();
     const rows = await db
       .select({
@@ -695,10 +728,12 @@ export const store = {
         sendTime: messages.sendTime,
       })
       .from(messages)
-      .where(eq(messages.groupId, input.groupId))
-      .orderBy(messages.sendTime);
+      .where(eq(messages.id, input.messageId))
+      .limit(1);
 
-    return rows.map((m) => ({ ...m, sendTime: m.sendTime.toISOString() }));
+    if (rows.length === 0) return null;
+    const m = rows[0];
+    return { ...m, sendTime: m.sendTime.toISOString() };
   },
 
   async sendMessage(input: {
@@ -1047,76 +1082,161 @@ export const store = {
           .where(input.workspaceId ? eq(groups.workspaceId, input.workspaceId) : undefined)
           .orderBy(desc(groups.createdAt));
 
-    const result = [];
-    for (const g of rows) {
-      const members = await db
-        .select({ userId: groupMembers.userId })
+    if (rows.length === 0) return [];
+
+    const groupIds = rows.map((g) => g.id);
+
+    // ---- Batch: all members for all groups (1 query instead of N) ----
+    const allMemberRows = await db
+      .select({ groupId: groupMembers.groupId, userId: groupMembers.userId })
+      .from(groupMembers)
+      .where(inArray(groupMembers.groupId, groupIds));
+
+    const membersByGroup = new Map<string, typeof allMemberRows>();
+    for (const m of allMemberRows) {
+      let arr = membersByGroup.get(m.groupId);
+      if (!arr) {
+        arr = [];
+        membersByGroup.set(m.groupId, arr);
+      }
+      arr.push(m);
+    }
+
+    // ---- Batch: latest message per group (DISTINCT ON, 1 query instead of N) ----
+    let lastMessageRows: Array<{
+      id: string; sender_id: string; content: string; content_type: string; send_time: Date; group_id: string;
+    }> = [];
+    try {
+      const groupIdList = dsql.join(
+        groupIds.map((gid) => dsql`${gid}::uuid`),
+        dsql`, `
+      );
+      const raw = await db.execute(
+        dsql`
+          SELECT DISTINCT ON (m.group_id)
+            m.id, m.sender_id, m.content, m.content_type, m.send_time, m.group_id
+          FROM messages m
+          WHERE m.group_id IN (${groupIdList})
+          ORDER BY m.group_id, m.send_time DESC
+        `
+      );
+      lastMessageRows = raw as unknown as typeof lastMessageRows;
+    } catch {
+      // If the subquery fails (e.g. no messages at all), leave empty
+    }
+    const lastMsgByGroup = new Map<string, typeof lastMessageRows[0]>();
+    for (const lm of lastMessageRows) {
+      lastMsgByGroup.set(lm.group_id, lm);
+    }
+
+    // ---- Batch: unread counts (1 or 2 queries instead of N) ----
+    let unreadByGroup = new Map<string, number>();
+    if (input.agentId) {
+      // Get read positions for this agent across all groups
+      const readStates = await db
+        .select({ groupId: groupMembers.groupId, lastReadMessageId: groupMembers.lastReadMessageId })
         .from(groupMembers)
-        .where(eq(groupMembers.groupId, g.id));
+        .where(and(inArray(groupMembers.groupId, groupIds), eq(groupMembers.userId, input.agentId)));
 
-      const lastMessage = await db
-        .select({
-          id: messages.id,
-          senderId: messages.senderId,
-          content: messages.content,
-          contentType: messages.contentType,
-          sendTime: messages.sendTime,
-        })
-        .from(messages)
-        .where(eq(messages.groupId, g.id))
-        .orderBy(desc(messages.sendTime))
-        .limit(1);
-
-      let unreadCount = 0;
-      if (input.agentId) {
-        const state = await db
-          .select({ lastReadMessageId: groupMembers.lastReadMessageId })
-          .from(groupMembers)
-          .where(and(eq(groupMembers.groupId, g.id), eq(groupMembers.userId, input.agentId)))
-          .limit(1);
-
-        const lastReadId = state[0]?.lastReadMessageId ?? null;
-        if (!lastReadId) {
-          const countRow = await db
-            .select({ c: dsql<number>`count(*)` })
-            .from(messages)
-            .where(and(eq(messages.groupId, g.id), ne(messages.senderId, input.agentId)));
-          unreadCount = Number(countRow[0]?.c ?? 0);
-        } else {
-          const lastRead = await db
-            .select({ sendTime: messages.sendTime })
-            .from(messages)
-            .where(eq(messages.id, lastReadId))
-            .limit(1);
-
-          const cutoff = lastRead[0]?.sendTime ?? new Date(0);
-          const countRow = await db
-            .select({ c: dsql<number>`count(*)` })
-            .from(messages)
-            .where(
-              and(eq(messages.groupId, g.id), gt(messages.sendTime, cutoff), ne(messages.senderId, input.agentId))
-            );
-          unreadCount = Number(countRow[0]?.c ?? 0);
+      // Get send times of all last-read messages (batch)
+      const readMsgIds = readStates.map((r) => r.lastReadMessageId).filter(Boolean) as string[];
+      const readTimes = new Map<string, Date>();
+      if (readMsgIds.length > 0) {
+        const msgTimes = await db
+          .select({ id: messages.id, sendTime: messages.sendTime })
+          .from(messages)
+          .where(inArray(messages.id, readMsgIds));
+        for (const mt of msgTimes) {
+          readTimes.set(mt.id, mt.sendTime);
         }
       }
 
-      const updatedAt = lastMessage[0]?.sendTime ?? g.createdAt;
+      // Build per-group cutoff
+      const cutoffByGroup = new Map<string, Date | null>();
+      const readStateMap = new Map<string, { lastReadMessageId: string | null }>();
+      for (const rs of readStates) {
+        readStateMap.set(rs.groupId, rs);
+      }
+      for (const gid of groupIds) {
+        const rs = readStateMap.get(gid);
+        if (!rs || !rs.lastReadMessageId) {
+          cutoffByGroup.set(gid, null); // count all
+        } else {
+          cutoffByGroup.set(gid, readTimes.get(rs.lastReadMessageId) ?? new Date(0));
+        }
+      }
+
+      // Batch unread count using a VALUES join or per-group approach
+      // Since each group has a different cutoff, batch by cutoff category
+      const noCutoffGroups: string[] = [];
+      const cutoffMap = new Map<string, string>(); // groupId → ISO timestamp
+      for (const [gid, cutoff] of cutoffByGroup) {
+        if (cutoff === null) {
+          noCutoffGroups.push(gid);
+        } else {
+          cutoffMap.set(gid, cutoff.toISOString());
+        }
+      }
+
+      // Groups with no prior read: count all messages not from self
+      if (noCutoffGroups.length > 0) {
+        const noCutoffList = dsql.join(
+          noCutoffGroups.map((gid) => dsql`${gid}::uuid`),
+          dsql`, `
+        );
+        const counts = await db.execute(
+          dsql`
+            SELECT m.group_id, count(*)::int as cnt
+            FROM messages m
+            WHERE m.group_id IN (${noCutoffList})
+              AND m.sender_id != ${input.agentId}
+            GROUP BY m.group_id
+          `
+        );
+        for (const row of (counts as unknown as Array<{ group_id: string; cnt: number }>)) {
+          unreadByGroup.set(row.group_id, row.cnt);
+        }
+      }
+
+      // Groups with a cutoff: count messages after the cutoff
+      for (const [gid, cutoffStr] of cutoffMap) {
+        const counts = await db.execute(
+          dsql`
+            SELECT count(*)::int as cnt
+            FROM messages m
+            WHERE m.group_id = ${gid}
+              AND m.sender_id != ${input.agentId}
+              AND m.send_time > ${cutoffStr}::timestamptz
+          `
+        );
+        const row = (counts as unknown as Array<{ cnt: number }>)[0];
+        unreadByGroup.set(gid, row?.cnt ?? 0);
+      }
+    }
+
+    // ---- Build result ----
+    const result = [];
+    for (const g of rows) {
+      const members = (membersByGroup.get(g.id) ?? []).map((m) => m.userId);
+      const lastMsg = lastMsgByGroup.get(g.id);
+      const unreadCount = unreadByGroup.get(g.id) ?? 0;
+      const updatedAt = lastMsg?.send_time ?? g.createdAt;
 
       result.push({
         id: g.id,
         name: g.name,
-        memberIds: members.map((m) => m.userId),
+        memberIds: members,
         unreadCount,
         contextTokens: g.contextTokens ?? 0,
-        lastMessage: lastMessage[0]
+        lastMessage: lastMsg
           ? {
-              content: lastMessage[0].content,
-              contentType: lastMessage[0].contentType,
-              sendTime: lastMessage[0].sendTime.toISOString(),
-              senderId: lastMessage[0].senderId,
+              content: lastMsg.content,
+              contentType: lastMsg.content_type,
+              sendTime: new Date(lastMsg.send_time).toISOString(),
+              senderId: lastMsg.sender_id,
             }
           : undefined,
-        updatedAt: updatedAt.toISOString(),
+        updatedAt: new Date(updatedAt).toISOString(),
         createdAt: g.createdAt.toISOString(),
       });
     }

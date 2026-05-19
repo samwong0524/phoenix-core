@@ -96,6 +96,11 @@ function formatToolOutput(result: any): { content: string; isError: boolean } {
     ? result.content
         .map((item: any) => {
           if (typeof item?.text === "string") return item.text;
+          if (item?.type === "image" || item?.type === "image_url") {
+            // Return a structured image reference for the agent to pass through to the LLM
+            const src = item.source?.data ? `data:${item.source?.media_type || "image/png"};base64,${item.source.data}` : item.image_url?.url || "[image]";
+            return JSON.stringify({ type: "image_url", image_url: { url: src } });
+          }
           try {
             return JSON.stringify(item);
           } catch {
