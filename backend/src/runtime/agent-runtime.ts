@@ -3159,9 +3159,12 @@ class AgentRunner {
         }
 
         const nowIso = now.toISOString();
+        const tagsSql = tagsArr.length > 0
+          ? sql.raw(`ARRAY[${tagsArr.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)
+          : sql.raw(`ARRAY[]::text[]`);
 
         await db.execute(
-          sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsArr}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
+          sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsSql}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
         );
 
         emitToolDone(true);
@@ -3203,10 +3206,11 @@ class AgentRunner {
         // Layer 1: Keyword + tag exact match (design doc §6.1)
         let layer1Rows;
         if (filterTags.length > 0) {
+          const filterTagsSql = sql.raw(`ARRAY[${filterTags.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`);
           layer1Rows = await db.execute(
             sql`SELECT id, content, tags, importance, source, created_at
                 FROM memories WHERE agent_id = ${this.agentId}
-                AND (content ILIKE ${`%${query}%`} OR tags && ${filterTags})
+                AND (content ILIKE ${`%${query}%`} OR tags && ${filterTagsSql})
                 ORDER BY importance DESC, created_at DESC`
           );
         } else {
@@ -3243,14 +3247,16 @@ class AgentRunner {
           const spikeThreshold = Math.max(2, Math.floor(limit * 0.3)); // up to 30% extra from spike
 
           if (layer1Ids.length > 0) {
-            // Build exclusion list for SQL
-            const placeholders = layer1Ids.map(() => sql`${layer1Ids[layer1Ids.indexOf(layer1Ids[0] ?? "")]}`).join(", ");
-            // Safer approach: use array containment
+            // Exclude layer1 IDs using raw SQL (UUIDs are safe, no escaping needed)
+            const excludedIds = layer1Ids.slice(0, 50).map(id => `'${id}'`).join(', ');
+            const tagArrSql = tagArr.length > 0
+              ? sql.raw(`ARRAY[${tagArr.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)
+              : sql.raw(`ARRAY[]::text[]`);
             const layer2Rows = await db.execute(
               sql`SELECT id, content, tags, importance, source, created_at
                   FROM memories WHERE agent_id = ${this.agentId}
-                  AND id NOT IN (${layer1Ids.slice(0, 50).map((id) => sql`${id}`).join(", ")})
-                  AND tags && ${tagArr}
+                  AND id NOT IN (${sql.raw(excludedIds)})
+                  AND tags && ${tagArrSql}
                   ORDER BY importance DESC, created_at DESC
                   LIMIT ${spikeThreshold}`
             );
