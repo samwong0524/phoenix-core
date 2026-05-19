@@ -2814,8 +2814,12 @@ class AgentRunner {
         for (const t of tasks) {
           const tId = uuid();
           const dependsOn = (t.dependsOn ?? []).map((d) => d.trim()).filter(Boolean);
+          // Use ARRAY[] syntax for Postgres text[] column
+          const depsSql = dependsOn.length > 0
+            ? sql.raw(`ARRAY[${dependsOn.map(d => `'${d}'`).join(',')}]::text[]`)
+            : sql.raw(`ARRAY[]::text[]`);
           await db.execute(
-            sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${JSON.stringify(dependsOn)}, ${t.maxRevisions ?? 3}, ${now})`
+            sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${depsSql}, ${t.maxRevisions ?? 3}, ${now})`
           );
         }
       } catch (err: unknown) {
