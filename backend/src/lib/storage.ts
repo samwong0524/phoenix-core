@@ -1371,9 +1371,12 @@ export const store = {
     const backupId = uuid();
     const createdAt = now();
 
-    await db.execute(
-      dsql`INSERT INTO backups (id, workspace_id, data, created_at) VALUES (${backupId}, ${input.workspaceId}, ${JSON.stringify(backupData)}::jsonb, ${createdAt})`
-    );
+    await db.insert(backups).values({
+      id: backupId,
+      workspaceId: input.workspaceId,
+      data: JSON.stringify(backupData),
+      createdAt,
+    });
 
     return { id: backupId, createdAt: createdAt.toISOString() };
   },
@@ -1485,10 +1488,10 @@ export const store = {
       );
     }
 
-    return (result as unknown as Array<{ id: string; workspace_id: string; created_at: Date }>).map((row) => ({
+    return (result as unknown as Array<{ id: string; workspace_id: string; created_at: string | Date }>).map((row) => ({
       id: row.id as UUID,
       workspaceId: row.workspace_id as UUID,
-      createdAt: row.created_at.toISOString(),
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString(),
     }));
   },
 
@@ -1498,16 +1501,17 @@ export const store = {
     const result = await db.execute(
       dsql`SELECT id, workspace_id, data, created_at FROM backups WHERE id = ${input.backupId}`
     );
-    const rows = result as unknown as Array<{ id: string; workspace_id: string; data: string; created_at: Date }>;
+    const rows = result as unknown as Array<{ id: string; workspace_id: string; data: string | Record<string, unknown>; created_at: string | Date }>;
     if (rows.length === 0) throw new Error("backup not found");
 
-    const parsed = JSON.parse(rows[0].data);
+    const raw = rows[0].data;
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
     return {
       id: rows[0].id as UUID,
       workspaceId: rows[0].workspace_id as UUID,
       data: parsed,
-      createdAt: rows[0]!.created_at.toISOString(),
+      createdAt: rows[0].created_at instanceof Date ? rows[0].created_at.toISOString() : new Date(rows[0].created_at).toISOString(),
     };
   },
 };
