@@ -7,12 +7,35 @@ import { createDeferred, safeJsonParse } from "./utils";
 import { getWorkspaceUIBus } from "./ui-bus";
 import { getMcpRegistry } from "./mcp";
 import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStreamEvent } from "./agent-logger";
-import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache } from "./skill-loader";
+import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache, FRONTMATTER_RE, parseFrontmatter } from "./skill-loader";
+
+// Runtime settings — mutable at request time for live model switching without restart.
+const runtimeSettings = new Map<string, string>();
+
+const RUNTIME_SETTINGS: Record<string, { validate: (v: string) => boolean }> = {
+  freellmapi_model: {
+    // Must be a valid model identifier: letters, digits, dots, dashes, underscores, slashes
+    // "auto" is the special value for router-selected model
+    validate: (v: string) => v === "auto" || (/^[a-zA-Z0-9][a-zA-Z0-9./_-]{0,127}$/.test(v)),
+  },
+};
+
+export function setRuntimeSetting(key: string, value: string) {
+  const spec = RUNTIME_SETTINGS[key];
+  if (spec && !spec.validate(value)) {
+    throw new Error(`Invalid value for ${key}: ${JSON.stringify(value)}`);
+  }
+  runtimeSettings.set(key, value);
+}
+
+export function getRuntimeSetting(key: string): string | undefined {
+  return runtimeSettings.get(key);
+}
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
 const MAX_LLM_RETRIES = 5;
@@ -20,6 +43,129 @@ const LLM_RETRY_BASE_MS = 3000;
 const LLM_REQUEST_TIMEOUT_MS = 60000; // 60s max per request
 const MAX_CONCURRENT_LLM = 1;
 const MIN_LLM_INTERVAL_MS = 1200; // minimum gap between LLM calls (~50 QPM ceiling)
+
+// Nudge Engine: lightweight background analysis that runs periodically during a conversation.
+// Every NUDGE_INTERVAL rounds, the agent reviews recent history for patterns
+// (tool failures that recovered, repeated commands, successful workflows)
+// and auto-creates skills from them. Best-effort, non-blocking.
+const NUDGE_INTERVAL = 15; // rounds between nudge analyses
+const MAX_AUTO_SKILLS_PER_AGENT_PER_DAY = 3; // shared with autoCreateSkillFromWorkflow
+
+// Context compression configuration (design doc §6.3)
+const COMPRESS_PROTECT_FIRST = 2; // protect first N system messages
+const COMPRESS_PROTECT_LAST = 6;  // keep last N messages intact
+const COMPRESS_TRIGGER = 8;       // trigger compression when history > N
+const COMPRESS_MAX_CONTENT = 2000; // max chars per individual message before truncation
+
+// Key Pool: per-provider API key rotation with 429 cooldown
+
+// Skill lifecycle constants (design doc §11.4)
+const SKILL_STALE_DAYS = 30;       // days without use → stale warning
+const SKILL_ARCHIVE_DAYS = 90;     // days without use → archive
+const SKILL_MERGE_SIMILARITY = 0.7; // description overlap threshold for dedup
+// Keys are parsed from *_API_KEYS env var (comma-separated)
+// Falls back to single *_API_KEY if *_API_KEYS is not set
+
+interface KeyEntry {
+  key: string;
+  cooldownUntil: number; // timestamp (ms) when this key becomes available again
+}
+
+class KeyPool {
+  private entries: KeyEntry[] = [];
+  private index = 0;
+
+  constructor(keys: string[]) {
+    this.entries = keys.filter(k => k.length > 0).map(k => ({ key: k, cooldownUntil: 0 }));
+  }
+
+  hasKeys(): boolean {
+    return this.entries.length > 0;
+  }
+
+  hasAvailable(): boolean {
+    return this.entries.some(e => e.cooldownUntil < Date.now());
+  }
+
+  /** Get next available key (round-robin with cooldown skip). Returns null if all keys are in cooldown. */
+  getNext(): string | null {
+    const now = Date.now();
+    if (this.entries.length === 0) return null;
+    if (this.entries.length === 1) {
+      const e = this.entries[0];
+      if (e.cooldownUntil > now) return null;
+      return e.key;
+    }
+    // Try to find an available key starting from current index (round-robin)
+    for (let i = 0; i < this.entries.length; i++) {
+      const idx = (this.index + i) % this.entries.length;
+      const entry = this.entries[idx];
+      if (entry.cooldownUntil <= now) {
+        this.index = (idx + 1) % this.entries.length;
+        return entry.key;
+      }
+    }
+    return null; // all keys in cooldown
+  }
+
+  /** Mark a key as rate-limited. It will be skipped for cooldownMs. */
+  mark429(key: string, cooldownMs: number): void {
+    const entry = this.entries.find(e => e.key === key);
+    if (entry) {
+      entry.cooldownUntil = Date.now() + cooldownMs;
+      console.warn(`[KeyPool] key ${key.slice(0, 8)}... in cooldown for ${cooldownMs}ms`);
+    }
+  }
+
+  size(): number {
+    return this.entries.length;
+  }
+}
+
+// Per-provider key pools (lazily initialized)
+let _glmKeyPool: KeyPool | null = null;
+let _openrouterKeyPool: KeyPool | null = null;
+let _anthropicKeyPool: KeyPool | null = null;
+let _freellmapiKeyPool: KeyPool | null = null;
+
+function parseKeyPool(envKey: string, fallbackKey: string): KeyPool {
+  const keys = process.env[envKey]
+    ? process.env[envKey].split(",").map(k => k.trim()).filter(k => k.length > 0)
+    : fallbackKey ? [fallbackKey] : [];
+  return new KeyPool(keys);
+}
+
+function getGlmKeyPool(): KeyPool {
+  if (_glmKeyPool) return _glmKeyPool;
+  _glmKeyPool = parseKeyPool("GLM_API_KEYS", process.env.GLM_API_KEY ?? process.env.ZHIPUAI_API_KEY ?? "");
+  return _glmKeyPool;
+}
+
+function getOpenrouterKeyPool(): KeyPool {
+  if (_openrouterKeyPool) return _openrouterKeyPool;
+  _openrouterKeyPool = parseKeyPool("OPENROUTER_API_KEYS", process.env.OPENROUTER_API_KEY ?? "");
+  return _openrouterKeyPool;
+}
+
+function getAnthropicKeyPool(): KeyPool {
+  if (_anthropicKeyPool) return _anthropicKeyPool;
+  _anthropicKeyPool = parseKeyPool("ANTHROPIC_API_KEYS", process.env.ANTHROPIC_API_KEY ?? "");
+  return _anthropicKeyPool;
+}
+
+function getFreellmapiKeyPool(): KeyPool {
+  if (_freellmapiKeyPool) return _freellmapiKeyPool;
+  _freellmapiKeyPool = parseKeyPool("FREELLMAPI_API_KEYS", process.env.FREELLMAPI_API_KEY ?? "");
+  return _freellmapiKeyPool;
+}
+
+// Invalidate all key pools (e.g., after .env change)
+export function invalidateKeyPools(): void {
+  _glmKeyPool = null;
+  _openrouterKeyPool = null;
+  _anthropicKeyPool = null;
+  _freellmapiKeyPool = null;
+}
 
 /**
  * Global LLM request scheduler.
@@ -66,12 +212,30 @@ async function fetchWithRetry(
   url: string,
   init: RequestInit,
   label: string = "LLM",
-  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string }
+  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string; keyPool?: KeyPool }
 ): Promise<Response> {
   let lastResponse: Response | null = null;
   let switchedModel = false;
 
   for (let attempt = 0; attempt <= MAX_LLM_RETRIES; attempt++) {
+    // On 429 retry (not first attempt), try next available key before waiting
+    if (attempt > 0 && options?.keyPool) {
+      const nextKey = options.keyPool.getNext();
+      if (nextKey) {
+        // Replace API key in request headers
+        if (init.headers && typeof init.headers === "object") {
+          const headers = init.headers as Record<string, string>;
+          if (headers["Authorization"]) {
+            headers["Authorization"] = `Bearer ${nextKey}`;
+          }
+          if (headers["x-api-key"]) {
+            headers["x-api-key"] = nextKey;
+          }
+        }
+        console.warn(`[fetchWithRetry] ${label} rotating to next key in pool (${options.keyPool.size()} keys)`);
+      }
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), LLM_REQUEST_TIMEOUT_MS);
     const resp = await fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
@@ -102,6 +266,15 @@ async function fetchWithRetry(
       }
     }
 
+    // Mark current key as rate-limited if we have a key pool
+    if (options?.keyPool && init.headers && typeof init.headers === "object") {
+      const headers = init.headers as Record<string, string>;
+      const currentKey = headers["x-api-key"] ?? headers["Authorization"]?.replace("Bearer ", "") ?? "";
+      if (currentKey) {
+        options.keyPool.mark429(currentKey, delayMs);
+      }
+    }
+
     console.warn(`[fetchWithRetry] ${label} got 429, attempt ${attempt + 1}/${MAX_LLM_RETRIES}, retrying in ${delayMs}ms`);
     await new Promise(r => setTimeout(r, delayMs));
   }
@@ -117,7 +290,7 @@ async function llmFetch(
   url: string,
   init: RequestInit,
   label: string = "LLM",
-  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string }
+  options?: { backupModel?: string; modelSwapFn?: (body: string, model: string) => string; keyPool?: KeyPool }
 ): Promise<Response> {
   await llmScheduler.acquire();
   try {
@@ -136,6 +309,11 @@ function uuid(): UUID {
 type MultimodalContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
+
+const EXT_TO_MEDIA: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp",
+};
 
 type HistoryMessage =
   | {
@@ -369,30 +547,29 @@ function summarizeUserMessage(content: string): string {
 
 /**
  * Compress old tool-call exchanges when history grows too large.
- * Trigger at >8 messages (was >10) to prevent context bloat.
- * Keep: first 2 system messages (soul + skills), last 6 messages, and the first user message.
+ * Trigger at COMPRESS_TRIGGER messages. Configurable via COMPRESS_PROTECT_FIRST/LAST constants.
+ * Keep: first N system messages, last M messages, and the first user message.
  * Replace middle tool/user/assistant blocks with a compact structured summary.
  */
 function compressHistory(history: HistoryMessage[]) {
-  if (history.length <= 8) return; // trigger earlier
+  if (history.length <= COMPRESS_TRIGGER) return;
 
-  // Protect the first 2 system messages (soul constitution, skills block)
+  // Protect the first N system messages (soul constitution, skills block)
   const systemMsgs = history.filter((m) => m.role === "system");
-  const protectedSystems = systemMsgs.slice(0, 2);
+  const protectedSystems = systemMsgs.slice(0, COMPRESS_PROTECT_FIRST);
 
   // Build non-system view
   const nonSystem = history.filter((m) => m.role !== "system");
-  if (nonSystem.length <= 6) return; // keep fewer recent messages
+  if (nonSystem.length <= COMPRESS_PROTECT_LAST) return;
 
   const keepStart = nonSystem.slice(0, 1);
-  const keepEnd = nonSystem.slice(-6); // was -8
-  const compressed = nonSystem.slice(1, nonSystem.length - 6);
+  const keepEnd = nonSystem.slice(-COMPRESS_PROTECT_LAST);
+  const compressed = nonSystem.slice(1, nonSystem.length - COMPRESS_PROTECT_LAST);
 
   // Truncate long content from kept messages to prevent bloat
-  const MAX_CONTENT_LEN = 2000; // cap individual message length
   const trimmed = [...keepStart, ...keepEnd].map((m) => {
-    if (typeof m.content === "string" && m.content.length > MAX_CONTENT_LEN) {
-      return { ...m, content: m.content.slice(0, MAX_CONTENT_LEN) + "\n...[truncated]" };
+    if (typeof m.content === "string" && m.content.length > COMPRESS_MAX_CONTENT) {
+      return { ...m, content: m.content.slice(0, COMPRESS_MAX_CONTENT) + "\n...[truncated]" };
     }
     return m;
   });
@@ -424,7 +601,7 @@ function compressHistory(history: HistoryMessage[]) {
   } else {
     summaryLines.push("  (no significant outcomes in this region)");
   }
-  const summaryText = summaryLines.join("\n").slice(0, 2000);
+  const summaryText = summaryLines.join("\n").slice(0, COMPRESS_MAX_CONTENT);
 
   const summary: HistoryMessage = {
     role: "system",
@@ -476,13 +653,30 @@ function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, 
   });
 }
 
-const AGENT_TOOLS = [
+// ---------------------------------------------------------------------------
+// Tool group categories — ordered by typical usage frequency.
+// Each group is a comment marker only; the flat array is what the LLM sees.
+// ---------------------------------------------------------------------------
+type ToolGroup =
+  | "agent"       // Agent lifecycle: create, self, list, delete, reload
+  | "skill"       // Knowledge: get_skill, create_skill
+  | "message"     // Messaging: send, send_group_message, send_direct_message, get messages
+  | "group"       // Group management: list, create, add, delete
+  | "execution"   // Shell execution: bash
+  | "workflow"    // Workflow orchestration: create, update, get, assign
+  | "memory"      // Long-term memory: add, search, replace, remove, session_search
+  | "backup";     // Workspace backup: create, list, restore
+
+// ---------------------------------------------------------------------------
+// Agent Management
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_AGENT = [
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "create",
       description:
-        "Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead.",
+        "[Agent] Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead. When the human asks you to create, execute directly — do not re-verify history or search for existing agents first.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -501,141 +695,27 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "self",
-      description: "Return the current agent's identity (agent_id, workspace_id, role).",
+      description: "[Agent] Return the current agent's identity (agent_id, workspace_id, role).",
       parameters: { type: "object", additionalProperties: false, properties: {} },
     },
   },
   {
-    type: "function",
-    function: {
-      name: "get_skill",
-      description:
-        "Load the full content of a specific skill by name (use when the skill metadata indicates relevance).",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          skill_name: { type: "string", description: "Skill name to retrieve" },
-        },
-        required: ["skill_name"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "create_skill",
-      description:
-        "Create a new skill. Skills are markdown files with YAML frontmatter that teach agents how to handle specific tasks.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: { type: "string", description: "Skill name (kebab-case, e.g. 'data-analysis')" },
-          description: { type: "string", description: "One-line description of what this skill does" },
-          content: { type: "string", description: "Full skill content (markdown body, no frontmatter)" },
-          autoLoad: { type: "boolean", description: "Whether to auto-inject this skill into all agents' system prompts" },
-          roles: { type: "array", items: { type: "string" }, description: "Optional: restrict to specific agent roles (e.g. ['coordinator', 'coder'])" },
-          requires: { type: "array", items: { type: "string" }, description: "Optional: list of skill names this skill depends on" },
-        },
-        required: ["name", "description", "content"],
-      },
-    },
-  },
-  {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "list_agents",
-      description: "List all agents in the current workspace (role names + UUIDs). This includes the 'human' agent (the human user). Use role names (not UUIDs) when calling create_group or add_group_members.",
+      description: "[Agent] List all agents in the current workspace (role names + UUIDs). This includes the 'human' agent (the human user). Use role names (not UUIDs) when calling create_group or add_group_members.",
       parameters: { type: "object", additionalProperties: false, properties: {} },
     },
   },
   {
-    type: "function",
-    function: {
-      name: "send",
-      description:
-        "Send a direct message to another agent_id. The IM storage (group) is created/selected automatically.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          to: { type: "string", description: "Target agent_id" },
-          content: { type: "string", description: "Message content" },
-        },
-        required: ["to", "content"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_groups",
-      description: "List visible groups for this agent.",
-      parameters: { type: "object", additionalProperties: false, properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_group_members",
-      description: "List member ids for a group. groupId must be the group UUID (not the name).",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          groupId: { type: "string", description: "The group UUID (not the name)" },
-        },
-        required: ["groupId"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "create_group",
-      description: "Create a group with the given member role names. Returns the groupId (UUID) and name. memberIds accepts agent role names from list_agents — this includes 'human' (the human user), which you should include in any group where a human needs to see progress. Use this groupId when calling send_group_message.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names from list_agents (e.g. frontend/backend/CTO/human). Always include 'human' if the human user needs to see progress and coordinate. NOT UUIDs" },
-          name: { type: "string" },
-        },
-        required: ["memberIds"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "add_group_members",
-      description:
-        "Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members. groupId must be the group UUID (not the name).",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          groupId: { type: "string", description: "The group UUID (not the name) to add members to" },
-          memberIds: {
-            type: "array",
-            items: { type: "string" },
-            description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs",
-          },
-        },
-        required: ["groupId", "memberIds"],
-      },
-    },
-  },
-  {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "delete_agent",
       description:
-        "Delete a direct child agent that you created. Only your own sub-agents can be deleted (agents whose parent is you). The target agent must have no sub-agents of its own — delete those first. This operation is irreversible and removes all associated P2P groups and workflows.",
+        "[Agent] Delete a direct child agent that you created. Only your own sub-agents can be deleted (agents whose parent is you). The target agent must have no sub-agents of its own — delete those first. This operation is irreversible and removes all associated P2P groups and workflows.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -654,10 +734,119 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
+    function: {
+      name: "reload_soul",
+      description:
+        "[Agent] Reload the agent soul.md and role templates from disk. Use after the soul file has been edited, or when the agent's behavior seems outdated.",
+      parameters: { type: "object", additionalProperties: false, properties: {} },
+    },
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Skills (Knowledge)
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_SKILL = [
+  {
+    type: "function" as const,
+    function: {
+      name: "get_skill",
+      description:
+        "[Skill] Load the full content of a specific skill by name (use when the skill metadata indicates relevance).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          skill_name: { type: "string", description: "Skill name to retrieve" },
+        },
+        required: ["skill_name"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_skill",
+      description:
+        "[Skill] Create a new skill. Skills are markdown files with YAML frontmatter that teach agents how to handle specific tasks.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", description: "Skill name (kebab-case, e.g. 'data-analysis')" },
+          description: { type: "string", description: "One-line description of what this skill does" },
+          content: { type: "string", description: "Full skill content (markdown body, no frontmatter)" },
+          autoLoad: { type: "boolean", description: "Whether to auto-inject this skill into all agents' system prompts" },
+          roles: { type: "array", items: { type: "string" }, description: "Optional: restrict to specific agent roles (e.g. ['coordinator', 'coder'])" },
+          requires: { type: "array", items: { type: "string" }, description: "Optional: list of skill names this skill depends on" },
+        },
+        required: ["name", "description", "content"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_skill",
+      description:
+        "[Skill] Search for skills on GitHub repos. Use when existing tools and local skills are insufficient for the current task.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "Search keywords (e.g., 'web scraping', 'data visualization')" },
+          maxResults: { type: "number", description: "Max results to return (default 5)" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "install_skill",
+      description:
+        "[Skill] Install a skill from a remote GitHub source. Downloads SKILL.md to the shared skills directory. All agents can then use it.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", description: "Skill name to install (kebab-case)" },
+          source_url: { type: "string", description: "GitHub raw URL or repo URL for the SKILL.md file" },
+        },
+        required: ["name", "source_url"],
+      },
+    },
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Messaging (Communication)
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_MESSAGE = [
+  {
+    type: "function" as const,
+    function: {
+      name: "send",
+      description:
+        "[Message] Send a direct message to another agent_id. The IM storage (group) is created/selected automatically.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          to: { type: "string", description: "Target agent_id" },
+          content: { type: "string", description: "Message content" },
+        },
+        required: ["to", "content"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
     function: {
       name: "send_group_message",
-      description: "Send a message to a group.",
+      description: "[Message] Send a message to a group.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -671,11 +860,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "send_direct_message",
       description:
-        "Send a direct message to another agent. Creates or reuses a P2P group and returns the channel type.",
+        "[Message] Send a direct message to another agent. Creates or reuses a P2P group and returns the channel type.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -689,10 +878,10 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "get_group_messages",
-      description: "Fetch recent message summary for a group. Returns a card list with sender, time, type, and preview. Use get_message_detail to read full content of a specific message.",
+      description: "[Message] Fetch recent message summary for a group. Returns a card list with sender, time, type, and preview. Use get_message_detail to read full content of a specific message.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -705,10 +894,10 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "get_message_detail",
-      description: "Fetch full content of a single message by ID. Use after get_group_messages to read details.",
+      description: "[Message] Fetch full content of a single message by ID. Use after get_group_messages to read details.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -719,12 +908,101 @@ const AGENT_TOOLS = [
       },
     },
   },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Group Management
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_GROUP = [
   {
-    type: "function",
+    type: "function" as const,
+    function: {
+      name: "list_groups",
+      description: "[Group] List visible groups for this agent.",
+      parameters: { type: "object", additionalProperties: false, properties: {} },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_group_members",
+      description: "[Group] List member ids for a group. groupId must be the group UUID (not the name).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "The group UUID (not the name)" },
+        },
+        required: ["groupId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_group",
+      description: "[Group] Create a group with the given member role names. Returns the groupId (UUID) and name. memberIds accepts agent role names from list_agents — this includes 'human' (the human user), which you should include in any group where a human needs to see progress. Use this groupId when calling send_group_message.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          memberIds: { type: "array", items: { type: "string" }, description: "Agent role names from list_agents (e.g. frontend/backend/CTO/human). Always include 'human' if the human user needs to see progress and coordinate. NOT UUIDs" },
+          name: { type: "string" },
+        },
+        required: ["memberIds"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "add_group_members",
+      description:
+        "[Group] Add one or more agents to an existing group. Use this instead of creating a new group when you want to add members. groupId must be the group UUID (not the name).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "The group UUID (not the name) to add members to" },
+          memberIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Agent role names (e.g. frontend/backend/CTO) - NOT UUIDs",
+          },
+        },
+        required: ["groupId", "memberIds"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "delete_group",
+      description:
+        "[Group] Delete a group and all its associated data (messages, workflows, tasks, task_logs, assignments). Only the group creator (coordinator) can use this. This operation is irreversible — use only when a project is completed or cancelled.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          groupId: { type: "string", description: "The group UUID to delete" },
+          confirm: { type: "boolean", description: "Set to true to confirm deletion" },
+        },
+        required: ["groupId", "confirm"],
+      },
+    },
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Execution (Shell)
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_EXECUTION = [
+  {
+    type: "function" as const,
     function: {
       name: "bash",
       description:
-        "Run a shell command on the server. Returns stdout/stderr/exitCode. Use for debugging or file operations.",
+        "[Execute] Run a shell command on the server. Returns stdout/stderr/exitCode. Use for debugging or file operations.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -738,12 +1016,18 @@ const AGENT_TOOLS = [
       },
     },
   },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Workflow Orchestration
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_WORKFLOW = [
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "create_workflow",
       description:
-        "Create a workflow with tasks. Only coordinator can use this. Returns {workflowId}.",
+        "[Workflow] Create a workflow with tasks. Only coordinator can use this. Returns {workflowId}.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -773,11 +1057,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "update_task",
       description:
-        "Update task status. 'in_progress': starting work. 'review': submit for coordinator review. 'done': coordinator approved. 'approved': coordinator approval. 'rejected': coordinator rejected. 'blocked': exceeded max revisions. 'failed': error occurred.",
+        "[Workflow] Update task status. 'in_progress': starting work. 'review': submit for coordinator review. 'done': coordinator approved. 'approved': coordinator approval. 'rejected': coordinator rejected. 'blocked': exceeded max revisions. 'failed': error occurred.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -792,10 +1076,10 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "get_workflow_status",
-      description: "Get workflow and task status for a group or workflow.",
+      description: "[Workflow] Get workflow and task status for a group or workflow.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -807,10 +1091,10 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "assign_agent",
-      description: "Assign or release an agent to/from a task in a workflow.",
+      description: "[Workflow] Assign or release an agent to/from a task in a workflow.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -825,38 +1109,18 @@ const AGENT_TOOLS = [
       },
     },
   },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Memory (Long-term)
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_MEMORY = [
   {
-    type: "function",
-    function: {
-      name: "delete_group",
-      description:
-        "Delete a group and all its associated data (messages, workflows, tasks, task_logs, assignments). Only the group creator (coordinator) can use this. This operation is irreversible — use only when a project is completed or cancelled.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          groupId: { type: "string", description: "The group UUID to delete" },
-          confirm: { type: "boolean", description: "Set to true to confirm deletion" },
-        },
-        required: ["groupId", "confirm"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "reload_soul",
-      description:
-        "Reload the agent soul.md and role templates from disk. Use after the soul file has been edited, or when the agent's behavior seems outdated.",
-      parameters: { type: "object", additionalProperties: false, properties: {} },
-    },
-  },
-  {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "memory_add",
       description:
-        "Save a fact, decision, or pattern to long-term memory. Use for important context that should persist across sessions.",
+        "[Memory] Save a fact, decision, or pattern to long-term memory. Use for important context that should persist across sessions.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -871,11 +1135,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "memory_search",
       description:
-        "Search long-term memory for relevant context. Use when starting a new task or when you need historical context.",
+        "[Memory] Search long-term memory for relevant context. Use when starting a new task or when you need historical context.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -889,11 +1153,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "memory_replace",
       description:
-        "Update an existing memory's content and/or tags. Use when information has changed or needs correction.",
+        "[Memory] Update an existing memory's content and/or tags. Use when information has changed or needs correction.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -907,11 +1171,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "memory_remove",
       description:
-        "Delete a memory permanently. Use when information is obsolete or incorrect.",
+        "[Memory] Delete a memory permanently. Use when information is obsolete or incorrect.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -923,11 +1187,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "session_search",
       description:
-        "Search archived sessions for past conversations and decisions. Use when looking for historical context about a topic.",
+        "[Memory] Search archived sessions for past conversations and decisions. Use when looking for historical context about a topic.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -940,12 +1204,18 @@ const AGENT_TOOLS = [
       },
     },
   },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Backup
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS_BACKUP = [
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "create_backup",
       description:
-        "Create a snapshot of the current workspace (agents, groups, members, messages). Returns a backup ID for later restore. Use before making risky changes.",
+        "[Backup] Create a snapshot of the current workspace (agents, groups, members, messages). Returns a backup ID for later restore. Use before making risky changes.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -954,11 +1224,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "list_backups",
       description:
-        "List available backups for the current workspace. Returns backup IDs and creation times.",
+        "[Backup] List available backups for the current workspace. Returns backup IDs and creation times.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -967,11 +1237,11 @@ const AGENT_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "restore_backup",
       description:
-        "Restore a workspace from a backup. This deletes all current workspace data and replaces it with the backup snapshot. IRREVERSIBLE — use list_backups first to confirm the backup ID.",
+        "[Backup] Restore a workspace from a backup. This deletes all current workspace data and replaces it with the backup snapshot. IRREVERSIBLE — use list_backups first to confirm the backup ID.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -985,18 +1255,69 @@ const AGENT_TOOLS = [
   },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Combined tool list — the flat array the LLM sees (grouped for readability).
+// ---------------------------------------------------------------------------
+const AGENT_TOOLS: readonly { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }[] = [
+  ...AGENT_TOOLS_AGENT,
+  ...AGENT_TOOLS_SKILL,
+  ...AGENT_TOOLS_MESSAGE,
+  ...AGENT_TOOLS_GROUP,
+  ...AGENT_TOOLS_EXECUTION,
+  ...AGENT_TOOLS_WORKFLOW,
+  ...AGENT_TOOLS_MEMORY,
+  ...AGENT_TOOLS_BACKUP,
+];
+
 const BUILTIN_TOOL_NAMES = new Set(AGENT_TOOLS.map((tool) => tool.function.name));
 
-async function getAgentTools() {
+// ---------------------------------------------------------------------------
+// check_fn — tool availability filtering (Sprint 2 — check_fn).
+// Each predicate receives runtime context and returns true if the tool
+// should be visible to the LLM in the current state.
+// ---------------------------------------------------------------------------
+interface ToolContext {
+  agentId: string;
+  isCoordinator: boolean;
+  hasActiveWorkflow: boolean;
+  shellEnabled: boolean;
+  hasHumanSender?: boolean;
+}
+
+type ToolCheck = (ctx: ToolContext) => boolean;
+
+const TOOL_AVAILABILITY: Record<string, ToolCheck> = {
+  // Workflow tools: only show management tools when a workflow is active
+  update_task: (ctx) => ctx.hasActiveWorkflow,
+  get_workflow_status: (ctx) => ctx.hasActiveWorkflow,
+  assign_agent: (ctx) => ctx.hasActiveWorkflow && ctx.isCoordinator,
+
+  // Coordinator-only tools
+  create_workflow: (ctx) => ctx.isCoordinator,
+  delete_group: (ctx) => ctx.isCoordinator,
+
+  // Shell execution: honor DISABLE_SHELL env var
+  bash: (ctx) => ctx.shellEnabled,
+};
+
+async function getAgentTools(context?: ToolContext) {
   const loadTimeoutMs =
     Number(process.env.MCP_LOAD_TIMEOUT_MS) > 0 ? Number(process.env.MCP_LOAD_TIMEOUT_MS) : 2000;
   const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES, { loadTimeoutMs });
   const mcpTools = mcp.getToolDefinitions();
-  return [...AGENT_TOOLS, ...mcpTools];
+
+  if (!context) return [...AGENT_TOOLS, ...mcpTools];
+
+  const filtered = AGENT_TOOLS.filter((tool) => {
+    const check = TOOL_AVAILABILITY[tool.function.name];
+    return !check || check(context);
+  });
+  return [...filtered, ...mcpTools];
 }
 
 function getGlmConfig() {
-  const apiKey = process.env.GLM_API_KEY ?? process.env.ZHIPUAI_API_KEY ?? "";
+  const pool = getGlmKeyPool();
+  const apiKey = pool.getNext() ?? "";
   const baseUrl =
     process.env.GLM_BASE_URL ??
     "https://open.bigmodel.cn/api/paas/v4/chat/completions";
@@ -1004,29 +1325,45 @@ function getGlmConfig() {
   const backupModel = process.env.GLM_BACKUP_MODEL ?? "";
 
   if (!apiKey) {
-    throw new Error("Missing GLM API key (set GLM_API_KEY or ZHIPUAI_API_KEY)");
+    throw new Error("Missing GLM API key (set GLM_API_KEY or GLM_API_KEYS)");
   }
 
-  return { apiKey, baseUrl, model, backupModel };
+  return { apiKey, baseUrl, model, backupModel, keyPool: pool };
 }
 
-type LlmProvider = "glm" | "openrouter" | "ollama" | "anthropic";
+function getFreellmapiConfig() {
+  const pool = getFreellmapiKeyPool();
+  const apiKey = pool.getNext() ?? "";
+  const baseUrl = (process.env.FREELLMAPI_URL ?? "http://127.0.0.1:3001/v1").replace(/\/+$/, "");
+  // Runtime model switching: check runtime setting first, then env var, then "auto".
+  const model = getRuntimeSetting("freellmapi_model") ?? process.env.FREELLMAPI_MODEL ?? "auto";
+
+  if (!apiKey) {
+    throw new Error("Missing FreeLLMAPI API key (set FREELLMAPI_API_KEY or FREELLMAPI_API_KEYS)");
+  }
+
+  return { baseUrl, apiKey, model, keyPool: pool };
+}
+
+type LlmProvider = "glm" | "openrouter" | "ollama" | "anthropic" | "freellmapi";
 
 function getLlmProvider(): LlmProvider {
   const raw = (process.env.LLM_PROVIDER ?? "glm").toLowerCase();
   if (raw === "openrouter" || raw === "open-router" || raw === "or") return "openrouter";
   if (raw === "anthropic" || raw === "anthropic-compatible") return "anthropic";
   if (raw === "ollama" || raw === "o" || raw === "local") return "ollama";
+  if (raw === "freellmapi" || raw === "free" || raw === "freellm") return "freellmapi";
   return "glm";
 }
 
 /** Returns whether each LLM provider has the required env vars configured. */
 function isProviderConfigured(provider: LlmProvider): boolean {
   switch (provider) {
-    case "openrouter": return !!process.env.OPENROUTER_API_KEY;
-    case "anthropic": return !!process.env.ANTHROPIC_API_KEY;
-    case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY);
+    case "openrouter": return !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEYS);
+    case "anthropic": return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEYS);
+    case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.GLM_API_KEYS);
     case "ollama": return true; // local, always available
+    case "freellmapi": return !!(process.env.FREELLMAPI_API_KEY || process.env.FREELLMAPI_API_KEYS);
   }
 }
 
@@ -1039,20 +1376,21 @@ function isProviderConfigured(provider: LlmProvider): boolean {
 function getProviderChain(): LlmProvider[] {
   const primary = getLlmProvider();
   const chain: LlmProvider[] = [primary];
-  const all: LlmProvider[] = ["openrouter", "glm", "anthropic", "ollama"];
+  const all: LlmProvider[] = ["freellmapi", "openrouter", "glm", "anthropic", "ollama"];
 
   const overrideRaw = process.env.LLM_FALLBACK_PROVIDERS ?? "";
   if (overrideRaw) {
     // User-specified fallback order
     for (const name of overrideRaw.split(",").map((s) => s.trim().toLowerCase())) {
-      if (name === "openrouter" || name === "or") { if (name !== primary && isProviderConfigured("openrouter")) chain.push("openrouter"); }
+      if (name === "freellmapi" || name === "free" || name === "freellm") { if (name !== primary && isProviderConfigured("freellmapi")) chain.push("freellmapi"); }
+      else if (name === "openrouter" || name === "or") { if (name !== primary && isProviderConfigured("openrouter")) chain.push("openrouter"); }
       else if (name === "glm") { if (name !== primary && isProviderConfigured("glm")) chain.push("glm"); }
       else if (name === "anthropic") { if (name !== primary && isProviderConfigured("anthropic")) chain.push("anthropic"); }
       else if (name === "ollama" || name === "o" || name === "local") { if (name !== primary && isProviderConfigured("ollama")) chain.push("ollama"); }
     }
   } else {
     // Auto-discover fallbacks: try other configured providers in a sensible default order
-    const defaults: LlmProvider[] = ["openrouter", "glm", "anthropic", "ollama"];
+    const defaults: LlmProvider[] = ["freellmapi", "openrouter", "glm", "anthropic", "ollama"];
     for (const p of defaults) {
       if (p !== primary && isProviderConfigured(p)) {
         chain.push(p);
@@ -1061,6 +1399,32 @@ function getProviderChain(): LlmProvider[] {
   }
 
   return chain;
+}
+
+// ---------------------------------------------------------------------------
+// RuntimeProvider abstraction — replace switch with registry (Sprint 2).
+// Adding a new provider: add config function + method + registry entry.
+// ---------------------------------------------------------------------------
+type StreamContext = { workspaceId: UUID; groupId: UUID; round: number };
+
+interface LlmStreamResult {
+  assistantText: string;
+  assistantThinking: string;
+  toolCalls: ToolCall[];
+  finishReason: string | null;
+}
+
+// Keyed by LlmProvider (string) for extensibility — no switch needed.
+const PROVIDER_REGISTRY: Record<string, (self: AgentRunner, history: HistoryMessage[], ctx: StreamContext) => Promise<LlmStreamResult>> = {
+  openrouter: (self, h, ctx) => self.callOpenRouterStreaming(h, ctx),
+  anthropic: (self, h, ctx) => self.callAnthropicStreaming(h, ctx),
+  glm: (self, h, ctx) => self.callGlmStreaming(h, ctx),
+  ollama: (self, h, ctx) => self.callOllamaStreaming(h, ctx),
+  freellmapi: (self, h, ctx) => self.callFreellmapiStreaming(h, ctx),
+};
+
+function getProviderHandler(provider: string) {
+  return PROVIDER_REGISTRY[provider] ?? null;
 }
 
 function normalizeOpenRouterUrl(value: string) {
@@ -1072,7 +1436,8 @@ function normalizeOpenRouterUrl(value: string) {
 }
 
 function getOpenRouterConfig() {
-  const apiKey = process.env.OPENROUTER_API_KEY ?? "";
+  const pool = getOpenrouterKeyPool();
+  const apiKey = pool.getNext() ?? "";
   const baseUrl = normalizeOpenRouterUrl(
     process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions"
   );
@@ -1082,23 +1447,24 @@ function getOpenRouterConfig() {
   const appTitle = process.env.OPENROUTER_APP_TITLE ?? "";
 
   if (!apiKey) {
-    throw new Error("Missing OPENROUTER_API_KEY");
+    throw new Error("Missing OPENROUTER_API_KEY (set OPENROUTER_API_KEY or OPENROUTER_API_KEYS)");
   }
 
-  return { apiKey, baseUrl, model, backupModel, httpReferer, appTitle };
+  return { apiKey, baseUrl, model, backupModel, httpReferer, appTitle, keyPool: pool };
 }
 
 function getAnthropicConfig() {
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
+  const pool = getAnthropicKeyPool();
+  const apiKey = pool.getNext() ?? "";
   const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "";
   const model = process.env.ANTHROPIC_MODEL ?? "qwen3.6-plus";
   const backupModel = process.env.ANTHROPIC_BACKUP_MODEL ?? "";
 
   if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY");
+    throw new Error("Missing ANTHROPIC_API_KEY (set ANTHROPIC_API_KEY or ANTHROPIC_API_KEYS)");
   }
 
-  return { apiKey, baseUrl, model, backupModel };
+  return { apiKey, baseUrl, model, backupModel, keyPool: pool };
 }
 
 function getOllamaConfig() {
@@ -1108,6 +1474,178 @@ function getOllamaConfig() {
   const model = process.env.OLLAMA_MODEL ?? "qwen3:8b";
   const backupModel = process.env.OLLAMA_BACKUP_MODEL ?? "";
   return { baseUrl, model, backupModel };
+}
+
+// ---------------------------------------------------------------------------
+// Skill search & install helpers
+// ---------------------------------------------------------------------------
+
+/** Trusted repos to prioritize in GitHub search */
+const TRUSTED_SKILL_REPOS = [
+  "openai/skills",
+  "anthropics/skills",
+  "massive/MassiveToolSkills",
+];
+
+/** Search GitHub code for SKILL.md files matching the query */
+async function searchGitHubSkills(query: string, maxResults: number): Promise<Array<{
+  name: string;
+  description: string;
+  source_url: string;
+  trust_level: string;
+  repo: string;
+}>> {
+  const allResults: Array<{ name: string; description: string; source_url: string; trust_level: string; repo: string }> = [];
+
+  // First, search trusted repos
+  for (const repo of TRUSTED_SKILL_REPOS) {
+    try {
+      const url = `https://api.github.com/search/code?q=SKILL.md+${encodeURIComponent(query)}+repo:${repo}&per_page=${maxResults}`;
+      const res = await fetch(url, {
+        headers: {
+          "Accept": "application/vnd.github.v3+json",
+          "User-Agent": "SWARM-IDE/1.0",
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) continue; // skip repo if not accessible
+      const data = await res.json();
+      for (const item of (data.items ?? [])) {
+        allResults.push({
+          name: item.name || item.path?.split("/").pop() || "unknown",
+          description: `Skill from trusted repo ${item.repository?.full_name}`,
+          source_url: item.html_url || item.git_url || "",
+          trust_level: "trusted",
+          repo: item.repository?.full_name || repo,
+        });
+      }
+      if (allResults.length >= maxResults) break;
+    } catch {
+      // skip unavailable repos
+    }
+  }
+
+  // Then, search GitHub globally
+  if (allResults.length < maxResults) {
+    const remaining = maxResults - allResults.length;
+    try {
+      const url = `https://api.github.com/search/code?q=SKILL.md+${encodeURIComponent(query)}&per_page=${remaining}`;
+      const res = await fetch(url, {
+        headers: {
+          "Accept": "application/vnd.github.v3+json",
+          "User-Agent": "SWARM-IDE/1.0",
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        for (const item of (data.items ?? [])) {
+          // Skip already-added from trusted repos
+          if (allResults.some(r => r.source_url === item.html_url)) continue;
+          allResults.push({
+            name: item.name || item.path?.split("/").pop() || "unknown",
+            description: `Skill from ${item.repository?.full_name}`,
+            source_url: item.html_url || item.git_url || "",
+            trust_level: "community",
+            repo: item.repository?.full_name || "unknown",
+          });
+        }
+      }
+    } catch {
+      // GitHub search unavailable
+    }
+  }
+
+  if (allResults.length === 0) {
+    // Fallback: search local skills
+    return searchLocalSkills(query);
+  }
+
+  return allResults.slice(0, maxResults);
+}
+
+/** Search local skills directory */
+async function searchLocalSkills(query: string): Promise<Array<{
+  name: string;
+  description: string;
+  source_url: string;
+  trust_level: string;
+  repo: string;
+}>> {
+  const loader = await getSkillLoader();
+  const allSkills = await loader.listSkills();
+  const skillsMeta = await loader.listAutoLoadSkills();
+  const queryLower = query.toLowerCase();
+
+  const results: Array<{ name: string; description: string; source_url: string; trust_level: string; repo: string }> = [];
+  for (const skill of skillsMeta) {
+    if (skill.name.toLowerCase().includes(queryLower) ||
+        skill.description.toLowerCase().includes(queryLower)) {
+      results.push({
+        name: skill.name,
+        description: skill.description,
+        source_url: `local://${skill.skillDir}`,
+        trust_level: "local",
+        repo: "local",
+      });
+    }
+  }
+  return results;
+}
+
+/** Convert a GitHub URL to a raw content URL */
+function toRawGitHubUrl(url: string): string {
+  // Already a raw URL
+  if (url.startsWith("https://raw.githubusercontent.com")) return url;
+
+  // github.com/blob/... → raw.githubusercontent.com
+  const blobMatch = url.match(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)/);
+  if (blobMatch) {
+    return `https://raw.githubusercontent.com/${blobMatch[1]}/${blobMatch[2]}/${blobMatch[3]}`;
+  }
+
+  // github.com/.../tree/... → not a file URL, try to append SKILL.md
+  const treeMatch = url.match(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(.*)/);
+  if (treeMatch) {
+    return `https://raw.githubusercontent.com/${treeMatch[1]}/${treeMatch[2]}/${treeMatch[3]}${treeMatch[4]}/SKILL.md`;
+  }
+
+  return url;
+}
+
+/** Fetch SKILL.md content from a URL */
+async function fetchSkillContent(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "Accept": "text/plain",
+      "User-Agent": "SWARM-IDE/1.0",
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch skill from ${url}: HTTP ${res.status}`);
+  }
+  return res.text();
+}
+
+/** Security scan: reject skill content with dangerous patterns */
+function scanSkillContent(content: string): { ok: true } | { ok: false; reason: string } {
+  const dangerousPatterns: Array<{ re: RegExp; reason: string }> = [
+    { re: /\bexec\s*\(/i, reason: "contains exec() call" },
+    { re: /\beval\s*\(/i, reason: "contains eval() call" },
+    { re: /\bbash\b.*\|.*\bnode\b/i, reason: "contains bash piping to node" },
+    { re: /fetch\s*\(\s*["']https?:\/\/(127\.|localhost|0\.0\.0\.0)/i, reason: "contains fetch to internal IP" },
+    { re: /http:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|10\.|192\.168\.)/i, reason: "contains internal network URL" },
+    { re: /```bash\n.*?(exec|eval|curl.*\|.*sh)/is, reason: "contains dangerous bash code block" },
+    { re: /```python\n.*?(exec|eval|__import__|subprocess)/is, reason: "contains dangerous python code block" },
+  ];
+
+  for (const { re, reason } of dangerousPatterns) {
+    if (re.test(content)) {
+      return { ok: false, reason };
+    }
+  }
+  return { ok: true };
 }
 
 class AgentRunner {
@@ -1127,6 +1665,21 @@ class AgentRunner {
   private agentPaused = false;
   // Free mode memory search cache: query -> results (design doc §6.5)
   private memoryCache = new Map<string, Array<Record<string, unknown>>>();
+  // Track last activity time for cleanup
+  private lastActiveTime = Date.now();
+  // Memory snapshot flag — injected once per fresh session to stabilize prompt caching
+  private memorySnapshotAdded = false;
+  // Tool context for check_fn availability filtering (updated each turn)
+  private toolContext: ToolContext | null = null;
+  // Nudge Engine: round counter for periodic background analysis
+  private nudgeCounter = 0;
+  // Auto-skill trigger: count of meaningful actions since last skill nudge
+  private meaningfulActions = 0;
+  private static readonly SKILL_AUTO_TRIGGER_AFTER = 3;
+  // search_skill per-turn call counter (reset in resetForTurn)
+  private _searchCountThisTurn = 0;
+  // search_skill query cache: query -> { results, timestamp }
+  private static _searchCache = new Map<string, { results: unknown[]; ts: number }>();
 
   /**
    * Record a structured decision event for self-learning.
@@ -1222,6 +1775,18 @@ class AgentRunner {
     void this.loop();
   }
 
+  /**
+   * Check if runner has been idle for longer than timeoutMs
+   */
+  isIdleTooLong(timeoutMs: number): boolean {
+    if (this.running) return false; // Currently processing, not idle
+    return Date.now() - this.lastActiveTime > timeoutMs;
+  }
+
+  private touchActive() {
+    this.lastActiveTime = Date.now();
+  }
+
   private async ensureSkillsLoaded() {
     try {
       const agent = await store.getAgent({ agentId: this.agentId });
@@ -1281,6 +1846,7 @@ class AgentRunner {
       if (!this.started) continue; // stopRunner set started=false
       if (this.running) continue;
       this.running = true;
+      this.touchActive();
       const iterationStart = Date.now();
       let hadWork = false;
       try {
@@ -1394,24 +1960,32 @@ class AgentRunner {
       : null;
     console.info(`[processGroupUnread] activeWf=${activeWf ? `${activeWf.id}(${activeWf.status})` : "none"}, isCoordinator=${isCoordinator}, freeMode=${isFreeMode}`);
 
+    // Resolve sender roles once (deduplicated), reused for hasHumanSender + coordinator check + user content
+    const uniqueSenderIds = [...new Set(unreadMessages.map((m) => m.senderId))];
+    const senderRoleCache = new Map<string, string | null>();
+    await Promise.all(
+      uniqueSenderIds.map(async (sid) => {
+        const role = await store.getAgentRole({ agentId: sid }).catch(() => null);
+        senderRoleCache.set(sid, role);
+      })
+    );
+    const hasHumanSender = [...senderRoleCache.values()].some((r) => r === "human");
+
+    // Update tool context for check_fn filtering
+    this.toolContext = {
+      agentId: this.agentId,
+      isCoordinator,
+      hasActiveWorkflow: activeWf !== null,
+      shellEnabled: process.env.DISABLE_SHELL !== "true",
+      hasHumanSender,
+    };
+
     // If workflow is paused and this agent is not coordinator, skip
     if (activeWf && activeWf.status === "paused" && !isCoordinator) { console.info('[processGroupUnread] SKIP: workflow paused, not coordinator'); return; }
 
     // If workflow active and this is the coordinator: check if human just spoke → auto-pause
     if (activeWf && activeWf.status === "active" && isCoordinator) {
-      const senderIds = [...new Set(unreadMessages.map((m) => m.senderId))];
-      let humanSpoke = false;
-      for (const sid of senderIds) {
-        const rows = await getDb().execute(
-          sql`SELECT role FROM agents WHERE id = ${sid}`
-        );
-        const role = (rows as unknown as Array<{ role: string } | null>)[0]?.role;
-        if (role === "human") {
-          humanSpoke = true;
-          break;
-        }
-      }
-      if (humanSpoke) {
+      if (hasHumanSender) {
         console.info('[processGroupUnread] SKIP: human spoke during active workflow, auto-pause');
         await getDb().execute(
           sql`UPDATE workflows SET status = 'paused', updated_at = ${new Date().toISOString()} WHERE id = ${activeWf.id}`
@@ -1432,7 +2006,7 @@ class AgentRunner {
     const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
 
     // Proactive compression: trim bloated history before LLM call to reduce token usage
-    if (history.length > 8) {
+    if (history.length > COMPRESS_TRIGGER) {
       try {
         compressHistory(history);
         console.info(`[processGroupUnread] compressed history: ${history.length} messages`);
@@ -1477,19 +2051,11 @@ class AgentRunner {
         : "";
 
       const systemContent =
-        `You are an agent in an IM system.\n` +
-        `Your agent_id is: ${this.agentId}.\n` +
-        `Your workspace_id is: ${workspaceId}.\n` +
-        `Your role is: ${role}.\n` +
-        `This group has ${members.length} members: [${membersList}]. ` +
-        `Only reference these agents by their roles — do not invent other roles.\n` +
-        `Act strictly as this role when replying. Be concise and helpful.\n` +
-        `Your replies are NOT automatically delivered to humans.\n` +
-        `To send messages, you MUST call tools like send_group_message or send_direct_message.\n` +
-        `CRITICAL: When creating groups with create_group, always include 'human' in memberIds so the human user can see progress. 'human' is a valid agent role from list_agents. Without it, workflow controls and cascade prevention will fail.\n` +
-        `If you need to coordinate with other agents, you may use tools like self, list_agents, create, send, list_groups, list_group_members, create_group, add_group_members, send_group_message, send_direct_message, and get_group_messages.\n` +
-        `If you need to run shell commands, use the bash tool.` +
-        `CRITICAL: When you solve a non-trivial problem (multi-step fix, new pattern, repeated failure), save it as a skill using create_skill. Skills become permanent knowledge for future-you and other agents.` +
+        `You are an agent in an IM system. Agent ID: ${this.agentId}, workspace: ${workspaceId}, role: ${role}.\n` +
+        `Group members: [${membersList}]. Reference agents by role only.\n` +
+        `Act as your role. Replies are NOT auto-delivered — use send_group_message or send_direct_message.\n` +
+        `When creating groups, always include 'human' in memberIds.\n` +
+        `Use bash for shell commands. Save solved patterns as skills with create_skill.` +
         workflowContext +
         (skillsBlock ? `\n\n${skillsBlock}` : "");
 
@@ -1502,6 +2068,15 @@ class AgentRunner {
         role: "system",
         content: finalSystemContent,
       });
+
+      // Inject memory snapshot for prompt stability (once per fresh session)
+      if (!this.memorySnapshotAdded) {
+        const memSnapshot = await this.buildMemorySnapshot();
+        if (memSnapshot) {
+          history.push({ role: "system", content: memSnapshot });
+          this.memorySnapshotAdded = true;
+        }
+      }
     } else {
       if (soulBlock && !hasSoul) {
         history.push({ role: "system", content: soulBlock });
@@ -1512,27 +2087,50 @@ class AgentRunner {
     }
 
     // Build user content with sender roles so agents know who's speaking
-    const senderRoleCache = new Map<string, string | null>();
-    const uniqueSenders = [...new Set(unreadMessages.map((m) => m.senderId))];
-    await Promise.all(
-      uniqueSenders.map(async (sid) => {
-        const role = await store.getAgentRole({ agentId: sid }).catch(() => null);
-        senderRoleCache.set(sid, role);
-      })
-    );
-    const userContent = unreadMessages
-      .map((m) => `[group:${groupId}] ${senderRoleCache.get(m.senderId) ?? m.senderId.substring(0, 8)}: ${m.content}`)
-      .join("\n");
-    history.push({ role: "user", content: userContent });
+    // For image messages, use multimodal content so the LLM can see them
+    const hasImages = unreadMessages.some((m) => m.contentType === "image");
+
+    if (hasImages) {
+      const parts: MultimodalContentPart[] = [];
+      for (const m of unreadMessages) {
+        const senderLabel = senderRoleCache.get(m.senderId) ?? m.senderId.substring(0, 8);
+
+        if (m.contentType === "image") {
+          let parsed: { url?: string } | null = null;
+          try { parsed = JSON.parse(m.content); } catch {}
+
+          if (parsed?.url) {
+            try {
+              const imgData = await this.fetchImageAsBase64(parsed.url);
+              parts.push({
+                type: "text",
+                text: `[group:${groupId}] ${senderLabel} (发送了一张图片):`,
+              });
+              parts.push({
+                type: "image_url",
+                image_url: { url: `data:${imgData.mediaType};base64,${imgData.data}` },
+              });
+              continue;
+            } catch (err) {
+              console.warn(`[processGroupUnread] image fetch failed: ${parsed.url}`);
+            }
+          }
+          parts.push({ type: "text", text: `[group:${groupId}] ${senderLabel}: [图片] ${m.content}` });
+        } else {
+          parts.push({ type: "text", text: `[group:${groupId}] ${senderLabel}: ${m.content}` });
+        }
+      }
+      history.push({ role: "user", content: parts });
+    } else {
+      const userContent = unreadMessages
+        .map((m) => `[group:${groupId}] ${senderRoleCache.get(m.senderId) ?? m.senderId.substring(0, 8)}: ${m.content}`)
+        .join("\n");
+      history.push({ role: "user", content: userContent });
+    }
 
     const lastId = unreadMessages[unreadMessages.length - 1]?.id;
 
     // === Cascade prevention: per-group agent turn counter ===
-    const senderRoles = await Promise.all(
-      unreadMessages.map((m) => store.getAgentRole({ agentId: m.senderId }).catch(() => null))
-    );
-    const hasHumanSender = senderRoles.some((r) => r === "human");
-
     if (hasHumanSender) {
       groupAgentTurnCount.set(groupId, 0);
     } else {
@@ -1648,14 +2246,28 @@ class AgentRunner {
 
     if ((!didSend || needsHumanReply) && !this.interruptRequested) {
       const reminder = needsHumanReply
-        ? "Reminder: 你创建了 agent 但未回复人类。请用 send_group_message 向对话群组发送确认消息。"
-        : "Reminder: 本轮未调用 send_*。先判断是否需要对外可见；需要时使用 send_group_message 或 send_direct_message，无需时可不发送。";
+        ? "Reminder: created agents but no reply sent. Use send_group_message."
+        : "Reminder: no send_* called this turn. Decide if reply is needed.";
       history.push({
         role: "user",
         content: reminder,
       });
       console.info(`[processGroupUnread] injected reminder (no LLM call) for agent ${this.agentId}`);
     }
+
+    // Auto-skill trigger: after N meaningful sends, nudge the LLM to create a skill
+    if (didSend) {
+      this.meaningfulActions++;
+      if (this.meaningfulActions >= AgentRunner.SKILL_AUTO_TRIGGER_AFTER) {
+        this.meaningfulActions = 0;
+        history.push({
+          role: "system",
+          content: `[Self-Learning] Patterns discovered — save with create_skill if worth preserving.`,
+        });
+        console.info(`[processGroupUnread] injected skill auto-trigger nudge for agent ${this.agentId}`);
+      }
+    }
+
     if (lastId) {
       await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
@@ -1682,6 +2294,22 @@ class AgentRunner {
       event: "ui.agent.history.persisted",
       data: { workspaceId, agentId: this.agentId, groupId, historyLength: history.length },
     });
+  }
+
+  private async fetchImageAsBase64(url: string): Promise<{ data: string; mediaType: string }> {
+    const fullUrl = url.startsWith("http") ? url : `http://127.0.0.1:${process.env.PORT ?? 3017}${url}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(fullUrl, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const ext = url.split(".").pop()?.toLowerCase() ?? "png";
+      const mediaType = EXT_TO_MEDIA[ext] ?? "image/png";
+      return { data: buffer.toString("base64"), mediaType };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /**
@@ -1728,6 +2356,7 @@ class AgentRunner {
     this.exactFailureCount.clear();
     this.sameToolFailureCount.clear();
     this.memoryCache.clear();
+    this._searchCountThisTurn = 0;
   }
 
   private async runWithTools(input: {
@@ -1743,26 +2372,12 @@ class AgentRunner {
     this.resetForTurn();
 
     for (let round = 0; round < maxToolRounds; round++) {
-      // Reinforce critical constraints before each LLM call.
-      // LLM attention to early system messages degrades in long conversations;
-      // appending to end ensures the rules are actually "seen".
-      const lastIdx = input.history.length - 1;
-      if (input.history[lastIdx] && typeof input.history[lastIdx].content === "string" && input.history[lastIdx].content.startsWith("[Rules]")) {
-        input.history.splice(lastIdx, 1);
-      }
-      const MAX_MSGS = 10;
-      const currentTurns = groupAgentTurnCount.get(input.groupId) ?? 0;
-      const senderRule = input.hasHumanSender
-        ? "A human is waiting for your reply. You MUST use send_group_message to respond."
-        : "Stay silent if no new input.";
+      const senderHint = input.hasHumanSender
+        ? "Human waiting — fulfill request then confirm with send_group_message."
+        : "No human input — stay silent unless meaningful reason to speak.";
       input.history.push({
         role: "system",
-        content:
-          `[Rules] Never create new agents or groups without human approval. ` +
-          `You can use bash to check files, run commands, and verify project state. ` +
-          `Use existing agents and groups for delegation. ` +
-          `Max ${MAX_MSGS} turns per group (current: ${currentTurns}). ` +
-          `${senderRule} One action, one message.`,
+        content: `[turn ${round}] ${senderHint}. One action per message.`,
       });
 
       const res = await this.callLlmStreaming(input.history, {
@@ -1788,7 +2403,22 @@ class AgentRunner {
         reasoning_content: res.assistantThinking || undefined,
       });
 
-      for (const call of res.toolCalls) {
+      // Phase 1: Execute all tool calls in parallel for I/O concurrency
+      const toolExecs = await Promise.all(
+        res.toolCalls.map(async (call) => {
+          const callKey = call.name
+            ? `${call.name}:${JSON.stringify(safeJsonParse(call.argumentsText, {}))}`
+            : "";
+          // Check if this specific tool+params combo is blocked
+          const isBlocked = !!(call.name && this.blockedTools.has(callKey));
+          const isSend = !!(call.name && SEND_TOOL_NAMES.has(call.name));
+          const result = isBlocked ? null : await this.executeToolCall({ groupId: input.groupId, call });
+          return { call, callKey, isBlocked, isSend, result };
+        })
+      );
+
+      // Phase 2: Process results serially (guardrails, events, history)
+      for (const { call, callKey, isBlocked, isSend, result } of toolExecs) {
         if (this.agentPaused) {
           input.history.push({
             role: "system",
@@ -1796,9 +2426,7 @@ class AgentRunner {
           });
           break;
         }
-        // Check if this specific tool+params combo is blocked
-        const callKey = `${call.name}:${JSON.stringify(safeJsonParse(call.argumentsText, {}))}`;
-        if (call.name && this.blockedTools.has(callKey)) {
+        if (isBlocked) {
           input.history.push({
             role: "system",
             content: `Tool "${call.name}" with these parameters has failed too many times and is blocked. Use different parameters or a different approach.`,
@@ -1806,22 +2434,14 @@ class AgentRunner {
           continue;
         }
 
-        if (call.name && SEND_TOOL_NAMES.has(call.name)) {
-          didSend = true;
-        }
-        const result = await this.executeToolCall({
-          groupId: input.groupId,
-          call,
-        });
+        if (isSend) didSend = true;
 
-        // Record skill usage for self-evolution tracking
+        // Guardrails: track failures
         const toolOk = (result as Record<string, unknown> | undefined)?.ok !== false;
         if (!toolOk && call.name) {
           const prev = this.turnToolFailures.get(call.name) ?? 0;
           this.turnToolFailures.set(call.name, prev + 1);
 
-          // Guardrail: exact failure (same tool + same params)
-          const callKey = `${call.name}:${JSON.stringify(safeJsonParse(call.argumentsText, {}))}`;
           const exactPrev = this.exactFailureCount.get(callKey) ?? 0;
           this.exactFailureCount.set(callKey, exactPrev + 1);
           if (exactPrev + 1 >= 5) {
@@ -1829,7 +2449,6 @@ class AgentRunner {
             console.warn(`[AgentRunner] blocked tool ${callKey} after 5 exact failures`);
           }
 
-          // Guardrail: same tool total failures
           const sameToolPrev = this.sameToolFailureCount.get(call.name) ?? 0;
           this.sameToolFailureCount.set(call.name, sameToolPrev + 1);
           if (sameToolPrev + 1 >= 8) {
@@ -1840,10 +2459,9 @@ class AgentRunner {
 
         // Persist skill usage
         const ok = (result as Record<string, unknown> | undefined)?.ok ?? true;
-        if (call.name) {
-          void this.recordSkillUsage(call.name, ok === true);
-        }
+        if (call.name) void this.recordSkillUsage(call.name, ok === true);
 
+        // Emit tool result event (streaming to UI)
         this.bus.emit(this.agentId, {
           event: "agent.stream",
           data: {
@@ -1861,6 +2479,8 @@ class AgentRunner {
           tool_call_id: call.id,
           tool_call_name: call.name,
         });
+
+        // Push result to history (serialized, in order)
         const resultStr = JSON.stringify(result);
         const truncatedResult = resultStr.length > MAX_TOOL_RESULT_CHARS
           ? resultStr.slice(0, MAX_TOOL_RESULT_CHARS) + `\n...[truncated, ${resultStr.length - MAX_TOOL_RESULT_CHARS} chars omitted. Use more specific tool parameters or get_message_detail for full content.]`
@@ -1871,9 +2491,11 @@ class AgentRunner {
           tool_call_id: call.id,
           name: call.name,
         });
+
         // Context compression: when a task is done, trim old tool exchanges
         if ((result as Record<string, unknown> | undefined)?.taskDone === true) {
           try { compressHistory(input.history); } catch { /* best-effort */ }
+          void this.autoCreateSkillFromWorkflow(input.groupId);
         }
       }
 
@@ -1882,7 +2504,12 @@ class AgentRunner {
         if (count >= 3) {
           input.history.push({
             role: "system",
-            content: `Tool "${toolName}" has failed ${count} times in this turn. Consider creating a skill with \`create_skill\` documenting the fix pattern, or try a different approach.`,
+            content: `Tool "${toolName}" has failed ${count} times in this turn. Your current approach is not working. Options:
+1. Call \`search_skill("<problem domain>")\` to search GitHub for relevant skills
+2. Call \`get_skill("<name>")\` to load an existing local skill
+3. Call \`install_skill("<name>", "<source_url>")\` to install a remote skill
+4. Call \`create_skill\` to document a new fix pattern
+5. Try a completely different approach`,
           });
           break;
         }
@@ -1890,7 +2517,533 @@ class AgentRunner {
 
     }
 
+    // Nudge Engine: trigger periodic background analysis after tool loop completes
+    this.nudgeCounter++;
+    if (this.nudgeCounter >= NUDGE_INTERVAL) {
+      this.nudgeCounter = 0;
+      void this.nudgeAnalysis(input.groupId);
+      void this.skillMaintenance();
+    }
+
     return { assistantText, assistantThinking, didSend };
+  }
+
+  /**
+   * Auto-create a skill when all tasks in a workflow are complete.
+   * Best-effort — failures are silently ignored.
+   * Triggered after update_task returns taskDone === true.
+   */
+  private async autoCreateSkillFromWorkflow(groupId: UUID) {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+
+      // Find active workflow for this group
+      const wfRows = await db.execute(
+        sql`SELECT id, name, description FROM workflows WHERE group_id = ${groupId} AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`
+      );
+      const wfArr = wfRows as unknown as Array<{ id: string; name: string; description: string | null }>;
+      if (wfArr.length === 0) return;
+      const wf = wfArr[0];
+
+      // Check if all tasks are in terminal state
+      const taskRows = await db.execute(
+        sql`SELECT status, result, name FROM tasks WHERE workflow_id = ${wf.id}`
+      );
+      const tasks = taskRows as unknown as Array<{ status: string; result: string | null; name: string }>;
+      if (tasks.length === 0) return;
+
+      const terminalStates = new Set(["done", "approved", "blocked", "failed"]);
+      const allDone = tasks.every((t) => terminalStates.has(t.status));
+      if (!allDone) return;
+
+      // Daily auto-skill limit: max 3 per agent
+      const today = new Date().toISOString().slice(0, 10);
+      const usageRows = await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM skill_usage WHERE agent_id = ${this.agentId} AND used_at >= ${today} AND skill_name LIKE 'auto-%'`
+      );
+      const usageArr = usageRows as unknown as Array<{ cnt: number }>;
+      if (usageArr.length > 0 && Number(usageArr[0].cnt) >= 3) return;
+
+      // Generate skill name from workflow name
+      const wfName = wf.name.trim();
+      const skillName = `auto-${wfName.toLowerCase().replace(/[^a-z0-9一-鿿]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)}`;
+
+      const doneTasks = tasks.filter((t) => t.status === "done" || t.status === "approved");
+      if (doneTasks.length === 0) return;
+
+      const taskSummaries = doneTasks
+        .map((t) => {
+          const resultPreview = (t.result ?? "").slice(0, 300);
+          return `- **${t.name}**: ${resultPreview || "(no result recorded)"}`;
+        })
+        .join("\n");
+
+      const totalTasks = tasks.length;
+      const successCount = doneTasks.length;
+      const skillDescription = `Auto-generated skill from workflow "${wfName}" (${successCount}/${totalTasks} tasks successful)`;
+      const skillContent = [
+        `# ${wfName}`,
+        "",
+        "## Overview",
+        "",
+        `Workflow completed with ${successCount}/${totalTasks} tasks successful.`,
+        "",
+        "## Tasks",
+        "",
+        taskSummaries,
+        "",
+        "## Notes",
+        "",
+        "- This skill was auto-generated from a completed workflow.",
+        "- Review and update the content for reusability.",
+      ].join("\n");
+
+      // Write skill file
+      const { getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
+      const skillsDir = getSkillDirectory();
+      const skillDir = path.join(skillsDir, skillName);
+      const existing = await fs.stat(skillDir).catch(() => null);
+      if (existing?.isDirectory()) return; // skip if skill already exists
+
+      await fs.mkdir(skillDir, { recursive: true });
+      const frontmatter = [
+        "---",
+        `name: ${skillName}`,
+        `description: ${skillDescription.slice(0, 200)}`,
+        "---",
+        "",
+        skillContent,
+      ].join("\n");
+      await fs.writeFile(path.join(skillDir, "SKILL.md"), frontmatter, "utf-8");
+      invalidateSkillCache();
+
+      // Record in skill_usage table
+      try {
+        await db.execute(
+          sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
+              VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
+        );
+      } catch { /* best-effort */ }
+
+      console.info(`[autoCreateSkill] auto-created skill "${skillName}" from workflow "${wfName}"`);
+    } catch {
+      // best-effort — skill auto-creation should never block the agent
+    }
+  }
+
+  /**
+   * Nudge Engine: full LLM-based background analysis of recent conversation.
+   * Runs every NUDGE_INTERVAL rounds. Fire-and-forget — never blocks the agent.
+   *
+   * Sends recent history to the primary LLM provider for semantic analysis,
+   * asking it to identify reusable patterns, fix recipes, and improvement
+   * suggestions. Creates skills from the LLM's recommendations.
+   */
+  private async nudgeAnalysis(groupId: UUID) {
+    try {
+      const agent = await store.getAgent({ agentId: this.agentId });
+      const parsed = safeJsonParse<unknown>(agent.llmHistory, {});
+      const history = Array.isArray(parsed) ? (parsed as HistoryMessage[]) : [];
+      if (history.length < 6) return;
+
+      // Check daily limit (shared with autoCreateSkillFromWorkflow)
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      const today = new Date().toISOString().slice(0, 10);
+      const usageRows = await db.execute(
+        sql`SELECT COUNT(*) as cnt FROM skill_usage WHERE agent_id = ${this.agentId} AND used_at >= ${today} AND skill_name LIKE 'auto-%'`
+      );
+      const usageArr = usageRows as unknown as Array<{ cnt: number }>;
+      const usedToday = usageArr.length > 0 ? Number(usageArr[0].cnt) : 0;
+      if (usedToday >= MAX_AUTO_SKILLS_PER_AGENT_PER_DAY) {
+        // Still try patching: patching reuses existing skill_usage slot
+        // Only skip if usedToday >= limit AND there's nothing to patch
+      }
+
+      // Discover existing skills for potential patching
+      const { getSkillLoader, getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
+      const skillLoader = await getSkillLoader();
+      const existingSkills = await skillLoader.listAutoLoadSkills();
+      const existingSkillsBlock = existingSkills.length > 0
+        ? `\nExisting skills available for patching:\n${existingSkills.map((s) => `  - ${s.name}: ${s.description}`).join("\n")}\n\nIf the detected pattern relates to an existing skill, set action to "patch" and skillName to the existing skill's name. The full content will be replaced with your skillContent.`
+        : "";
+
+      // Build a condensed view of recent history for the LLM
+      const recentHistory = history.slice(-30);
+      const historySummary = recentHistory.map((m) => {
+        const role = m.role;
+        const name = "name" in m && m.name ? `(${m.name})` : "";
+        let content: string;
+        if (typeof m.content === "string") {
+          content = m.content.slice(0, 300);
+        } else if (m.content && typeof m.content === "object") {
+          content = JSON.stringify(m.content).slice(0, 300);
+        } else {
+          content = "";
+        }
+        const toolCalls = m.role !== "tool" && m.tool_calls
+          ? (m.tool_calls as Array<{ function: { name: string } }>).map((tc) => tc.function.name).join(", ")
+          : "";
+        return `[${role}]${name} ${content}${toolCalls ? ` | calls: ${toolCalls}` : ""}`;
+      }).join("\n");
+
+      const systemPrompt = [
+        "You are analyzing an AI agent conversation to find reusable patterns. Your task:",
+        "",
+        "1. Identify tool failures that were later resolved (valuable fix recipes)",
+        "2. Identify repeated successful tool usage patterns (potential automation)",
+        "3. Identify any other reusable knowledge (workflow steps, debugging tricks)",
+        "",
+        "Respond with a JSON object only (no markdown, no extra text):",
+        JSON.stringify({
+          hasPattern: false,
+          action: "create", // "create" for new skill, "patch" to update existing, null if no pattern
+          skillName: "kebab-case-name-or-null",
+          skillDescription: "one-line summary or null",
+          skillContent: "full markdown content or null",
+          patchSummary: "what changed or null",
+        }),
+        "",
+        "Only set hasPattern=true if you found a genuinely reusable pattern.",
+        "skillContent should be concise, actionable markdown (< 1000 chars).",
+        'When action is "patch", skillName must match an existing skill name exactly.',
+        'When action is "patch", the existing skill\'s SKILL.md will be fully replaced with your skillContent.',
+        "Prefer patching an existing skill over creating a new one when the pattern relates to known knowledge.",
+        'If no pattern found, respond with {"hasPattern":false}.',
+        existingSkillsBlock,
+      ].join("\n");
+
+      // Make non-streaming LLM call through the global rate limiter (llmScheduler)
+      const provider = getLlmProvider();
+      let url: string;
+      let apiKey: string;
+      let model: string;
+      let backupModel: string;
+      let keyPool: KeyPool | null = null;
+
+      switch (provider) {
+        case "openrouter": {
+          const cfg = getOpenRouterConfig();
+          url = cfg.baseUrl;
+          apiKey = cfg.apiKey;
+          model = cfg.model || "google/gemini-2.0-flash-001";
+          backupModel = cfg.backupModel;
+          keyPool = cfg.keyPool;
+          break;
+        }
+        case "anthropic": {
+          const cfg = getAnthropicConfig();
+          url = cfg.baseUrl || "https://api.anthropic.com/v1/messages";
+          apiKey = cfg.apiKey;
+          model = cfg.model;
+          backupModel = cfg.backupModel;
+          keyPool = cfg.keyPool;
+          break;
+        }
+        case "glm": {
+          const cfg = getGlmConfig();
+          url = cfg.baseUrl;
+          apiKey = cfg.apiKey;
+          model = cfg.model;
+          backupModel = cfg.backupModel;
+          keyPool = cfg.keyPool;
+          break;
+        }
+        case "ollama": {
+          const cfg = getOllamaConfig();
+          url = cfg.baseUrl;
+          apiKey = "";
+          model = cfg.model;
+          backupModel = cfg.backupModel;
+          break;
+        }
+        default:
+          return;
+      }
+
+      const nudgeOpts = { backupModel, keyPool: keyPool ?? undefined };
+
+      // Anthropic uses a different non-OpenAI format; use OpenAI-compatible for all others
+      let respText: string;
+      if (provider === "anthropic") {
+        const resp = await llmFetch(url, {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 2048,
+            system: systemPrompt,
+            messages: [{ role: "user", content: historySummary }],
+          }),
+        }, "Nudge-Anthropic", nudgeOpts);
+        if (!resp.ok) return;
+        const data = await resp.json() as { content?: Array<{ text?: string }> };
+        respText = data.content?.[0]?.text ?? "";
+      } else {
+        // OpenAI-compatible (OpenRouter, GLM, Ollama)
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+        const resp = await llmFetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: historySummary },
+            ],
+            temperature: 0.1,
+            max_tokens: 2048,
+            stream: false,
+          }),
+        }, "Nudge", nudgeOpts);
+        if (!resp.ok) return;
+        const data = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+        respText = data.choices?.[0]?.message?.content ?? "";
+      }
+
+      if (!respText) return;
+
+      // Parse structured response
+      const result = JSON.parse(respText) as {
+        hasPattern?: boolean;
+        action?: "create" | "patch";
+        skillName?: string | null;
+        skillDescription?: string | null;
+        skillContent?: string | null;
+        patchSummary?: string | null;
+      };
+
+      if (!result.hasPattern || !result.skillContent) return;
+
+      const action = result.action === "patch" ? "patch" : "create";
+
+      if (action === "patch") {
+        // ---- Auto-patching: update existing skill ----
+        const existingSkill = existingSkills.find((s) => s.name === result.skillName);
+        if (!existingSkill) {
+          console.warn(`[nudgeAnalysis] patch requested for "${result.skillName}" but skill not found, falling back to create`);
+          // Fall through to create logic below
+        } else {
+          const skillDescription = (result.skillDescription ?? existingSkill.description).slice(0, 200);
+          const skillContent = result.skillContent;
+
+          // Write updated content with patch metadata
+          const patchVersion = new Date().toISOString().slice(0, 10);
+          const frontmatter = [
+            "---",
+            `name: ${existingSkill.name}`,
+            `description: ${skillDescription}`,
+            `patched: ${patchVersion}`,
+            "---",
+            "",
+            skillContent,
+          ].join("\n");
+          await fs.writeFile(path.join(existingSkill.skillDir, "SKILL.md"), frontmatter, "utf-8");
+          invalidateSkillCache();
+
+          await db.execute(
+            sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
+                VALUES (gen_random_uuid(), ${existingSkill.name}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
+          ).catch(() => {});
+
+          const patchSummary = result.patchSummary ?? "updated via nudge analysis";
+          console.info(`[nudgeAnalysis] patched skill "${existingSkill.name}": ${patchSummary}`);
+          return;
+        }
+      }
+
+      // ---- Create new skill (default, or fallback from failed patch) ----
+      const skillName = `auto-nudge-${(result.skillName ?? "pattern")
+        .toLowerCase()
+        .replace(/[^a-z0-9一-鿿-]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 60)}`;
+      const skillDescription = (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200);
+      const skillContent = result.skillContent;
+
+      // Respect daily limit for new skill creation
+      if (usedToday >= MAX_AUTO_SKILLS_PER_AGENT_PER_DAY) return;
+
+      const skillsDir = getSkillDirectory();
+      const skillDirPath = path.join(skillsDir, skillName);
+      const existing = await fs.stat(skillDirPath).catch(() => null);
+      if (existing?.isDirectory()) return;
+
+      await fs.mkdir(skillDirPath, { recursive: true });
+      const frontmatter = [
+        "---",
+        `name: ${skillName}`,
+        `description: ${skillDescription}`,
+        "---",
+        "",
+        skillContent,
+      ].join("\n");
+      await fs.writeFile(path.join(skillDirPath, "SKILL.md"), frontmatter, "utf-8");
+      invalidateSkillCache();
+
+      await db.execute(
+        sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
+            VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
+      ).catch(() => {});
+
+      console.info(`[nudgeAnalysis] LLM created skill "${skillName}" from conversation analysis`);
+    } catch {
+      // best-effort — nudge analysis should never block the agent
+    }
+  }
+
+  /**
+   * Skill lifecycle maintenance: detect stale skills, archive old ones,
+   * and merge duplicates. Runs once per nudge cycle as best-effort.
+   * (design doc §11.4 — skill lifecycle)
+   */
+  private async skillMaintenance() {
+    try {
+      const { getSkillLoader, getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+      const loader = await getSkillLoader();
+      const allSkills = await loader.listAutoLoadSkills();
+      if (allSkills.length === 0) return;
+
+      const now = new Date();
+      const staleThreshold = new Date(now.getTime() - SKILL_STALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const archiveThreshold = new Date(now.getTime() - SKILL_ARCHIVE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+      // Query last usage date for each skill
+      const skillNames = allSkills.map(s => s.name);
+      const rows = await db.execute(
+        sql`SELECT skill_name, MAX(used_at) as last_used FROM skill_usage WHERE skill_name = ANY(${skillNames}) GROUP BY skill_name`
+      );
+      const lastUsageMap = new Map<string, string>();
+      for (const row of rows as Array<Record<string, unknown>>) {
+        lastUsageMap.set(row.skill_name as string, row.last_used as string);
+      }
+
+      for (const skill of allSkills) {
+        // Check for `patched` date in frontmatter as fallback
+        const patchedDate = skill.metadata?.patched as string | undefined;
+        const lastUsed = lastUsageMap.get(skill.name) ?? patchedDate ?? null;
+
+        if (!lastUsed) continue;
+
+        // Archive: no usage in 90 days
+        if (lastUsed < archiveThreshold) {
+          const archivedDir = path.join(getSkillDirectory(), `_archived-${skill.name}`);
+          try {
+            await fs.rename(skill.skillDir, archivedDir);
+            await db.execute(
+              sql`UPDATE skill_usage SET status = 'archived' WHERE skill_name = ${skill.name} AND status != 'archived'`
+            );
+            console.info(`[skillMaintenance] archived skill "${skill.name}" (last used ${lastUsed.slice(0, 10)})`);
+          } catch {
+            // best-effort — skill archiving should not break anything
+          }
+          invalidateSkillCache();
+        }
+        // Stale: no usage in 30 days — add usage hint for future nudge analysis
+        else if (lastUsed < staleThreshold) {
+          console.info(`[skillMaintenance] skill "${skill.name}" is stale (last used ${lastUsed.slice(0, 10)}) — consider merging or removing`);
+        }
+      }
+
+      // Dedup: find skills with overlapping descriptions
+      const descs = allSkills.map(s => ({ name: s.name, desc: (s.description ?? "").toLowerCase() }));
+      for (let i = 0; i < descs.length; i++) {
+        for (let j = i + 1; j < descs.length; j++) {
+          const a = descs[i];
+          const b = descs[j];
+          if (!a.desc || !b.desc) continue;
+          // Simple word overlap check
+          const aWords = new Set(a.desc.split(/\s+/));
+          const bWords = new Set(b.desc.split(/\s+/));
+          const overlap = [...aWords].filter(w => bWords.has(w)).length;
+          const union = new Set([...aWords, ...bWords]).size;
+          if (union > 3 && overlap / union >= SKILL_MERGE_SIMILARITY) {
+            console.info(`[skillMaintenance] potential duplicate skills: "${a.name}" and "${b.name}" — consider merging`);
+          }
+        }
+      }
+    } catch {
+      // best-effort — skill maintenance should never block the agent
+    }
+  }
+
+  /**
+   * Per-turn file-mutation verifier: after a file-write tool call,
+   * read back the target file to confirm it actually exists and has content.
+   * Best-effort — failures are logged, not surfaced to the agent.
+   * (design doc §11.5)
+   */
+  private async verifyFileMutation(args: Record<string, unknown>, resultContent: string) {
+    try {
+      // Extract file path from common argument patterns
+      const filePath = (args.file_path ?? args.path ?? args.filename ?? args.filePath ?? "") as string;
+      if (!filePath || typeof filePath !== "string") return;
+
+      const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+      const stat = await fs.stat(resolved).catch(() => null);
+      if (!stat?.isFile()) {
+        console.warn(`[verifyFileMutation] file not found after write: ${filePath}`);
+        return;
+      }
+      // Verify file is not empty
+      if (stat.size === 0) {
+        console.warn(`[verifyFileMutation] file is empty after write: ${filePath}`);
+        return;
+      }
+      // Log successful verification
+      console.info(`[verifyFileMutation] verified: ${filePath} (${stat.size} bytes)`);
+    } catch {
+      // best-effort
+    }
+  }
+
+  /**
+   * Build a memory snapshot — top N important memories frozen at session start.
+   * Injected as a system message to stabilize prompt caching.
+   * Best-effort — returns null on failure or if no memories exist.
+   */
+  private async buildMemorySnapshot(): Promise<string | null> {
+    try {
+      const { getDb } = await import("@/db");
+      const { sql } = await import("drizzle-orm");
+      const db = getDb();
+
+      const rows = await db.execute(
+        sql`SELECT content, importance, source FROM memories WHERE agent_id = ${this.agentId} ORDER BY importance DESC, created_at DESC LIMIT 20`
+      ) as unknown as Array<{ content: string; importance: number | null; source: string | null }>;
+
+      if (!rows || rows.length === 0) return null;
+
+      const lines = rows.map((r, i) => {
+        const imp = r.importance ?? 3;
+        const source = r.source ? ` (source: ${r.source})` : "";
+        return `${i + 1}. [${"★".repeat(Math.min(5, imp))}${"☆".repeat(5 - Math.min(5, imp))}] ${r.content}${source}`;
+      });
+
+      return [
+        "## Memory Snapshot (session start)",
+        "",
+        "Key facts from prior sessions, ordered by importance:",
+        "",
+        ...lines,
+        "",
+        "---",
+      ].join("\n");
+    } catch {
+      return null; // best-effort
+    }
   }
 
   /**
@@ -2026,6 +3179,15 @@ class AgentRunner {
       });
     };
 
+    // check_fn: if tool is filtered by availability, return clear error
+    if (this.toolContext) {
+      const check = TOOL_AVAILABILITY[name];
+      if (check && !check(this.toolContext)) {
+        emitToolDone(false);
+        return { ok: false, error: `Tool "${name}" is not available in the current context.` };
+      }
+    }
+
     if (name === "self") {
       const role = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
       emitToolDone(true);
@@ -2135,6 +3297,129 @@ class AgentRunner {
       }
     }
 
+    // -----------------------------------------------------------------------
+    // search_skill: GitHub code search for SKILL.md files
+    // -----------------------------------------------------------------------
+    if (name === "search_skill") {
+      const args = safeJsonParse<{ query?: string; maxResults?: number }>(
+        input.call.argumentsText, {}
+      );
+      const query = (args.query ?? "").trim();
+      if (!query) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing query parameter" };
+      }
+
+      const maxResults = Math.min(args.maxResults ?? 5, 10);
+
+      // Guard: prevent infinite search loops within a single tool turn
+      if (this._searchCountThisTurn >= 2) {
+        emitToolDone(false);
+        return { ok: false, error: "search_skill has been called too many times this turn. Try a different approach or use install_skill with a known source." };
+      }
+      this._searchCountThisTurn++;
+
+      // Guard: cache same query within 5 minutes
+      const cacheKey = query.toLowerCase();
+      const now = Date.now();
+      const CACHE_TTL = 5 * 60 * 1000;
+      const lastSearch = AgentRunner._searchCache.get(cacheKey);
+      if (lastSearch && (now - lastSearch.ts) < CACHE_TTL) {
+        emitToolDone(true);
+        return { ok: true, results: lastSearch.results, cached: true };
+      }
+
+      try {
+        const results = await searchGitHubSkills(query, maxResults);
+        // Cache the result
+        AgentRunner._searchCache.set(cacheKey, { results, ts: now });
+
+        emitToolDone(true);
+        return { ok: true, results, count: results.length };
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        // GitHub API rate limit or network error → fallback to local skills
+        if (errMsg.includes("403") || errMsg.includes("429") || errMsg.includes("rate")) {
+          const localResults = await searchLocalSkills(query);
+          emitToolDone(true);
+          return { ok: true, results: localResults, count: localResults.length, fallback: "GitHub API rate limited, showing local skills" };
+        }
+        emitToolDone(false);
+        return { ok: false, error: `search_skill failed: ${errMsg.slice(0, 200)}` };
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // install_skill: Download and install a skill from GitHub
+    // -----------------------------------------------------------------------
+    if (name === "install_skill") {
+      const args = safeJsonParse<{ name?: string; source_url?: string }>(
+        input.call.argumentsText, {}
+      );
+      const skillName = (args.name ?? "").trim();
+      const sourceUrl = (args.source_url ?? "").trim();
+      if (!skillName || !sourceUrl) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing required fields: name, source_url" };
+      }
+
+      // Validate skill name: only alphanumeric, hyphens, underscores
+      if (!/^[a-z0-9_-]+$/.test(skillName)) {
+        emitToolDone(false);
+        return { ok: false, error: "Invalid skill name. Only lowercase letters, numbers, hyphens, and underscores allowed." };
+      }
+
+      // Validate URL: must be a GitHub URL
+      if (!sourceUrl.startsWith("https://github.com") && !sourceUrl.startsWith("https://raw.githubusercontent.com")) {
+        emitToolDone(false);
+        return { ok: false, error: "source_url must be a GitHub URL (github.com or raw.githubusercontent.com)" };
+      }
+
+      // Check if already installed
+      const skillsDir = getSkillDirectory();
+      const skillDir = path.join(skillsDir, skillName);
+      if (existsSync(skillDir)) {
+        emitToolDone(true);
+        return { ok: true, message: `Skill "${skillName}" is already installed at ${skillDir}`, skip: true };
+      }
+
+      try {
+        // Download SKILL.md
+        const rawUrl = toRawGitHubUrl(sourceUrl);
+        const skillContent = await fetchSkillContent(rawUrl);
+
+        // Validate YAML frontmatter
+        const frontmatterMatch = skillContent.match(FRONTMATTER_RE);
+        if (!frontmatterMatch) {
+          emitToolDone(false);
+          return { ok: false, error: "Invalid skill file: missing YAML frontmatter" };
+        }
+        const frontmatter = parseFrontmatter(frontmatterMatch[1]);
+        if (!frontmatter || !frontmatter.name || !frontmatter.description) {
+          emitToolDone(false);
+          return { ok: false, error: "Invalid skill file: missing name or description in frontmatter" };
+        }
+
+        // Security scan: reject dangerous content
+        const scanResult = scanSkillContent(skillContent);
+        if (!scanResult.ok) {
+          emitToolDone(false);
+          return { ok: false, error: `Security scan failed: ${scanResult.reason}` };
+        }
+
+        // Save skill
+        await fs.mkdir(skillDir, { recursive: true });
+        await fs.writeFile(path.join(skillDir, "SKILL.md"), skillContent, "utf-8");
+        invalidateSkillCache();
+
+        emitToolDone(true);
+        return { ok: true, skill_name: skillName, path: path.join(skillDir, "SKILL.md") };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to install skill" };
+      }
+    }
+
     if (name === "bash") {
       const args = safeJsonParse<{
         command?: string;
@@ -2204,6 +3489,7 @@ class AgentRunner {
           timeout: timeoutMs,
           maxBuffer,
           shell: process.platform === "win32" ? "cmd.exe" : "/bin/bash",
+          windowsHide: true, // Hide CMD/PowerShell window on Windows
         });
         const successLine = `${new Date().toISOString()} | ${this.agentId.substring(0, 8)} | ${command.slice(0, 200).replace(/\n/g, "\\n")} | OK | exit:0\n`;
         void fs.appendFile(auditLogPath, successLine);
@@ -2230,17 +3516,6 @@ class AgentRunner {
     }
 
     if (name === "create") {
-      // CODE-LEVEL GUARD: Only the human user can create new agents.
-      // Prompt constraints are lost in long conversations; code cannot be ignored.
-      const callerRole = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
-      if (callerRole !== "human") {
-        emitToolDone(false);
-        return {
-          ok: false,
-          error: "Permission denied: only the human user can create new agents. Ask the human to create them for you, or delegate to existing agents.",
-        };
-      }
-
       const args = safeJsonParse<{ role?: string; guidance?: string }>(input.call.argumentsText, {});
       const role = (args.role ?? "").trim();
       const guidance = (args.guidance ?? "").trim();
@@ -2337,12 +3612,6 @@ class AgentRunner {
     }
 
     if (name === "create_group") {
-      const callerRole = await store.getAgentRole({ agentId: this.agentId }).catch(() => null);
-      if (callerRole !== "human") {
-        emitToolDone(false);
-        return { ok: false, error: "Permission denied: only the human user can create groups. Ask the human to create a group for you." };
-      }
-
       const args = safeJsonParse<{ memberIds?: string[]; name?: string }>(input.call.argumentsText, {});
       let memberIds = this.resolveAgentIds(
         (args.memberIds ?? []).map((id) => id.trim()).filter(Boolean),
@@ -2845,12 +4114,8 @@ class AgentRunner {
         for (const t of tasks) {
           const tId = uuid();
           const dependsOn = (t.dependsOn ?? []).map((d) => d.trim()).filter(Boolean);
-          // Use ARRAY[] syntax for Postgres text[] column
-          const depsSql = dependsOn.length > 0
-            ? sql.raw(`ARRAY[${dependsOn.map(d => `'${d}'`).join(',')}]::text[]`)
-            : sql.raw(`ARRAY[]::text[]`);
           await db.execute(
-            sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${depsSql}, ${t.maxRevisions ?? 3}, ${now})`
+            sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, status, depends_on, max_revisions, created_at) VALUES (${tId}, ${wfId}, ${t.name ?? "unnamed"}, ${t.description ?? null}, ${t.assigneeRole ?? null}, ${t.expectedOutput ?? null}, 'pending', ${dependsOn}, ${t.maxRevisions ?? 3}, ${now})`
           );
         }
       } catch (err: unknown) {
@@ -3475,6 +4740,15 @@ class AgentRunner {
       const args = safeJsonParse<Record<string, unknown>>(input.call.argumentsText, {});
       const result = await mcp.callTool(name, args);
       emitToolDone(result.ok);
+
+      // Per-turn file-mutation verifier: after file-write operations,
+      // read back the file to confirm content was actually persisted.
+      // (design doc §11.5 — file-mutation verifier)
+      const fileWriteTools = new Set(["write_file", "edit_file", "write", "str_replace_editor", "write_to_file", "create_file"]);
+      if (fileWriteTools.has(name) && result.ok && result.content) {
+        void this.verifyFileMutation(args, result.content);
+      }
+
       return result;
     }
 
@@ -3521,19 +4795,18 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    switch (provider) {
-      case "ollama": return this.callOllamaStreaming(history, ctx);
-      case "openrouter": return this.callOpenRouterStreaming(history, ctx);
-      case "anthropic": return this.callAnthropicStreaming(history, ctx);
-      case "glm": return this.callGlmStreaming(history, ctx);
+    const handler = getProviderHandler(provider);
+    if (!handler) {
+      throw new Error(`Unknown LLM provider: "${provider}". Add it to PROVIDER_REGISTRY.`);
     }
+    return handler(this, history, ctx);
   }
 
-  private async callOpenRouterStreaming(
+  /* internal */ async callOpenRouterStreaming(
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model, backupModel, httpReferer, appTitle } = getOpenRouterConfig();
+    const { apiKey, baseUrl, model, backupModel, httpReferer, appTitle, keyPool } = getOpenRouterConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3550,7 +4823,7 @@ class AgentRunner {
       kind: "start",
     });
 
-    const tools = await getAgentTools();
+    const tools = await getAgentTools(this.toolContext ?? undefined);
     const payload: Record<string, unknown> = {
       // Preserve reasoning for OpenRouter using the canonical "reasoning" field.
       messages: mapOpenRouterMessages(history),
@@ -3577,7 +4850,7 @@ class AgentRunner {
       method: "POST",
       headers,
       body: requestBody,
-    }, "OpenRouter", { backupModel });
+    }, "OpenRouter", { backupModel, keyPool });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3685,15 +4958,15 @@ class AgentRunner {
       assistantText,
       assistantThinking,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
-      finishReason: finalState.finishReason,
+      finishReason: finalState.finishReason ?? null,
     };
   }
 
-  private async callAnthropicStreaming(
+  /* internal */ async callAnthropicStreaming(
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model, backupModel } = getAnthropicConfig();
+    const { apiKey, baseUrl, model, backupModel, keyPool } = getAnthropicConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3710,11 +4983,45 @@ class AgentRunner {
       kind: "start",
     });
 
-    const tools = await getAgentTools();
-    const messages = history.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
+    const tools = await getAgentTools(this.toolContext ?? undefined);
+
+    // --- Anthropic Prompt Caching ---
+    // Separate system messages from conversation, send as `system` param with cache_control.
+    // Strategy: "system_and_3" — cache breakpoints on system prompt + last 3 messages.
+    const systemMessages = history.filter((m) => m.role === "system");
+    const chatMessages = history.filter((m) => m.role !== "system");
+
+    // Build system parameter with cache_control (Anthropic API requirement)
+    const systemParam = systemMessages.map((m) => ({
+      type: "text" as const,
+      text: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+      cache_control: { type: "ephemeral" as const },
     }));
+
+    // Build messages array with cache_control on last 3 chat messages
+    // Convert image_url (OpenAI format) to image (Anthropic format) for multimodal content
+    const messages = chatMessages.map((msg, i) => {
+      let content = msg.content;
+      if (Array.isArray(content)) {
+        content = (content as MultimodalContentPart[]).map((part) => {
+          if (part.type === "image_url" && part.image_url?.url?.startsWith("data:")) {
+            const url = part.image_url.url;
+            const [header, data] = url.split(",");
+            const mediaType = header.replace("data:", "").replace(";base64", "");
+            return {
+              type: "image" as const,
+              source: { type: "base64" as const, media_type: mediaType, data },
+            };
+          }
+          return part;
+        }) as unknown as MultimodalContentPart[];
+      }
+      return {
+        role: msg.role as "user" | "assistant",
+        content,
+        ...(i >= chatMessages.length - 3 ? { cache_control: { type: "ephemeral" as const } } : {}),
+      };
+    });
 
     const payload: Record<string, unknown> = {
       model,
@@ -3722,6 +5029,9 @@ class AgentRunner {
       max_tokens: 8192,
       stream: true,
     };
+    if (systemParam.length > 0) {
+      payload.system = systemParam;
+    }
     if (tools.length > 0) {
       payload.tools = tools.map((t: any) => ({
         name: t.function.name,
@@ -3737,13 +5047,14 @@ class AgentRunner {
       "x-api-key": apiKey,
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "prompt-caching-2024-07-31",
     };
 
     const upstream = await llmFetch(baseUrl, {
       method: "POST",
       headers,
       body: requestBody,
-    }, "Anthropic", { backupModel });
+    }, "Anthropic", { backupModel, keyPool });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -3866,11 +5177,11 @@ class AgentRunner {
     };
   }
 
-  private async callGlmStreaming(
+  /* internal */ async callGlmStreaming(
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
-    const { apiKey, baseUrl, model, backupModel } = getGlmConfig();
+    const { apiKey, baseUrl, model, backupModel, keyPool } = getGlmConfig();
 
     getWorkspaceUIBus().emit(ctx.workspaceId, {
       event: "ui.agent.llm.start",
@@ -3890,7 +5201,7 @@ class AgentRunner {
     const glmPayload: Record<string, unknown> = {
       model,
       messages: history,
-      tools: await getAgentTools(),
+      tools: await getAgentTools(this.toolContext ?? undefined),
       tool_choice: "auto",
       stream: true,
       tool_stream: true,
@@ -3905,7 +5216,7 @@ class AgentRunner {
         "Content-Type": "application/json",
       },
       body: requestBody,
-    }, "GLM", { backupModel });
+    }, "GLM", { backupModel, keyPool });
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
@@ -4014,11 +5325,11 @@ class AgentRunner {
       assistantText,
       assistantThinking,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
-      finishReason: finalState.finishReason,
+      finishReason: finalState.finishReason ?? null,
     };
   }
 
-  private async callOllamaStreaming(
+  /* internal */ async callOllamaStreaming(
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
@@ -4039,7 +5350,7 @@ class AgentRunner {
       kind: "start",
     });
 
-    const tools = await getAgentTools();
+    const tools = await getAgentTools(this.toolContext ?? undefined);
     const payload: Record<string, unknown> = {
       messages: mapOpenRouterMessages(history),
       model,
@@ -4168,7 +5479,164 @@ class AgentRunner {
       assistantText,
       assistantThinking,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
-      finishReason: finalState.finishReason,
+      finishReason: finalState.finishReason ?? null,
+    };
+  }
+
+  /* internal */ async callFreellmapiStreaming(
+    history: HistoryMessage[],
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ) {
+    const { baseUrl, apiKey, model, keyPool } = getFreellmapiConfig();
+
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.start",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+      },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "start",
+    });
+
+    const tools = await getAgentTools(this.toolContext ?? undefined);
+    const payload: Record<string, unknown> = {
+      messages: mapOpenRouterMessages(history),
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    if (model) payload.model = model;
+    if (tools.length > 0) {
+      payload.tools = tools;
+      payload.tool_choice = "auto";
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+
+    const requestBody = JSON.stringify(payload);
+    void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
+
+    const upstream = await llmFetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: requestBody,
+    }, "FreeLLMAPI", { keyPool });
+
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => "");
+      throw new Error(`FreeLLMAPI upstream error: ${upstream.status} ${text}`);
+    }
+
+    const assembler = new OpenAIStreamAssembler();
+    let prev = assembler.snapshot();
+    let assistantText = "";
+    let assistantThinking = "";
+
+    for await (const evt of parseSSEJsonLines(upstream.body)) {
+      const state = assembler.push(evt as any);
+
+      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
+      const contentDelta = state.content.slice(prev.content.length);
+      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
+
+      if (reasoningDelta) {
+        assistantThinking += reasoningDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "reasoning", delta: reasoningDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "reasoning",
+          delta: reasoningDelta,
+        });
+      }
+
+      if (contentDelta) {
+        assistantText += contentDelta;
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: { kind: "content", delta: contentDelta },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "content",
+          delta: contentDelta,
+        });
+      }
+
+      for (const delta of toolCallDeltas) {
+        this.bus.emit(this.agentId, {
+          event: "agent.stream",
+          data: {
+            kind: "tool_calls",
+            delta: delta.delta,
+            tool_call_id: delta.tool_call_id,
+            tool_call_name: delta.tool_call_name,
+          },
+        });
+        void appendAgentStreamEvent({
+          agentId: this.agentId,
+          round: ctx.round,
+          kind: "tool_calls",
+          delta: delta.delta,
+          tool_call_id: delta.tool_call_id,
+          tool_call_name: delta.tool_call_name,
+        });
+      }
+
+      prev = state;
+    }
+
+    this.bus.emit(this.agentId, {
+      event: "agent.done",
+      data: { finishReason: prev.finishReason ?? undefined },
+    });
+    void appendAgentStreamEvent({
+      agentId: this.agentId,
+      round: ctx.round,
+      kind: "done",
+      finishReason: prev.finishReason ?? null,
+    });
+    getWorkspaceUIBus().emit(ctx.workspaceId, {
+      event: "ui.agent.llm.done",
+      data: {
+        workspaceId: ctx.workspaceId,
+        agentId: this.agentId,
+        groupId: ctx.groupId,
+        round: ctx.round,
+        finishReason: prev.finishReason ?? undefined,
+      },
+    });
+
+    const finalState = assembler.snapshot();
+
+    if (finalState.usage && finalState.usage.totalTokens > 0) {
+      try {
+        await store.setGroupContextTokens({
+          groupId: ctx.groupId,
+          tokens: finalState.usage.totalTokens,
+        });
+      } catch {
+        // Best effort
+      }
+    }
+
+    return {
+      assistantText,
+      assistantThinking,
+      toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
+      finishReason: finalState.finishReason ?? null,
     };
   }
 }
@@ -4220,16 +5688,46 @@ export class AgentRuntime {
   private readonly runners = new Map<UUID, AgentRunner>();
   public readonly bus = new AgentEventBus();
   private bootstrapped = false;
-  static readonly VERSION = 2;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  static readonly VERSION = 3;
+  private static readonly RUNNER_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 min idle timeout
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 min cleanup interval
 
-  async bootstrap() {
+  async bootstrap(workspaceId?: UUID) {
     if (this.bootstrapped) return;
     this.bootstrapped = true;
 
-    const agents = await store.listAgents();
+    // Start periodic cleanup timer
+    this.startCleanupTimer();
+
+    const agents = workspaceId
+      ? await store.listAgents({ workspaceId })
+      : await store.listAgents();
     for (const a of agents) {
       if (a.role === "human") continue;
       this.ensureRunner(a.id);
+    }
+  }
+
+  private startCleanupTimer() {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupIdleRunners();
+    }, AgentRuntime.CLEANUP_INTERVAL_MS);
+    this.cleanupTimer.unref(); // Don't keep process alive
+  }
+
+  private cleanupIdleRunners() {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [id, runner] of this.runners) {
+      if (runner.isIdleTooLong(AgentRuntime.RUNNER_IDLE_TIMEOUT_MS)) {
+        this.stopRunner(id);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.info(`[AgentRuntime] Cleaned up ${cleaned} idle runners, ${this.runners.size} remaining`);
     }
   }
 

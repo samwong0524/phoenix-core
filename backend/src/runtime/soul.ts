@@ -3,6 +3,10 @@ import path from "node:path";
 
 const PROMPTS_DIR = path.join(process.cwd(), "src", "prompts");
 
+// Project-level context files — auto-injected if present in workspace root.
+// Named `.swarm.md` to match SWARM IDE convention (Hermes uses `.hermes.md`).
+const CONTEXT_FILE_CANDIDATES = [".swarm.md", "AGENTS.md", "CLAUDE.md"];
+
 async function readMd(filename: string): Promise<string | null> {
   const filePath = path.join(PROMPTS_DIR, filename);
   if (!existsSync(filePath)) return null;
@@ -153,6 +157,26 @@ export async function buildSystemPrompt(
   const behaviorRole = resolveBehaviorRole(role, extraGuidance);
   const roleTemplate = await getRoleTemplate(behaviorRole);
 
-  const parts = [soul, roleTemplate, extraGuidance ?? ""].filter((p) => p.trim());
+  // Auto-inject project-level context files from workspace root (design doc §11.6)
+  let contextFiles = "";
+  for (const candidate of CONTEXT_FILE_CANDIDATES) {
+    const candidatePath = path.join(process.cwd(), candidate);
+    if (existsSync(candidatePath)) {
+      try {
+        const content = await fs.readFile(candidatePath, "utf-8");
+        // Cap at 3000 chars to avoid blowing up context
+        contextFiles += `## Project Context (${candidate})\n\n${content.slice(0, 3000)}\n\n`;
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  const parts = [
+    soul,
+    roleTemplate,
+    contextFiles || null,
+    extraGuidance ?? "",
+  ].filter((p): p is string => typeof p === "string" && p.length > 0);
   return parts.join("\n\n---\n\n");
 }
