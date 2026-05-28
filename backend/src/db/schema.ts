@@ -181,3 +181,12 @@ export const messageArchive = pgTable("message_archive", {
   archivedAt: timestamp("archived_at", { withTimezone: true }).notNull(),
   storageTier: text("storage_tier").default("warm"), // warm|cold
 });
+
+export const skillUsage = pgTable("skill_usage", {
+  id: uuid("id").primaryKey(),
+  skillName: text("skill_name").notNull(),
+  agentId: uuid("agent_id").notNull(),
+  success: boolean("success").notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("active"), // active|conflict|archived
+});
