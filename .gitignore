@@ -19,3 +19,16 @@ tmp/
 backend/mcp.json
 backend/dev-server.log
 backend/dev-server-error.log
+
+# Debug / test scripts (archive to backend/.debug-archive/)
+backend/_*.ts
+backend/_*.mjs
+backend/_*.js
+backend/check-*.cjs
+backend/check-*.mjs
+backend/check-*.js
+backend/dev.log
+backend/msgs.json
+backend/nul
+backend/test-mcp.js
+backend/.debug-archive/
