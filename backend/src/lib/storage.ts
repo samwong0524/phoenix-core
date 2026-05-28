@@ -945,10 +945,10 @@ export const store = {
     return rows;
   },
 
-  async getAgent(input: { agentId: UUID }): Promise<{ id: UUID; role: string; llmHistory: string }> {
+  async getAgent(input: { agentId: UUID }): Promise<{ id: UUID; workspaceId: UUID; role: string; llmHistory: string }> {
     const db = getDb();
     const rows = await db
-      .select({ id: agents.id, role: agents.role, llmHistory: agents.llmHistory })
+      .select({ id: agents.id, workspaceId: agents.workspaceId, role: agents.role, llmHistory: agents.llmHistory })
       .from(agents)
       .where(eq(agents.id, input.agentId))
       .limit(1);

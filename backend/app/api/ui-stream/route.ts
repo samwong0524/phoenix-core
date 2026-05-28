@@ -55,8 +55,9 @@ export async function GET(req: Request) {
       });
 
       const uiBus = getWorkspaceUIBus();
-      const history = uiBus.getSince(workspaceId, 0);
-      for (const evt of history) {
+      const allHistory = uiBus.getSince(workspaceId, 0);
+      const recentHistory = allHistory.slice(-50);
+      for (const evt of recentHistory) {
         controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
       }
       inMemoryUnsubscribe = uiBus.subscribe(workspaceId, (evt) => {

@@ -20,10 +20,9 @@ export async function GET(
 ) {
   const { agentId } = await params;
   new URL(req.url);
-  const runtime = getAgentRuntime();
-  await runtime.bootstrap();
-
   const agent = await store.getAgent({ agentId });
+  const runtime = getAgentRuntime();
+  await runtime.bootstrap(agent.workspaceId);
   if (agent.role !== "human") {
     void runtime.wakeAgent(agentId, "context_stream");
   }

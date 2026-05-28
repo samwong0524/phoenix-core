@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   const runtime = getAgentRuntime();
-  await runtime.bootstrap();
+  await runtime.bootstrap(workspaceId);
   const { humanAgentId } = await store.ensureWorkspaceDefaults({ workspaceId });
 
   if (body?.groupId) {

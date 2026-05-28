@@ -44,7 +44,7 @@ type McpToolCallResult = {
 };
 
 const DEFAULT_TIMEOUT_MS =
-  Number(process.env.MCP_TIMEOUT_MS) > 0 ? Number(process.env.MCP_TIMEOUT_MS) : 30_000;
+  Number(process.env.MCP_TIMEOUT_MS) > 0 ? Number(process.env.MCP_TIMEOUT_MS) : 10_000;
 
 function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
@@ -136,7 +136,16 @@ class McpRegistry {
       for (const name of reserved) this.reservedNames.add(name);
     }
     if (this.loaded) return;
-    if (this.loading) return this.loading;
+    if (this.loading) {
+      // Second+ call while loading is in progress: wait a short while,
+      // but don't block indefinitely — return tools loaded so far.
+      const timeout = opts?.loadTimeoutMs ?? 2000;
+      await Promise.race([
+        this.loading,
+        new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+      ]);
+      return;
+    }
     this.loading = this.load();
     if (opts?.loadTimeoutMs && opts.loadTimeoutMs > 0) {
       console.info(`[mcp] loading with timeout ${opts.loadTimeoutMs}ms`);
@@ -205,9 +214,9 @@ class McpRegistry {
     }
 
     const servers = config?.mcpServers ?? {};
-    const entries = Object.entries(servers);
-    for (const [name, server] of entries) {
-      if (server?.disabled) continue;
+    const entries = Object.entries(servers).filter(([, s]) => !s?.disabled);
+    // Load all MCP servers in parallel to avoid npx/Python startup delays blocking each other
+    await Promise.allSettled(entries.map(async ([name, server]) => {
       try {
         console.info(`[mcp] connecting ${name}...`);
         const client = await this.connectServer(name, server);
@@ -222,7 +231,7 @@ class McpRegistry {
           `[mcp] ${name} failed: ${err instanceof Error ? err.message : String(err)}`
         );
       }
-    }
+    }));
 
     console.info(`[mcp] total tools loaded: ${this.tools.size}`);
     this.loaded = true;

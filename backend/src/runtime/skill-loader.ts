@@ -25,7 +25,7 @@ export type Skill = {
   requires?: string[];  // design doc §11.4: skill dependencies
 };
 
-const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
+export const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
 
 function parseScalar(value: string): string {
   const trimmed = value.trim();
@@ -56,7 +56,7 @@ function parseInlineList(value: string): string[] | null {
     .filter((item) => item.length > 0);
 }
 
-function parseFrontmatter(text: string): SkillFrontmatter | null {
+export function parseFrontmatter(text: string): SkillFrontmatter | null {
   const result: SkillFrontmatter = {};
   let currentListKey: string | null = null;
   let inMetadata = false;
