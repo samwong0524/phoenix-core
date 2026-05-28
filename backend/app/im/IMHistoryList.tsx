@@ -9,35 +9,46 @@ type IMHistoryListProps = {
   ) => string;
 };
 
+function roleToCssClass(role: string): string {
+  if (role === "system") return "system";
+  if (role === "user") return "user-e";
+  if (role === "assistant") return "assistant-e";
+  if (role === "tool") return "tool-e";
+  return "system";
+}
+
 export function IMHistoryList({
   entries,
   historyRole,
-  historyAccent,
   summarizeHistoryEntry,
 }: IMHistoryListProps) {
   return (
-    <div className="history-list">
+    <>
       {entries.length === 0 ? (
         <div className="muted">—</div>
       ) : (
-        entries.map((entry, idx) => (
-          <details
-            key={entry?.id ?? `${idx}`}
-            className="history-item"
-            style={{ ["--accent" as any]: historyAccent(historyRole(entry)) }}
-          >
-            <summary>
-              <span className="history-role">{historyRole(entry)}</span>
-              <span className="history-summary">
-                {summarizeHistoryEntry(entry, idx, { omitRole: true })}
-              </span>
-            </summary>
-            <div className="history-item-body">
-              <pre>{JSON.stringify(entry, null, 2)}</pre>
+        entries.map((entry, idx) => {
+          const role = historyRole(entry);
+          const cls = roleToCssClass(role);
+          return (
+            <div key={entry?.id ?? `${idx}`} className={cx("llm-entry", cls)}>
+              <div className="entry-head">
+                <span className="sys-tag">{role.toUpperCase()}</span>
+                #{idx + 1} — {summarizeHistoryEntry(entry, idx, { omitRole: true })}
+              </div>
+              <div className="entry-text">
+                {typeof entry?.content === "string"
+                  ? entry.content.replace(/\s+/g, " ").slice(0, 200)
+                  : JSON.stringify(entry?.content ?? "").slice(0, 200)}
+              </div>
             </div>
-          </details>
-        ))
+          );
+        })
       )}
-    </div>
+    </>
   );
+}
+
+function cx(...classes: Array<string | false | undefined | null>): string {
+  return classes.filter(Boolean).join(" ");
 }

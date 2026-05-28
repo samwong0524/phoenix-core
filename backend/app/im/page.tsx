@@ -11,6 +11,7 @@ import { mermaid } from "@streamdown/mermaid";
 import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { IMHistoryList } from "./IMHistoryList";
+import { TopoAnimCanvas } from "./TopoAnimCanvas";
 
 // Create code plugin with dark theme
 const code = createCodePlugin({
@@ -18,6 +19,12 @@ const code = createCodePlugin({
 });
 
 type UUID = string;
+
+type ModelEntry = {
+  id: string;
+  displayName: string;
+  platform: string;
+};
 
 type WorkspaceDefaults = {
   workspaceId: UUID;
@@ -107,6 +114,63 @@ function MarkdownContent({ content, className = "" }: { content: string; classNa
     <div className={className}>
       <Streamdown plugins={streamdownPlugins}>{content}</Streamdown>
     </div>
+  );
+}
+
+function FileCard({ url, name, size }: { url: string; name: string; size?: number }) {
+  const fmtSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const ext = name.split(".").pop()?.toUpperCase() || "";
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 12px",
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        textDecoration: "none",
+        color: "var(--text-primary)",
+        cursor: "pointer",
+        maxWidth: 280,
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 6,
+          background: "var(--cyan)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "#000",
+          flexShrink: 0,
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        {ext.slice(0, 3)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </div>
+        {size ? <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>{fmtSize(size)}</div> : null}
+      </div>
+      <span style={{ fontSize: 16, color: "var(--text-dim)" }}>↓</span>
+    </a>
   );
 }
 
@@ -212,6 +276,11 @@ function IMPageInner() {
   const [vizEvents, setVizEvents] = useState<VizEvent[]>([]);
   const [vizBeams, setVizBeams] = useState<VizBeam[]>([]);
   const [vizSize, setVizSize] = useState({ width: 640, height: 260 });
+  // Round vizSize to 10px granularity to avoid vizLayout recalc on every ResizeObserver pixel
+  const vizSizeRounded = useMemo(() => ({
+    width: Math.round(vizSize.width / 10) * 10,
+    height: Math.round(vizSize.height / 10) * 10,
+  }), [vizSize.width, vizSize.height]);
   const [vizScale, setVizScale] = useState(0.9);
   const [vizOffset, setVizOffset] = useState({ x: 0, y: 0 });
   const [vizIsPanning, setVizIsPanning] = useState(false);
@@ -228,6 +297,9 @@ function IMPageInner() {
   const [midStackHeight, setMidStackHeight] = useState(0);
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
   const [collapsedAgents, setCollapsedAgents] = useState<Record<string, boolean>>({});
+  const [detailsCollapsed, setDetailsCollapsed] = useState<Record<string, boolean>>({});
+  const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
+  const [selectedModel, setSelectedModel] = useState("auto");
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -244,6 +316,7 @@ function IMPageInner() {
   const midChatHeightRef = useRef(0);
   const nodeOffsetsRef = useRef<Record<string, { x: number; y: number }>>({});
   const groupsRef = useRef<Group[]>([]);
+  const messagesRef = useRef<Message[]>([]);
   const beamTimeoutsRef = useRef<number[]>([]);
   const refreshQueueRef = useRef<{
     timer: number | null;
@@ -264,8 +337,8 @@ function IMPageInner() {
   }, [agents]);
 
   const vizLayout = useMemo(() => {
-    const width = Math.max(1, vizSize.width);
-    const height = Math.max(1, vizSize.height);
+    const width = Math.max(1, vizSizeRounded.width);
+    const height = Math.max(1, vizSizeRounded.height);
     const paddingX = 70;
     const paddingY = 60;
     const byId = new Map(agents.map((a) => [a.id, a]));
@@ -414,7 +487,32 @@ function IMPageInner() {
     }
 
     return { positions, ordered, edges, parentById };
-  }, [agents, session, vizSize.height, vizSize.width, nodeOffsets]);
+  }, [agents, session, vizSizeRounded.height, vizSizeRounded.width, nodeOffsets]);
+
+  // Topo animation nodes (pixel positions for canvas overlay)
+  const topoNodes = useMemo(() => {
+    const agentColor = (role?: string) => {
+      if (!role || role === "human") return "#e0ebff";
+      if (role === "assistant") return "#00f0ff";
+      if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "#ff2d7b";
+      if (role === "reviewer" || role === "qa") return "#a855f7";
+      if (role === "researcher" || role === "analyst" || role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "#00ff88";
+      if (role === "creator" || role === "writer" || role === "editor" || role === "worker") return "#ffd700";
+      return "#ffd700";
+    };
+    return vizLayout.ordered.map((a) => {
+      const pos = vizLayout.positions.get(a.id);
+      const status = agentStatusById[a.id] ?? "IDLE";
+      return {
+        id: a.id,
+        x: pos?.x ?? 0,
+        y: pos?.y ?? 0,
+        color: agentColor(a.role),
+        r: 30,
+        status,
+      };
+    });
+  }, [vizLayout.ordered, vizLayout.positions, agentStatusById, agents]);
 
   const getGroupLabel = useCallback(
     (g: Group | null | undefined) => {
@@ -582,28 +680,38 @@ function IMPageInner() {
     esRef.current?.close();
 
     if (overrideWorkspaceId) {
-      const ensured = await api<WorkspaceDefaults>(
-        `/api/workspaces/${overrideWorkspaceId}/defaults`
-      );
-      saveSession(ensured);
-      setSession(ensured);
-      setActiveGroupId(ensured.defaultGroupId);
+      const init = await api<{
+        session: WorkspaceDefaults;
+        config: { tokenLimit: number };
+        agents: AgentMeta[];
+        groups: Group[];
+      }>(`/api/workspace-init?overrideWorkspaceId=${encodeURIComponent(overrideWorkspaceId)}`);
+      setTokenLimit(init.config.tokenLimit);
+      saveSession(init.session);
+      setSession(init.session);
+      setAgents(init.agents);
+      setGroups(init.groups);
+      setActiveGroupId(init.session.defaultGroupId);
       setStatus("idle");
-      void refreshAgents(ensured);
       return;
     }
 
     const existing = loadSession();
     if (existing) {
       try {
-        const ensured = await api<WorkspaceDefaults>(
-          `/api/workspaces/${existing.workspaceId}/defaults`
-        );
-        saveSession(ensured);
-        setSession(ensured);
-        setActiveGroupId(ensured.defaultGroupId);
+        const init = await api<{
+          session: WorkspaceDefaults;
+          config: { tokenLimit: number };
+          agents: AgentMeta[];
+          groups: Group[];
+        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(existing.workspaceId)}`);
+        setTokenLimit(init.config.tokenLimit);
+        saveSession(init.session);
+        setSession(init.session);
+        setAgents(init.agents);
+        setGroups(init.groups);
+        setActiveGroupId(init.session.defaultGroupId);
         setStatus("idle");
-        void refreshAgents(ensured);
         return;
       } catch {
         // fall through
@@ -616,14 +724,19 @@ function IMPageInner() {
       }>(`/api/workspaces`);
       if (recent.workspaces.length > 0) {
         const targetId = recent.workspaces[0]!.id;
-        const ensured = await api<WorkspaceDefaults>(
-          `/api/workspaces/${targetId}/defaults`
-        );
-        saveSession(ensured);
-        setSession(ensured);
-        setActiveGroupId(ensured.defaultGroupId);
+        const init = await api<{
+          session: WorkspaceDefaults;
+          config: { tokenLimit: number };
+          agents: AgentMeta[];
+          groups: Group[];
+        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(targetId)}`);
+        setTokenLimit(init.config.tokenLimit);
+        saveSession(init.session);
+        setSession(init.session);
+        setAgents(init.agents);
+        setGroups(init.groups);
+        setActiveGroupId(init.session.defaultGroupId);
         setStatus("idle");
-        void refreshAgents(ensured);
         return;
       }
     } catch {
@@ -658,11 +771,43 @@ function IMPageInner() {
     return created;
   }, [refreshAgents]);
 
-  // Load token limit config on mount
+  // Single init call: session + config + agents + groups (local DB, <200ms)
+  // Models remain separate via /api/models (FreeLLMAPI, may be slow)
   useEffect(() => {
-    api<{ tokenLimit: number }>("/api/config")
-      .then((c) => setTokenLimit(c.tokenLimit))
-      .catch(() => setTokenLimit(100000));
+    if (workspaceOverrideId) return; // handled by bootstrap
+    const existing = loadSession();
+    if (!existing) return;
+
+    const params = new URLSearchParams();
+    params.set("workspaceId", existing.workspaceId);
+    api<{
+      session: WorkspaceDefaults;
+      config: { tokenLimit: number };
+      agents: AgentMeta[];
+      groups: Group[];
+    }>(`/api/workspace-init?${params.toString()}`)
+      .then((r) => {
+        setTokenLimit(r.config.tokenLimit);
+        saveSession(r.session);
+        setSession(r.session);
+        setAgents(r.agents);
+        setGroups(r.groups);
+        setActiveGroupId(r.session.defaultGroupId);
+        setStatus("idle");
+      })
+      .catch(() => {
+        setSession(existing);
+        setActiveGroupId(existing.defaultGroupId);
+        setStatus("idle");
+        setTokenLimit(100000);
+      });
+  }, []);
+
+  // Load available models from FreeLLMAPI (independent, may be slow)
+  useEffect(() => {
+    api<{ models: Array<{ id: string; displayName: string; platform: string }> }>("/api/models")
+      .then((r) => setAvailableModels(r.models))
+      .catch(() => {});
   }, []);
 
   const refreshGroups = useCallback(async (s: WorkspaceDefaults, opts?: { silent?: boolean }) => {
@@ -677,7 +822,7 @@ function IMPageInner() {
     async (
       s: WorkspaceDefaults,
       groupId: string,
-      opts?: { markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean }
+      opts?: { markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean; scrollToBottom?: boolean }
     ) => {
       if (!opts?.silent) setStatus("messages");
       const q = new URLSearchParams();
@@ -687,12 +832,15 @@ function IMPageInner() {
       const { messages } = await api<{ messages: Message[] }>(
         `/api/groups/${groupId}/messages${suffix}`
       );
+      const prevCount = messagesRef.current.length;
       setMessages(messages);
       if (!opts?.silent) setStatus("idle");
       if (!opts?.skipGroupRefresh) {
         void refreshGroups(s, { silent: opts?.silent });
       }
-      queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+      if (opts?.scrollToBottom ?? messages.length > prevCount) {
+        queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+      }
     },
     [refreshGroups]
   );
@@ -761,9 +909,10 @@ function IMPageInner() {
             markRead: false,
             silent: true,
             skipGroupRefresh: true,
+            scrollToBottom: false,
           });
         }
-      }, 200);
+      }, 500);
     },
     [refreshAgents, refreshGroups, refreshLlmHistory, refreshMessages, session]
   );
@@ -840,7 +989,7 @@ function IMPageInner() {
             toolResultBuffersRef.current = new Map();
             const groupId = activeGroupIdRef.current;
             const nextSession = loadSession();
-            if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false });
+            if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false, scrollToBottom: false });
             if (nextSession) void refreshGroups(nextSession);
             const agentId = streamAgentIdRef.current;
             if (agentId) void refreshLlmHistory(agentId);
@@ -983,7 +1132,7 @@ function IMPageInner() {
     }
 
     setStatus("idle");
-    void refreshMessages(session, activeGroupId, { markRead: false });
+    void refreshMessages(session, activeGroupId, { markRead: false, scrollToBottom: false });
     void refreshGroups(session);
   }, [
     activeGroupId,
@@ -994,6 +1143,56 @@ function IMPageInner() {
     refreshMessages,
     session,
   ]);
+
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadFile(file: File) {
+    if (!session || !activeGroupId) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) { alert(`上传失败: ${data.error}`); return; }
+
+      const content = JSON.stringify({ url: data.url, name: data.name, size: data.size });
+      const contentType = data.isImage ? "image" : "file";
+
+      const optimistic: Message = {
+        id: `optimistic-${Date.now()}`,
+        senderId: session.humanAgentId,
+        content,
+        contentType,
+        sendTime: new Date().toISOString(),
+      };
+      setMessages((m) => [...m, optimistic]);
+
+      try {
+        await api(`/api/groups/${activeGroupId}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ senderId: session.humanAgentId, content, contentType }),
+        });
+      } finally { /* keep going */ }
+
+      void refreshMessages(session, activeGroupId, { markRead: false, scrollToBottom: false });
+      void refreshGroups(session);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    void uploadFile(files[0]);
+    e.target.value = "";
+  }
 
   useEffect(() => {
     void bootstrap(workspaceOverrideId).catch((e) =>
@@ -1012,6 +1211,10 @@ function IMPageInner() {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     agentRoleByIdRef.current = agentRoleById;
@@ -1228,18 +1431,23 @@ function IMPageInner() {
   }, []);
 
   const roleColor = (role?: string) => {
-    if (!role) return "#e4e4e7";
-    if (role === "human") return "#f8fafc";
-    if (role === "assistant") return "#38bdf8";
-    if (role === "productmanager") return "#fb7185";
-    if (role === "coder") return "#34d399";
-    return "#fbbf24";
+    if (!role) return "var(--text-primary)";
+    if (role === "human") return "var(--text-primary)";
+    if (role === "assistant") return "var(--cyan)";
+    if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "var(--magenta)";
+    if (role === "reviewer" || role === "qa") return "var(--purple)";
+    if (role === "researcher" || role === "analyst") return "var(--green)";
+    if (role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "var(--green)";
+    if (role === "creator" || role === "writer") return "var(--yellow)";
+    if (role === "editor") return "var(--yellow)";
+    if (role === "worker") return "var(--text-secondary)";
+    return "var(--yellow)";
   };
 
   const statusColor = (status?: AgentStatus) => {
-    if (status === "BUSY") return "#ef4444";
-    if (status === "WAKING") return "#facc15";
-    return "#22c55e";
+    if (status === "BUSY") return "var(--red)";
+    if (status === "WAKING") return "var(--yellow)";
+    return "var(--green)";
   };
 
   const midChatHeight = useMemo(() => {
@@ -1496,14 +1704,16 @@ function IMPageInner() {
   }, []);
 
   const historyAccent = useCallback((role?: string) => {
-    if (!role) return "#94a3b8";
-    if (role === "human") return "#f8fafc";
-    if (role === "assistant") return "#38bdf8";
-    if (role === "productmanager") return "#fb7185";
-    if (role === "coder") return "#34d399";
-    if (role === "tool") return "#fbbf24";
-    if (role === "system") return "#a78bfa";
-    return "#94a3b8";
+    if (!role) return "var(--purple)";
+    if (role === "human") return "var(--text-primary)";
+    if (role === "assistant") return "var(--cyan)";
+    if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager") return "var(--magenta)";
+    if (role === "reviewer") return "var(--purple)";
+    if (role === "researcher" || role === "specialist" || role === "coder" || role === "developer") return "var(--green)";
+    if (role === "creator" || role === "editor") return "var(--yellow)";
+    if (role === "tool") return "var(--yellow)";
+    if (role === "system") return "var(--purple)";
+    return "var(--purple)";
   }, []);
 
   const title = getGroupLabel(activeGroup);
@@ -1511,6 +1721,20 @@ function IMPageInner() {
   const toggleAgentCollapsed = useCallback((agentId: string) => {
     setCollapsedAgents((prev) => ({ ...prev, [agentId]: !prev[agentId] }));
   }, []);
+
+  const toggleDetailCollapsed = useCallback((groupId: string) => {
+    setDetailsCollapsed((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  }, []);
+
+  const getGroupStatus = useCallback((g: Group, agentId?: string): "online" | "busy" | "idle" | "error" => {
+    const aid = agentId ?? g.memberIds.find((id) => id !== session?.humanAgentId);
+    if (!aid) return "idle";
+    const status = agentStatusById[aid];
+    if (status === "BUSY") return "busy";
+    if (status === "WAKING") return "busy";
+    if (g.unreadCount > 0) return "online";
+    return "idle";
+  }, [agentStatusById, session?.humanAgentId]);
 
   const renderGroupRow = (
     g: Group,
@@ -1523,138 +1747,138 @@ function IMPageInner() {
       isLast: boolean;
     }
   ) => {
-    const guideWidth = 14;
-    const caretWidth = 18;
-    const caretGap = 6;
     const depth = tree?.depth ?? 0;
-    const prefixWidth = depth > 0 ? depth * guideWidth + guideWidth : 0;
-    const previewIndent = tree ? prefixWidth + caretWidth + caretGap : 0;
-    return (
-      <button
-        key={g.id}
-        className={cx("row", g.id === activeGroupId && "active")}
-        onClick={() => {
-          setActiveGroupId(g.id);
-        }}
-        style={{ paddingLeft: 16 }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {tree && tree.depth > 0 ? (
-              <span className="tree-prefix">
-                {tree.guides.map((hasLine, idx) => (
-                  <span
-                    key={`${g.id}-guide-${idx}`}
-                    className={hasLine ? "tree-line" : "tree-blank"}
-                  />
-                ))}
-                <span className={tree.isLast ? "tree-elbow last" : "tree-elbow"} />
-              </span>
-            ) : null}
+    const isCollapsed = tree?.collapsed ?? false;
+    const agentId = tree?.agentId;
+    const status = getGroupStatus(g, agentId);
+    const isActive = g.id === activeGroupId;
+
+    if (depth === 0) {
+      const isDetailCollapsed = detailsCollapsed[g.id] ?? true;
+      return (
+        <div key={g.id} className="agent-group">
+          <div
+            className={cx("agent-group-header", isActive && "active")}
+            onClick={() => setActiveGroupId(g.id)}
+          >
             {tree?.hasChildren ? (
-              <button
-                type="button"
-                className="tree-caret"
+              <span
+                className={cx("group-chevron", !isCollapsed && "open")}
                 onClick={(e) => {
-                  e.preventDefault();
                   e.stopPropagation();
                   toggleAgentCollapsed(tree.agentId);
+                  toggleDetailCollapsed(g.id);
                 }}
-                title={tree.collapsed ? "展开" : "收起"}
-              >
-                {tree.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-              </button>
-            ) : tree ? (
-              <span className="tree-caret-placeholder" />
-            ) : null}
-            <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {getGroupLabel(g)}
-            </div>
+              >▶</span>
+            ) : (
+              <span
+                className={cx("group-chevron", !isDetailCollapsed && "open")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleDetailCollapsed(g.id);
+                }}
+              >▶</span>
+            )}
+            <span className={cx("status-dot", status)} />
+            <span className="group-name">{getGroupLabel(g)}</span>
+            {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
           </div>
-          {g.unreadCount > 0 && <span className="badge">{g.unreadCount}</span>}
+          {!isCollapsed && !isDetailCollapsed ? (
+            <div className="group-detail">
+              {g.lastMessage ? (
+                <div style={{ marginBottom: g.contextTokens > 0 ? 4 : 0 }}>{g.lastMessage.content}</div>
+              ) : null}
+              {g.contextTokens > 0 ? (
+                <div className="ctx-bar">
+                  <span className="ctx-bar-label">Context</span>
+                  <div className="ctx-bar-track">
+                    <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
+                  </div>
+                  <span className="ctx-bar-text">{g.contextTokens.toLocaleString()} / {tokenLimit.toLocaleString()}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        {g.lastMessage ? (
-          <div
-            className="muted"
-            style={{
-              fontSize: 12,
-              marginTop: 6,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              marginLeft: previewIndent,
-            }}
-          >
-            {g.lastMessage.content}
+      );
+    }
+
+    // depth > 0: sub-agent
+    const isDetailCollapsed = detailsCollapsed[g.id] ?? true;
+    return (
+      <div key={g.id}>
+        <div className={cx("agent-sub", isActive && "active")} onClick={() => setActiveGroupId(g.id)}>
+          <span className={cx("status-dot", status)} />
+          <span className={cx("sub-name", isActive && "highlight")}>{getGroupLabel(g)}</span>
+          {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
+        </div>
+        {!isCollapsed && !isDetailCollapsed && tree?.hasChildren ? (
+          <div className="group-detail" style={{ paddingLeft: 54, paddingTop: 0 }}>
+            {g.lastMessage ? (
+              <div style={{ marginBottom: g.contextTokens > 0 ? 4 : 0 }}>{g.lastMessage.content}</div>
+            ) : null}
+            {g.contextTokens > 0 ? (
+              <div className="ctx-bar">
+                <span className="ctx-bar-label">Context</span>
+                <div className="ctx-bar-track">
+                  <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
+                </div>
+                <span className="ctx-bar-text">{g.contextTokens.toLocaleString()} / {tokenLimit.toLocaleString()}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
-        {g.contextTokens > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
-              <span className="muted">Context</span>
-              <span className="mono" style={{ color: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e" }}>
-                {g.contextTokens.toLocaleString()}
-                <span className="muted" style={{ marginLeft: 4 }}>/ {tokenLimit.toLocaleString()}</span>
-              </span>
-            </div>
-            <div style={{ height: 3, background: "#27272a", borderRadius: 2, overflow: "hidden" }}>
-              <div
-                style={{
-                  height: "100%",
-                  width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%`,
-                  background: (g.contextTokens / tokenLimit) > 0.8 ? "#ef4444" : (g.contextTokens / tokenLimit) > 0.5 ? "#facc15" : "#22c55e",
-                  borderRadius: 2,
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-          </div>
-        )}
-      </button>
+      </div>
     );
   };
 
   return (
     <IMShell
       left={
-        <aside className="panel panel-left">
-        <div className="header">
-          <div>
-            <div style={{ fontWeight: 700 }}>Workspace</div>
-            <div className="muted mono" style={{ fontSize: 12 }}>
-              {session?.workspaceId ?? "-"}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }} />
+        <aside className="panel panel-left" style={{ overflow: "hidden" }}>
+        <div className="logo-bar">
+          <img className="logo-icon" src="data:image/png;base64,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" alt="PHOENIX CORE" />
+          <div className="logo-text">PHOENIX CORE</div>
         </div>
-
-        <div style={{ padding: 12 }}>
-          <div className="muted mono" style={{ fontSize: 12, lineHeight: 1.4 }}>
-            human: {session?.humanAgentId ?? "-"}
-            <br />
-            assistant: {session?.assistantAgentId ?? "-"}
+        <div className="ws-info">
+          <div className="ws-title">WORKSPACE</div>
+          <div className="ws-id">{session?.workspaceId ?? "-"}</div>
+          <div style={{ marginTop: 4, fontSize: 9 }}>
+            human: {(session?.humanAgentId ?? "-").slice(0, 22)}…
+          </div>
+          <div style={{ fontSize: 9 }}>
+            assistant: {(session?.assistantAgentId ?? "-").slice(0, 22)}…
           </div>
         </div>
-
-        <div className="list">
+        <div className="agent-scroll">
+          <div className="section-label">AGENTS</div>
           {agentTreeRows.length === 0 && extraGroups.length === 0 ? (
             <div style={{ padding: 16 }} className="muted">
               No groups yet.
             </div>
           ) : (
             <>
-              {agentTreeRows.map(({ agent, group, depth, hasChildren, collapsed, guides, isLast }) =>
-                group
-                  ? renderGroupRow(group, {
-                      depth,
-                      hasChildren,
-                      collapsed,
-                      agentId: agent.id,
-                      guides,
-                      isLast,
-                    })
-                  : null
-              )}
+              {(() => {
+                const lastDepth0Idx = agentTreeRows.reduce((acc, row, idx) => {
+                  if (row.depth === 0 && row.group) return idx;
+                  return acc;
+                }, -1);
+                return agentTreeRows.map(({ agent, group, depth, hasChildren, collapsed, guides, isLast }, idx) => (
+                  <Fragment key={idx}>
+                    {group
+                      ? renderGroupRow(group, {
+                          depth,
+                          hasChildren,
+                          collapsed,
+                          agentId: agent.id,
+                          guides,
+                          isLast,
+                        })
+                      : null}
+                    {depth === 0 && group && idx < lastDepth0Idx ? <div className="sidebar-divider" /> : null}
+                  </Fragment>
+                ));
+              })()}
               {extraGroups.map((g) => renderGroupRow(g))}
             </>
           )}
@@ -1663,27 +1887,20 @@ function IMPageInner() {
       }
       mid={
         <main className="panel panel-mid">
-        <div className="header">
-          <div style={{ fontWeight: 700 }}>{title}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="chat-header">
+          <span className="chat-header-title">{title}</span>
+          <div className="chat-header-actions">
             <button
-              className="btn"
-              style={{
-                padding: "4px 10px",
-                fontSize: 12,
-                borderColor: "#7f1d1d",
-                background: stoppingAgents ? "#450a0a" : "#1f0b0b",
-                color: "#fecaca",
-              }}
+              className={cx("btn-action", "danger")}
               onClick={() => void onInterruptAllAgents()}
               disabled={!session || stoppingAgents}
               title="停止所有 agent 当前循环"
             >
-              {stoppingAgents ? "Stopping..." : "Stop All Agents"}
+              ■ {stoppingAgents ? "Stopping..." : "Stop All Agents"}
             </button>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {status !== "idle" ? `${status}...` : ""}
-            </div>
+            {status !== "idle" ? (
+              <span className="muted" style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>{status}...</span>
+            ) : null}
           </div>
         </div>
 
@@ -1698,7 +1915,25 @@ function IMPageInner() {
               humanAgentId={session?.humanAgentId ?? null}
               agentRoleById={agentRoleById}
               fmtTime={fmtTime}
-              renderContent={(content) => <MarkdownContent content={content} />}
+              renderContent={(content, contentType) => {
+                if (contentType === "image") {
+                  try {
+                    const img = JSON.parse(content) as { url?: string; name?: string };
+                    if (img?.url) {
+                      return <img src={img.url} alt={img.name || ""} style={{ maxWidth: "100%", maxHeight: 300, borderRadius: 8, cursor: "pointer" }} onClick={() => window.open(img.url!, "_blank")} />;
+                    }
+                  } catch { /* fallthrough */ }
+                }
+                if (contentType === "file") {
+                  try {
+                    const file = JSON.parse(content) as { url?: string; name?: string; size?: number };
+                    if (file?.url && file?.name) {
+                      return <FileCard url={file.url} name={file.name} size={file.size} />;
+                    }
+                  } catch { /* fallthrough */ }
+                }
+                return <MarkdownContent content={content} />;
+              }}
               cx={cx}
             />
             <div ref={bottomRef} />
@@ -1718,12 +1953,9 @@ function IMPageInner() {
               style={{
                 position: "relative",
                 minHeight: 200,
-                borderTop: "1px solid #27272a",
                 background:
-                  "radial-gradient(circle at 20% 20%, rgba(56,189,248,0.12), transparent 40%), radial-gradient(circle at 80% 70%, rgba(34,197,94,0.12), transparent 45%), linear-gradient(transparent 23px, rgba(39,39,42,0.35) 24px), linear-gradient(90deg, transparent 23px, rgba(39,39,42,0.35) 24px), #050505",
-                backgroundSize: "24px 24px, 24px 24px, 24px 24px, 24px 24px, auto",
+                  "radial-gradient(circle at 30% 30%, var(--cyan-glow), transparent 50%), radial-gradient(circle at 70% 60%, var(--purple-dim), transparent 45%), var(--bg-void)",
                 cursor: vizIsPanning ? "grabbing" : "grab",
-                overflow: "hidden",
               }}
               onMouseDown={(e) => {
                 if (e.button !== 0) return;
@@ -1750,15 +1982,16 @@ function IMPageInner() {
                   position: "absolute",
                   left: 12,
                   top: 12,
+                  zIndex: 2,
                   display: "flex",
                   gap: 8,
                   alignItems: "center",
                   padding: "6px 10px",
                   borderRadius: 999,
-                  border: "1px solid #27272a",
-                  background: "rgba(9,9,11,0.7)",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-panel)",
                   fontSize: 12,
-                  color: "#e4e4e7",
+                  color: "var(--text-primary)",
                 }}
               >
                 <span className="mono">缩放 {Math.round(vizScale * 100)}%</span>
@@ -1805,35 +2038,28 @@ function IMPageInner() {
                   transition: vizIsPanning ? "none" : "transform 120ms ease-out",
                 }}
               >
+                {/* Topology animated canvas overlay */}
+                <TopoAnimCanvas
+                  width={vizSize.width}
+                  height={vizSize.height}
+                  nodes={topoNodes}
+                  edges={vizLayout.edges}
+                />
+
                 <svg
                   width={vizSize.width}
                   height={vizSize.height}
                   style={{ position: "absolute", inset: 0 }}
                 >
                   <g>
-                    {vizLayout.edges.map((edge) => {
-                      const from = vizLayout.positions.get(edge.fromId);
-                      const to = vizLayout.positions.get(edge.toId);
-                      if (!from || !to) return null;
-                      const midY = (from.y + to.y) / 2;
-                      const path = `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`;
-                      return (
-                        <path
-                          key={`${edge.fromId}-${edge.toId}`}
-                          d={path}
-                          stroke="rgba(148,163,184,0.35)"
-                          strokeWidth={1.2}
-                          fill="none"
-                        />
-                      );
-                    })}
+                    {/* Static edges rendered by TopoAnimCanvas canvas overlay instead */}
                   </g>
                   <AnimatePresence>
                     {vizBeams.map((beam) => {
                       const from = vizLayout.positions.get(beam.fromId);
                       const to = vizLayout.positions.get(beam.toId);
                       if (!from || !to) return null;
-                      const color = beam.kind === "create" ? "#3b82f6" : "#ffffff";
+                      const color = beam.kind === "create" ? "var(--purple)" : "var(--cyan)";
                       return (
                         <motion.g
                           key={beam.id}
@@ -1945,8 +2171,8 @@ function IMPageInner() {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          background: "rgba(5,5,5,0.9)",
-                          boxShadow: `0 0 30px ${ring}55`,
+                          background: "var(--bg-void)",
+                          boxShadow: "0 0 30px var(--cyan-dim)",
                           position: "relative",
                         }}
                       >
@@ -1955,14 +2181,14 @@ function IMPageInner() {
                             width: 70,
                             height: 70,
                             borderRadius: "50%",
-                            border: `2px solid ${isHuman ? "#f8fafc" : "#4ade80"}`,
+                            border: `2px solid ${isHuman ? "var(--text-primary)" : "var(--green)"}`,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             background: "rgba(0,0,0,0.6)",
                           }}
                         >
-                          <Icon size={24} color={isHuman ? "#f8fafc" : "#e4e4e7"} />
+                          <Icon size={24} color={isHuman ? "var(--text-primary)" : "var(--text-primary)"} />
                         </div>
                         {status === "BUSY" ? (
                           <motion.div
@@ -1970,7 +2196,7 @@ function IMPageInner() {
                               position: "absolute",
                               inset: 6,
                               borderRadius: "50%",
-                              border: "2px solid #ef4444",
+                              border: "2px solid var(--red)",
                               borderTopColor: "transparent",
                               borderRightColor: "transparent",
                             }}
@@ -1989,7 +2215,7 @@ function IMPageInner() {
                           width: 120,
                           fontSize: 11,
                           fontWeight: 700,
-                          color: "#e4e4e7",
+                          color: "var(--text-primary)",
                         }}
                       >
                         {agent.role}
@@ -2001,86 +2227,31 @@ function IMPageInner() {
               </div>
             </div>
 
-            <div className={cx("viz-events", vizEventsCollapsed && "collapsed")}>
-              {!vizEventsCollapsed ? (
-                <>
-                  <div style={{ fontWeight: 700, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>事件流</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="muted mono">{vizEvents.length}</span>
-                      <button
-                        type="button"
-                        className="viz-events-toggle"
-                        onClick={() => setVizEventsCollapsed(true)}
-                        title="收起"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  {vizEvents.length === 0 ? (
-                    <div className="muted">暂无事件</div>
-                  ) : (
-                    vizEvents
-                      .slice(-6)
-                      .reverse()
-                      .map((evt) => (
-                        <div
-                          key={evt.id}
-                          style={{
-                            marginBottom: 8,
-                            paddingBottom: 8,
-                            borderBottom: "1px solid rgba(39,39,42,0.6)",
-                          }}
-                        >
-                          <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                            <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 999,
-                                background:
-                                  evt.kind === "agent"
-                                    ? "#60a5fa"
-                                    : evt.kind === "message"
-                                      ? "#fbbf24"
-                                      : evt.kind === "llm"
-                                        ? "#38bdf8"
-                                        : evt.kind === "tool"
-                                          ? "#f97316"
-                                          : "#a855f7",
-                                boxShadow: "0 0 8px rgba(0,0,0,0.5)",
-                              }}
-                            />
-                            <span>{evt.label}</span>
-                          </div>
-                          <div className="muted mono" style={{ fontSize: 11, marginTop: 4 }}>
-                            {new Date(evt.at).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      ))
-                  )}
-                </>
-              ) : null}
-            </div>
-            {vizEventsCollapsed ? (
-              <button
-                type="button"
-                className="viz-events-toggle floating"
-                onClick={() => setVizEventsCollapsed(false)}
-                title="展开"
-              >
-                <ChevronLeft size={16} />
-              </button>
-            ) : null}
           </div>
         </div>
 
         {error ? <div className="toast">{error}</div> : null}
 
-        <div className="composer">
-          <textarea
-            className="input textarea"
+        <div className="chat-input-area">
+          <input
+            ref={fileInputRef}
+            type="file"
+            style={{ display: "none" }}
+            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.pptx,.js,.ts,.tsx,.py,.rs,.go,.java,.c,.cpp,.h,.css,.html,.json,.yaml,.yml,.xml,.sh,.sql,.rb,.swift,.kt"
+            onChange={handleFileSelect}
+          />
+          <button
+            className="chat-attach"
+            title="上传文件"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? "wait" : "pointer" }}
+          >
+            {uploading ? "..." : "+"}
+          </button>
+          <input
+            className="chat-input-field"
+            type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Type a message… (Ctrl/Cmd+Enter to send)"
@@ -2091,101 +2262,181 @@ function IMPageInner() {
               }
             }}
           />
-          <button className="btn btn-primary" onClick={() => void onSend()} disabled={!draft.trim() || status === "send"}>
-            Send
+          <select
+            className="chat-model"
+            value={selectedModel}
+            onChange={(e) => {
+              const model = e.target.value;
+              setSelectedModel(model);
+              // Tell backend to use this model for subsequent LLM calls
+              fetch("/api/settings/model", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model }),
+              }).catch(() => {});
+            }}
+          >
+            <option value="auto">Auto (router picks)</option>
+            {availableModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName} ({m.platform})
+              </option>
+            ))}
+          </select>
+          <button className="send-btn" onClick={() => void onSend()} disabled={!draft.trim() || status === "send"}>
+            SEND
           </button>
         </div>
         </main>
       }
       right={
-        <>
-          <section className="panel panel-right">
-        <div className="header">
-          <div style={{ fontWeight: 700 }}>Agent Details</div>
-        </div>
-
-        <div className="agent-sidebar-body">
-          <div className="muted" style={{ fontSize: 12 }}>
-            Streaming from: <span className="mono">{streamAgentId ?? "-"}</span>
-          </div>
-          {agentError ? (
-            <div
-              className="toast"
-              style={{ borderColor: "#713f12", background: "rgba(113,63,18,0.25)", color: "#fde68a" }}
-            >
-              {agentError}
+        <div className="right-section">
+          {/* EVENTS PANEL */}
+          <div className={cx("events-panel", vizEventsCollapsed && "collapsed")}>
+            <div className="events-header" onClick={() => setVizEventsCollapsed((v) => !v)}>
+              <span className="events-title"><span className="ev-chevron">▶</span> 事件流</span>
+              <span className="events-count">{vizEvents.length} ▸</span>
             </div>
-          ) : null}
+            <div className="events-list" style={{ display: vizEventsCollapsed ? "none" : undefined }}>
+              {vizEvents.length === 0 ? (
+                <div className="event-item"><span className="event-name muted">暂无事件</span></div>
+              ) : (
+                vizEvents.slice(-50).reverse().map((evt) => (
+                  <div key={evt.id} className="event-item">
+                    <span className={cx("event-dot", evt.kind)} />
+                    <span className="event-name">{evt.label}</span>
+                    <div className="event-time">{new Date(evt.at).toLocaleTimeString()}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
-          <div className="agent-panels">
-            {rightPanels.map((panel, idx) => (
-              <Fragment key={panel.id}>
-                <div
-                  className={cx("agent-panel", panel.collapsed && "collapsed")}
-                  style={
-                    panel.collapsed
-                      ? { flex: `0 0 ${RIGHT_PANEL_HEADER_HEIGHT}px`, height: RIGHT_PANEL_HEADER_HEIGHT }
-                      : { flex: `1 1 ${panel.size}px`, minHeight: RIGHT_PANEL_MIN_HEIGHT }
-                  }
-                >
-                  <button
-                    className="agent-panel-header"
-                    type="button"
-                    onClick={() => toggleRightPanel(panel.id)}
-                  >
-                    <span className="agent-panel-caret">{panel.collapsed ? "▸" : "▾"}</span>
-                    <span>{panel.title}</span>
-                  </button>
-                  {!panel.collapsed ? (
-                    <div className={cx("agent-panel-body", "mono")}>
-                      {panel.id === "history" ? (
-                        Array.isArray(llmHistoryParsed) ? (
-                          <IMHistoryList
-                            entries={llmHistoryParsed}
-                            historyRole={historyRole}
-                            historyAccent={historyAccent}
-                            summarizeHistoryEntry={summarizeHistoryEntry}
-                          />
-                        ) : (
-                          <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                            {llmHistoryFormatted || "—"}
-                          </pre>
-                        )
-                      ) : panel.id === "content" ? (
-                        <MarkdownContent content={contentStream} />
-                      ) : panel.id === "reasoning" ? (
-                        <MarkdownContent content={reasoningStream} />
-                      ) : (
-                        <MarkdownContent content={toolStream} />
-                      )}
-                    </div>
+          {/* DETAILS PANEL */}
+          <aside className="details-panel">
+            <div className="details-header">
+              <div className="details-title">Agent Details</div>
+              <div className="details-sub">Streaming from: {streamAgentId ?? "-"}</div>
+            </div>
+            <div className="details-scroll">
+              {/* LLM History */}
+              <div className="panel-section">
+                <div className="panel-header">
+                  <span className="panel-title"><span className="hud-dot" /> LLM history</span>
+                  {contentStream || reasoningStream || toolStream ? (
+                    <span className="panel-badge streaming">● streaming</span>
                   ) : null}
                 </div>
-                {idx < rightPanels.length - 1 ? (
-                  <div
-                    className={cx(
-                      "agent-panel-resizer",
-                      (panel.collapsed || rightPanels[idx + 1]?.collapsed) && "disabled"
-                    )}
-                    onPointerDown={(e) => handleRightPanelResizeStart(idx, e)}
+                {Array.isArray(llmHistoryParsed) ? (
+                  <IMHistoryList
+                    entries={llmHistoryParsed}
+                    historyRole={historyRole}
+                    historyAccent={historyAccent}
+                    summarizeHistoryEntry={summarizeHistoryEntry}
                   />
-                ) : null}
-              </Fragment>
-            ))}
-          </div>
+                ) : (
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 10, color: "var(--text-secondary)" }}>
+                    {llmHistoryFormatted || "—"}
+                  </pre>
+                )}
+              </div>
+              {/* Realtime content */}
+              <div className="panel-section">
+                <div className="panel-header">
+                  <span className="panel-title"><span className="hud-dot" /> Realtime content</span>
+                  {contentStream ? <span className="panel-badge streaming">●</span> : null}
+                </div>
+                <div className="rt-block">
+                  {contentStream || <span className="muted">—</span>}
+                </div>
+              </div>
+              {/* Realtime reasoning */}
+              <div className="panel-section">
+                <div className="panel-header">
+                  <span className="panel-title"><span className="hud-dot" /> Realtime reasoning</span>
+                  {reasoningStream ? <span className="panel-badge streaming">●</span> : null}
+                </div>
+                <div className="reason-block">
+                  {reasoningStream || <span className="muted">—</span>}
+                </div>
+              </div>
+              {/* Realtime tools */}
+              <div className="panel-section">
+                <div className="panel-header">
+                  <span className="panel-title"><span className="hud-dot" /> Realtime tools</span>
+                  {toolStream ? <span className="panel-badge streaming">●</span> : null}
+                </div>
+                <div className="tool-block">
+                  {toolStream || <span className="muted">—</span>}
+                </div>
+              </div>
+              {agentError ? (
+                <div className="panel-section">
+                  <div className="rt-block" style={{ color: "var(--red)", border: "1px solid rgba(255,59,59,0.2)" }}>
+                    {agentError}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {/* Stats bar */}
+            <div className="stats-bar">
+              <div className="stat-item">
+                <div className="stat-label">Tokens</div>
+                <div className="stat-value cyan">
+                  {activeGroup?.contextTokens
+                    ? `${(activeGroup.contextTokens / 1000).toFixed(1)}k`
+                    : "-"}
+                </div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-label">Latency</div>
+                <div className="stat-value green">-</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-label">Tools</div>
+                <div className="stat-value magenta">
+                  {toolStream ? "●" : "-"}
+                </div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-label">Agents</div>
+                <div className="stat-value yellow">{agents.length}</div>
+              </div>
+            </div>
+            {/* Agent status bar */}
+            <div className="agent-status-bar">
+              <div className="agent-status-item">
+                <span className="as-dot green" />
+                <span className="as-label">Online</span>
+                <span className="as-count">
+                  {agents.filter((a) => a.role !== "human" && (agentStatusById[a.id] ?? "IDLE") === "IDLE").length}
+                </span>
+              </div>
+              <div className="agent-status-item">
+                <span className="as-dot magenta" />
+                <span className="as-label">Busy</span>
+                <span className="as-count">
+                  {agents.filter((a) => {
+                    const s = agentStatusById[a.id];
+                    return s === "BUSY" || s === "WAKING";
+                  }).length}
+                </span>
+              </div>
+              <div className="agent-status-item">
+                <span className="as-dot idle" />
+                <span className="as-label">Idle</span>
+                <span className="as-count">
+                  {agents.filter((a) => a.role !== "human" && !agentStatusById[a.id]).length}
+                </span>
+              </div>
+              <div className="agent-status-item">
+                <span className="as-dot red" />
+                <span className="as-label">Error</span>
+                <span className="as-count">0</span>
+              </div>
+            </div>
+          </aside>
         </div>
-          </section>
-          <style jsx global>{`
-        @keyframes viz-dash {
-          from {
-            stroke-dashoffset: 18;
-          }
-          to {
-            stroke-dashoffset: 0;
-          }
-        }
-      `}</style>
-        </>
       }
     />
   );

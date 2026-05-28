@@ -13,9 +13,40 @@ type IMMessageListProps = {
   humanAgentId?: string | null;
   agentRoleById: Map<string, string>;
   fmtTime: (iso: string) => string;
-  renderContent: (content: string) => ReactNode;
+  renderContent: (content: string, contentType: string) => ReactNode;
   cx: (...classes: Array<string | false | undefined | null>) => string;
 };
+
+function getAvatarClass(role: string): string {
+  if (role === "human") return "user-av";
+  if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager") return "coord-av";
+  if (role === "worker" || role === "researcher" || role === "specialist" || role === "coder" || role === "developer" || role === "assistant") return "worker-av";
+  return "coord-av";
+}
+
+function getAvatarLabel(role: string): string {
+  if (role === "human") return "H";
+  if (role === "assistant") return "A";
+  if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager") return "C";
+  if (role === "worker") return "W";
+  if (role === "researcher") return "R";
+  if (role === "specialist") return "S";
+  if (role === "coder" || role === "developer") return "</>";
+  if (role === "creator") return "Cr";
+  if (role === "editor") return "Ed";
+  if (role === "reviewer") return "Rv";
+  return role.slice(0, 2).toUpperCase();
+}
+
+function getRoleName(role: string): string {
+  if (role === "human") return "Human";
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function getAgentRole(senderId: string, agentRoleById: Map<string, string>, isMe: boolean): string {
+  if (isMe) return "human";
+  return agentRoleById.get(senderId) ?? senderId.slice(0, 8);
+}
 
 export function IMMessageList({
   messages,
@@ -29,21 +60,33 @@ export function IMMessageList({
     <>
       {messages.map((m) => {
         const isMe = m.senderId === humanAgentId;
-        const senderRole = agentRoleById.get(m.senderId) ?? (isMe ? "human" : m.senderId.slice(0, 8));
+        const senderRole = getAgentRole(m.senderId, agentRoleById, isMe);
+        const avClass = getAvatarClass(senderRole);
+        const avLabel = getAvatarLabel(senderRole);
+        const roleName = getRoleName(senderRole);
+        const isSystem = m.contentType === "system" || senderRole === "system";
+
         return (
           <div
             key={m.id}
-            style={{
-              display: "flex",
-              justifyContent: isMe ? "flex-end" : "flex-start",
-              marginBottom: 10,
-            }}
+            className={cx(
+              "msg",
+              isMe ? "user" : "agent",
+              isSystem && "system-msg"
+            )}
           >
-            <div className={cx("bubble", isMe ? "me" : "other")}>
-              <div className="bubble-meta">
-                {fmtTime(m.sendTime)} • {senderRole}
-              </div>
-              {renderContent(m.content)}
+            <div className="msg-sender">
+              {!isMe ? (
+                <span className={cx("avatar", avClass)}>{avLabel}</span>
+              ) : null}
+              {!isMe ? <span>{roleName}</span> : null}
+              <span className="msg-time">{fmtTime(m.sendTime)}</span>
+              {isMe ? (
+                <span className={cx("avatar", avClass)}>{avLabel}</span>
+              ) : null}
+            </div>
+            <div className="msg-bubble">
+              {renderContent(m.content, m.contentType)}
             </div>
           </div>
         );
