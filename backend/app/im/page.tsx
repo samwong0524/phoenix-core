@@ -771,39 +771,8 @@ function IMPageInner() {
     return created;
   }, [refreshAgents]);
 
-  // Single init call: session + config + agents + groups (local DB, <200ms)
   // Models remain separate via /api/models (FreeLLMAPI, may be slow)
-  useEffect(() => {
-    if (workspaceOverrideId) return; // handled by bootstrap
-    const existing = loadSession();
-    if (!existing) return;
-
-    const params = new URLSearchParams();
-    params.set("workspaceId", existing.workspaceId);
-    api<{
-      session: WorkspaceDefaults;
-      config: { tokenLimit: number };
-      agents: AgentMeta[];
-      groups: Group[];
-    }>(`/api/workspace-init?${params.toString()}`)
-      .then((r) => {
-        setTokenLimit(r.config.tokenLimit);
-        saveSession(r.session);
-        setSession(r.session);
-        setAgents(r.agents);
-        setGroups(r.groups);
-        setActiveGroupId(r.session.defaultGroupId);
-        setStatus("idle");
-      })
-      .catch(() => {
-        setSession(existing);
-        setActiveGroupId(existing.defaultGroupId);
-        setStatus("idle");
-        setTokenLimit(100000);
-      });
-  }, []);
-
-  // Load available models from FreeLLMAPI (independent, may be slow)
+  // NOTE: workspace-init is handled by bootstrap() below — no separate init needed.
   useEffect(() => {
     api<{ models: Array<{ id: string; displayName: string; platform: string }> }>("/api/models")
       .then((r) => setAvailableModels(r.models))
@@ -883,10 +852,11 @@ function IMPageInner() {
     (opts?: { groups?: boolean; agents?: boolean; messages?: boolean; llmHistory?: boolean }) => {
       if (!session) return;
       const pending = refreshQueueRef.current.pending;
+      // Default: only refresh groups + messages (agents/history rarely change)
       pending.groups = opts?.groups ?? true;
-      pending.agents = opts?.agents ?? true;
+      pending.agents = opts?.agents ?? false;
       pending.messages = opts?.messages ?? true;
-      pending.llmHistory = opts?.llmHistory ?? true;
+      pending.llmHistory = opts?.llmHistory ?? false;
 
       if (refreshQueueRef.current.timer !== null) return;
       refreshQueueRef.current.timer = window.setTimeout(() => {
@@ -1265,11 +1235,8 @@ function IMPageInner() {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  useEffect(() => {
-    if (!session) return;
-    void refreshGroups(session).catch((e) => setError(e instanceof Error ? e.message : String(e)));
-    void refreshAgents(session).catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [refreshGroups, session]);
+  // NOTE: bootstrap() already loads agents + groups, so no need to refresh here.
+  // Individual actions (hireSubAgent, sendMessage) call refreshAgents/refreshGroups as needed.
 
   useEffect(() => {
     if (!session) return;
@@ -1389,8 +1356,8 @@ function IMPageInner() {
         }
       }
 
-      // any change in workspace => refresh lists (cheap enough for MVP)
-      scheduleWorkspaceRefresh();
+      // any change in workspace => refresh only what changed (not agents/history)
+      scheduleWorkspaceRefresh({ groups: true, agents: false, messages: true, llmHistory: false });
     };
     es.onerror = () => {
       // tolerate disconnects; user can refresh manually
