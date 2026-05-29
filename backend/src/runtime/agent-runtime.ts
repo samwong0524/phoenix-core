@@ -1696,8 +1696,6 @@ class AgentRunner {
     success?: boolean;
   }) {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const { v4: uuid } = await import("uuid");
       const db = getDb();
       // Get workspace_id
@@ -1730,8 +1728,6 @@ class AgentRunner {
     keyDecisions?: Record<string, unknown>[];
   }) {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const { v4: uuid } = await import("uuid");
       const db = getDb();
       const wsRows = await db.execute(
@@ -2323,8 +2319,6 @@ class AgentRunner {
     workspaceId: string,
   ) {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const { v4: uuid } = await import("uuid");
       const db = getDb();
 
@@ -2535,8 +2529,6 @@ class AgentRunner {
    */
   private async autoCreateSkillFromWorkflow(groupId: UUID) {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
 
       // Find active workflow for this group
@@ -2649,8 +2641,6 @@ class AgentRunner {
       if (history.length < 6) return;
 
       // Check daily limit (shared with autoCreateSkillFromWorkflow)
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
       const today = new Date().toISOString().slice(0, 10);
       const usageRows = await db.execute(
@@ -2813,16 +2803,16 @@ class AgentRunner {
       if (!respText) return;
 
       // Parse structured response
-      const result = JSON.parse(respText) as {
+      const result = safeJsonParse(respText, null) as {
         hasPattern?: boolean;
         action?: "create" | "patch";
         skillName?: string | null;
         skillDescription?: string | null;
         skillContent?: string | null;
         patchSummary?: string | null;
-      };
+      } | null;
 
-      if (!result.hasPattern || !result.skillContent) return;
+      if (!result || !result.hasPattern || !result.skillContent) return;
 
       const action = result.action === "patch" ? "patch" : "create";
 
@@ -2853,7 +2843,7 @@ class AgentRunner {
           await db.execute(
             sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
                 VALUES (gen_random_uuid(), ${existingSkill.name}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
-          ).catch(() => {});
+          ).catch((err) => console.warn(`[nudgeAnalysis] skill_usage INSERT failed: ${err}`));
 
           const patchSummary = result.patchSummary ?? "updated via nudge analysis";
           console.info(`[nudgeAnalysis] patched skill "${existingSkill.name}": ${patchSummary}`);
@@ -2893,7 +2883,7 @@ class AgentRunner {
       await db.execute(
         sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
             VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
-      ).catch(() => {});
+      ).catch((err) => console.warn(`[nudgeAnalysis] skill_usage INSERT failed: ${err}`));
 
       console.info(`[nudgeAnalysis] LLM created skill "${skillName}" from conversation analysis`);
     } catch {
@@ -2909,8 +2899,6 @@ class AgentRunner {
   private async skillMaintenance() {
     try {
       const { getSkillLoader, getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
       const loader = await getSkillLoader();
       const allSkills = await loader.listAutoLoadSkills();
@@ -3016,8 +3004,6 @@ class AgentRunner {
    */
   private async buildMemorySnapshot(): Promise<string | null> {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
 
       const rows = await db.execute(
@@ -3082,8 +3068,6 @@ class AgentRunner {
    */
   private async recordSkillUsage(skillName: string, success: boolean) {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
       await db.execute(
         sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at)
@@ -3102,8 +3086,6 @@ class AgentRunner {
    */
   private async evaluateSkills() {
     try {
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
 
       // Aggregate success/failure per skill
@@ -3235,8 +3217,6 @@ class AgentRunner {
 
       // Frequency limit: max 3 skills per day per agent (design doc §11.4)
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
         const rows = await db.execute(
           sql`SELECT COUNT(*) as cnt FROM skill_usage WHERE agent_id = ${this.agentId} AND used_at >= NOW() - INTERVAL '24 hours'`
@@ -3259,8 +3239,6 @@ class AgentRunner {
         if (existing?.isDirectory()) {
           // Mark conflict in skill_usage table
           try {
-            const { getDb } = await import("@/db");
-            const { sql } = await import("drizzle-orm");
             const db = getDb();
             await db.execute(
               sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
@@ -4102,8 +4080,6 @@ class AgentRunner {
       const wfId = uuid();
       const now = new Date();
       const initialStatus = args.autoActivate ? "active" : "draft";
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
 
       try {
@@ -4182,8 +4158,6 @@ class AgentRunner {
         return { ok: false, error: `Invalid status: ${status}` };
       }
 
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
       const now = new Date();
 
@@ -4256,8 +4230,6 @@ class AgentRunner {
       );
       let workflowId = (args.workflowId ?? "").trim();
 
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
 
       if (!workflowId) {
@@ -4322,8 +4294,6 @@ class AgentRunner {
         return { ok: false, error: "Missing agentId, groupId, or action" };
       }
 
-      const { getDb } = await import("@/db");
-      const { sql } = await import("drizzle-orm");
       const db = getDb();
       const now = new Date();
 
@@ -4404,8 +4374,6 @@ class AgentRunner {
       }
 
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
         const memId = uuid();
         const now = new Date();
@@ -4462,8 +4430,6 @@ class AgentRunner {
       }
 
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
         const limit = Math.min(50, args.limit ?? 10);
         const filterTags = args.tags ?? [];
@@ -4592,8 +4558,6 @@ class AgentRunner {
       }
 
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
 
         if (args.tags) {
@@ -4623,8 +4587,6 @@ class AgentRunner {
       }
 
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
         await db.execute(
           sql`DELETE FROM memories WHERE id = ${id} AND agent_id = ${this.agentId}`
@@ -4650,8 +4612,6 @@ class AgentRunner {
       }
 
       try {
-        const { getDb } = await import("@/db");
-        const { sql } = await import("drizzle-orm");
         const db = getDb();
         const wsRows = await db.execute(
           sql`SELECT workspace_id FROM agents WHERE id = ${this.agentId} LIMIT 1`
