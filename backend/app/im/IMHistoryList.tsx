@@ -1,3 +1,7 @@
+function cx(...classes: Array<string | false | undefined | null>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
 type IMHistoryListProps = {
   entries: any[];
   historyRole: (entry: any) => string;
@@ -47,8 +51,4 @@ export function IMHistoryList({
       )}
     </>
   );
-}
-
-function cx(...classes: Array<string | false | undefined | null>): string {
-  return classes.filter(Boolean).join(" ");
 }

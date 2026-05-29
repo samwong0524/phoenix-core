@@ -24,6 +24,11 @@ function safeUrl(raw: string | undefined | null) {
 }
 
 export async function GET(req: Request) {
+  // Development-only endpoint — never expose in production
+  if (process.env.NODE_ENV === "production") {
+    return Response.json({ error: "Not available" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const nodeEnv = process.env.NODE_ENV ?? "unknown";
 

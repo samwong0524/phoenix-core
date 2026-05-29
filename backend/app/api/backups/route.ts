@@ -24,10 +24,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as {
+  const body = (await req.json().catch(() => null)) as {
     action: "create" | "restore";
     backupId?: string;
-  };
+  } | null;
+  if (!body) {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   if (body.action === "create") {
     const url = new URL(req.url);

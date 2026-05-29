@@ -12,11 +12,14 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as {
+  const body = (await req.json().catch(() => null)) as {
     workspaceId: string;
     memberIds: string[];
     name?: string;
-  };
+  } | null;
+  if (!body) {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   if (body.memberIds.length === 2) {
     const groupId =

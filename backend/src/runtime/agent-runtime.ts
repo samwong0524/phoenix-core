@@ -11,6 +11,13 @@ import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCa
 
 type StreamAssembledState = OpenAIAssembledState | GLMAssembledState;
 
+/** Build a Postgres text[] array from a JS string array using parameterized SQL. */
+function buildTextArray(arr: string[]): ReturnType<typeof sql> {
+  if (arr.length === 0) return sql`ARRAY[]::text[]`;
+  // Use sql.join for safe parameterization
+  return sql`ARRAY[${sql.join(arr.map((v) => sql`${v}`), sql`, `)}]::text[]`;
+}
+
 // Runtime settings — mutable at request time for live model switching without restart.
 const runtimeSettings = new Map<string, string>();
 
@@ -34,7 +41,7 @@ export function getRuntimeSetting(key: string): string | undefined {
   return runtimeSettings.get(key);
 }
 import { getDb } from "@/db";
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, promises as fs } from "node:fs";
@@ -4179,19 +4186,20 @@ class AgentRunner {
         }
       }
 
-      const updates: string[] = [`status = ${finalStatus}`];
-      if (finalStatus === "in_progress") updates.push(`started_at = ${now}`);
-      if (finalStatus === "review") updates.push(`reviewed_at = ${now}`);
-      if (finalStatus === "done") updates.push(`completed_at = ${now}`);
-      if (finalStatus === "approved") updates.push(`completed_at = ${now}`);
-      if (args.result) updates.push(`result = ${args.result}`);
-      if (args.error) updates.push(`error = ${args.error}`);
-      if (finalStatus === "review") updates.push(`review_count = review_count + 1`);
-      if (finalStatus === "blocked") updates.push(`review_count = review_count + 1`);
+      const updateParts: ReturnType<typeof sql>[] = [];
+      updateParts.push(sql`status = ${finalStatus}`);
+      if (finalStatus === "in_progress") updateParts.push(sql`started_at = ${now}`);
+      if (finalStatus === "review") updateParts.push(sql`reviewed_at = ${now}`);
+      if (finalStatus === "done") updateParts.push(sql`completed_at = ${now}`);
+      if (finalStatus === "approved") updateParts.push(sql`completed_at = ${now}`);
+      if (args.result) updateParts.push(sql`result = ${args.result}`);
+      if (args.error) updateParts.push(sql`error = ${args.error}`);
+      if (finalStatus === "review") updateParts.push(sql`review_count = review_count + 1`);
+      if (finalStatus === "blocked") updateParts.push(sql`review_count = review_count + 1`);
 
       try {
         await db.execute(
-          sql`UPDATE tasks SET ${sql.raw(updates.join(", "))} WHERE id = ${taskId}`
+          sql`UPDATE tasks SET ${sql.join(updateParts, sql`, `)} WHERE id = ${taskId}`
         );
 
         // Log task status change
@@ -4395,8 +4403,8 @@ class AgentRunner {
 
         const nowIso = now.toISOString();
         const tagsSql = tagsArr.length > 0
-          ? sql.raw(`ARRAY[${tagsArr.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)
-          : sql.raw(`ARRAY[]::text[]`);
+          ? buildTextArray(tagsArr)
+          : sql`ARRAY[]::text[]`;
 
         await db.execute(
           sql`INSERT INTO memories (id, agent_id, workspace_id, content, tags, created_at, accessed_at, importance, source) VALUES (${memId}, ${this.agentId}, ${ws.workspace_id}, ${content}, ${tagsSql}, ${nowIso}, ${nowIso}, ${importance}, ${source})`
@@ -4439,7 +4447,7 @@ class AgentRunner {
         // Layer 1: Keyword + tag exact match (design doc §6.1)
         let layer1Rows;
         if (filterTags.length > 0) {
-          const filterTagsSql = sql.raw(`ARRAY[${filterTags.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`);
+          const filterTagsSql = buildTextArray(filterTags);
           layer1Rows = await db.execute(
             sql`SELECT id, content, tags, importance, source, created_at
                 FROM memories WHERE agent_id = ${this.agentId}
@@ -4480,15 +4488,15 @@ class AgentRunner {
           const spikeThreshold = Math.max(2, Math.floor(limit * 0.3)); // up to 30% extra from spike
 
           if (layer1Ids.length > 0) {
-            // Exclude layer1 IDs using raw SQL (UUIDs are safe, no escaping needed)
-            const excludedIds = layer1Ids.slice(0, 50).map(id => `'${id}'`).join(', ');
+            // Exclude layer1 IDs using parameterized IN clause
+            const excludedIds = layer1Ids.slice(0, 50);
             const tagArrSql = tagArr.length > 0
-              ? sql.raw(`ARRAY[${tagArr.map(t => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)
-              : sql.raw(`ARRAY[]::text[]`);
+              ? buildTextArray(tagArr)
+              : sql`ARRAY[]::text[]`;
             const layer2Rows = await db.execute(
               sql`SELECT id, content, tags, importance, source, created_at
                   FROM memories WHERE agent_id = ${this.agentId}
-                  AND id NOT IN (${sql.raw(excludedIds)})
+                  AND id NOT IN (${sql.join(excludedIds.map((id) => sql`${id}`), sql`, `)})
                   AND tags && ${tagArrSql}
                   ORDER BY importance DESC, created_at DESC
                   LIMIT ${spikeThreshold}`

@@ -29,11 +29,25 @@ export async function POST(
   { params }: { params: Promise<{ groupId: string }> }
 ) {
   const { groupId } = await params;
-  const body = (await req.json()) as {
+  const body = (await req.json().catch(() => null)) as {
     senderId: string;
     content: string;
     contentType?: string;
-  };
+  } | null;
+  if (!body) {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!body.senderId || !body.content) {
+    return Response.json({ error: "Missing senderId or content" }, { status: 400 });
+  }
+
+  // Validate senderId is a known agent in the workspace
+  const workspaceId = await store.getGroupWorkspaceId({ groupId });
+  const agents = await store.listAgents({ workspaceId });
+  const agent = agents.find((a) => a.id === body.senderId);
+  if (!agent) {
+    return Response.json({ error: "Invalid senderId" }, { status: 403 });
+  }
 
   const result = await store.sendMessage({
     groupId,
@@ -43,7 +57,6 @@ export async function POST(
   });
 
   const memberIds = await store.listGroupMemberIds({ groupId });
-  const workspaceId = await store.getGroupWorkspaceId({ groupId });
   getWorkspaceUIBus().emit(workspaceId, {
     event: "ui.message.created",
     data: {
