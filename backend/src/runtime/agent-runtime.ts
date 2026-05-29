@@ -1,6 +1,6 @@
 import { store } from "@/lib/storage";
-import { GLMStreamAssembler, parseSSEJsonLines } from "@/lib/glm-stream";
-import { OpenAIStreamAssembler } from "@/lib/openai-stream";
+import { GLMStreamAssembler, parseSSEJsonLines, GLMAssembledState } from "@/lib/glm-stream";
+import { OpenAIStreamAssembler, OpenAIAssembledState } from "@/lib/openai-stream";
 
 import { AgentEventBus } from "./event-bus";
 import { createDeferred, safeJsonParse } from "./utils";
@@ -8,6 +8,8 @@ import { getWorkspaceUIBus } from "./ui-bus";
 import { getMcpRegistry } from "./mcp";
 import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStreamEvent } from "./agent-logger";
 import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache, FRONTMATTER_RE, parseFrontmatter } from "./skill-loader";
+
+type StreamAssembledState = OpenAIAssembledState | GLMAssembledState;
 
 // Runtime settings — mutable at request time for live model switching without restart.
 const runtimeSettings = new Map<string, string>();
@@ -4716,6 +4718,70 @@ class AgentRunner {
     return { ok: false, error: `Unknown tool: ${name}` };
   }
 
+  /**
+   * Extract deltas from assembler state changes (reasoning, content, tool calls)
+   * and emit bus + stream events for each.
+   */
+  private processSseDeltas(
+    prevState: StreamAssembledState,
+    nextState: StreamAssembledState,
+    ctx: { workspaceId: UUID; groupId: UUID; round: number },
+    rawEvt: unknown
+  ): StreamAssembledState {
+    const reasoningDelta = nextState.reasoningContent.slice(prevState.reasoningContent.length);
+    const contentDelta = nextState.content.slice(prevState.content.length);
+    const toolCallDeltas = extractToolCallDeltas(rawEvt as any, prevState, nextState);
+
+    if (reasoningDelta) {
+      this.bus.emit(this.agentId, { event: "agent.stream", data: { kind: "reasoning", delta: reasoningDelta } });
+      void appendAgentStreamEvent({ agentId: this.agentId, round: ctx.round, kind: "reasoning", delta: reasoningDelta });
+    }
+    if (contentDelta) {
+      this.bus.emit(this.agentId, { event: "agent.stream", data: { kind: "content", delta: contentDelta } });
+      void appendAgentStreamEvent({ agentId: this.agentId, round: ctx.round, kind: "content", delta: contentDelta });
+    }
+    for (const delta of toolCallDeltas) {
+      this.bus.emit(this.agentId, { event: "agent.stream", data: { kind: "tool_calls", delta: delta.delta, tool_call_id: delta.tool_call_id, tool_call_name: delta.tool_call_name } });
+      void appendAgentStreamEvent({ agentId: this.agentId, round: ctx.round, kind: "tool_calls", delta: delta.delta, tool_call_id: delta.tool_call_id, tool_call_name: delta.tool_call_name });
+    }
+
+    return nextState;
+  }
+
+  /**
+   * Run the SSE event loop, emitting deltas to bus + DB as they arrive.
+   * Returns the final assembled state.
+   */
+  private async runSseLoop(
+    body: ReadableStream<Uint8Array>,
+    assembler: { push(evt: unknown): StreamAssembledState; snapshot(): StreamAssembledState },
+    ctx: { workspaceId: UUID; groupId: UUID; round: number }
+  ): Promise<StreamAssembledState> {
+    let prev = assembler.snapshot();
+    for await (const evt of parseSSEJsonLines(body)) {
+      prev = this.processSseDeltas(prev, assembler.push(evt as any), ctx, evt);
+    }
+    return prev;
+  }
+
+  /** Emit agent.done events + DB bookkeeping after SSE loop completes. */
+  private emitAgentDone(
+    ctx: { workspaceId: UUID; groupId: UUID; round: number },
+    finishReason: string | null
+  ) {
+    this.bus.emit(this.agentId, { event: "agent.done", data: { finishReason: finishReason ?? undefined } });
+    void appendAgentStreamEvent({ agentId: this.agentId, round: ctx.round, kind: "done", finishReason });
+    getWorkspaceUIBus().emit(ctx.workspaceId, { event: "ui.agent.llm.done", data: { workspaceId: ctx.workspaceId, agentId: this.agentId, groupId: ctx.groupId, round: ctx.round, finishReason: finishReason ?? undefined } });
+  }
+
+  /** Save token usage to group context (best-effort). */
+  private async saveTokenUsage(groupId: UUID, totalTokens: number) {
+    if (totalTokens <= 0) return;
+    try {
+      await store.setGroupContextTokens({ groupId, tokens: totalTokens });
+    } catch { /* Best effort */ }
+  }
+
   private async callLlmStreaming(
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
@@ -4818,105 +4884,14 @@ class AgentRunner {
     }
 
     const assembler = new OpenAIStreamAssembler();
-    let prev = assembler.snapshot();
-    let assistantText = "";
-    let assistantThinking = "";
+    const finalState = await this.runSseLoop(upstream.body, assembler, ctx);
 
-    for await (const evt of parseSSEJsonLines(upstream.body)) {
-      const state = assembler.push(evt as any);
-
-      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
-      const contentDelta = state.content.slice(prev.content.length);
-      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
-
-      if (reasoningDelta) {
-        assistantThinking += reasoningDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "reasoning", delta: reasoningDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "reasoning",
-          delta: reasoningDelta,
-        });
-      }
-
-      if (contentDelta) {
-        assistantText += contentDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "content", delta: contentDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "content",
-          delta: contentDelta,
-        });
-      }
-
-      for (const delta of toolCallDeltas) {
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: {
-            kind: "tool_calls",
-            delta: delta.delta,
-            tool_call_id: delta.tool_call_id,
-            tool_call_name: delta.tool_call_name,
-          },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "tool_calls",
-          delta: delta.delta,
-          tool_call_id: delta.tool_call_id,
-          tool_call_name: delta.tool_call_name,
-        });
-      }
-
-      prev = state;
-    }
-
-    this.bus.emit(this.agentId, {
-      event: "agent.done",
-      data: { finishReason: prev.finishReason ?? undefined },
-    });
-    void appendAgentStreamEvent({
-      agentId: this.agentId,
-      round: ctx.round,
-      kind: "done",
-      finishReason: prev.finishReason ?? null,
-    });
-    getWorkspaceUIBus().emit(ctx.workspaceId, {
-      event: "ui.agent.llm.done",
-      data: {
-        workspaceId: ctx.workspaceId,
-        agentId: this.agentId,
-        groupId: ctx.groupId,
-        round: ctx.round,
-        finishReason: prev.finishReason ?? undefined,
-      },
-    });
-
-    const finalState = assembler.snapshot();
-
-    if (finalState.usage && finalState.usage.totalTokens > 0) {
-      try {
-        await store.setGroupContextTokens({
-          groupId: ctx.groupId,
-          tokens: finalState.usage.totalTokens,
-        });
-      } catch {
-        // Best effort - don't fail if token tracking fails
-      }
-    }
+    this.emitAgentDone(ctx, finalState.finishReason ?? null);
+    await this.saveTokenUsage(ctx.groupId, finalState.usage?.totalTokens ?? 0);
 
     return {
-      assistantText,
-      assistantThinking,
+      assistantText: finalState.content,
+      assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
     };
@@ -5184,106 +5159,14 @@ class AgentRunner {
     }
 
     const assembler = new GLMStreamAssembler();
-    let prev = assembler.snapshot();
-    let assistantText = "";
-    let assistantThinking = "";
+    const finalState = await this.runSseLoop(upstream.body, assembler, ctx);
 
-    for await (const evt of parseSSEJsonLines(upstream.body)) {
-      const state = assembler.push(evt as any);
-
-      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
-      const contentDelta = state.content.slice(prev.content.length);
-      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
-
-      if (reasoningDelta) {
-        assistantThinking += reasoningDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "reasoning", delta: reasoningDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "reasoning",
-          delta: reasoningDelta,
-        });
-      }
-
-      if (contentDelta) {
-        assistantText += contentDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "content", delta: contentDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "content",
-          delta: contentDelta,
-        });
-      }
-
-      for (const delta of toolCallDeltas) {
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: {
-            kind: "tool_calls",
-            delta: delta.delta,
-            tool_call_id: delta.tool_call_id,
-            tool_call_name: delta.tool_call_name,
-          },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "tool_calls",
-          delta: delta.delta,
-          tool_call_id: delta.tool_call_id,
-          tool_call_name: delta.tool_call_name,
-        });
-      }
-
-      prev = state;
-    }
-
-    this.bus.emit(this.agentId, {
-      event: "agent.done",
-      data: { finishReason: prev.finishReason ?? undefined },
-    });
-    void appendAgentStreamEvent({
-      agentId: this.agentId,
-      round: ctx.round,
-      kind: "done",
-      finishReason: prev.finishReason ?? null,
-    });
-    getWorkspaceUIBus().emit(ctx.workspaceId, {
-      event: "ui.agent.llm.done",
-      data: {
-        workspaceId: ctx.workspaceId,
-        agentId: this.agentId,
-        groupId: ctx.groupId,
-        round: ctx.round,
-        finishReason: prev.finishReason ?? undefined,
-      },
-    });
-
-    const finalState = assembler.snapshot();
-
-    // Save token usage (current context window size)
-    if (finalState.usage && finalState.usage.totalTokens > 0) {
-      try {
-        await store.setGroupContextTokens({
-          groupId: ctx.groupId,
-          tokens: finalState.usage.totalTokens,
-        });
-      } catch {
-        // Best effort - don't fail if token tracking fails
-      }
-    }
+    this.emitAgentDone(ctx, finalState.finishReason ?? null);
+    await this.saveTokenUsage(ctx.groupId, finalState.usage?.totalTokens ?? 0);
 
     return {
-      assistantText,
-      assistantThinking,
+      assistantText: finalState.content,
+      assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
     };
@@ -5339,105 +5222,14 @@ class AgentRunner {
     }
 
     const assembler = new OpenAIStreamAssembler();
-    let prev = assembler.snapshot();
-    let assistantText = "";
-    let assistantThinking = "";
+    const finalState = await this.runSseLoop(upstream.body, assembler, ctx);
 
-    for await (const evt of parseSSEJsonLines(upstream.body)) {
-      const state = assembler.push(evt as any);
-
-      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
-      const contentDelta = state.content.slice(prev.content.length);
-      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
-
-      if (reasoningDelta) {
-        assistantThinking += reasoningDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "reasoning", delta: reasoningDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "reasoning",
-          delta: reasoningDelta,
-        });
-      }
-
-      if (contentDelta) {
-        assistantText += contentDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "content", delta: contentDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "content",
-          delta: contentDelta,
-        });
-      }
-
-      for (const delta of toolCallDeltas) {
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: {
-            kind: "tool_calls",
-            delta: delta.delta,
-            tool_call_id: delta.tool_call_id,
-            tool_call_name: delta.tool_call_name,
-          },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "tool_calls",
-          delta: delta.delta,
-          tool_call_id: delta.tool_call_id,
-          tool_call_name: delta.tool_call_name,
-        });
-      }
-
-      prev = state;
-    }
-
-    this.bus.emit(this.agentId, {
-      event: "agent.done",
-      data: { finishReason: prev.finishReason ?? undefined },
-    });
-    void appendAgentStreamEvent({
-      agentId: this.agentId,
-      round: ctx.round,
-      kind: "done",
-      finishReason: prev.finishReason ?? null,
-    });
-    getWorkspaceUIBus().emit(ctx.workspaceId, {
-      event: "ui.agent.llm.done",
-      data: {
-        workspaceId: ctx.workspaceId,
-        agentId: this.agentId,
-        groupId: ctx.groupId,
-        round: ctx.round,
-        finishReason: prev.finishReason ?? undefined,
-      },
-    });
-
-    const finalState = assembler.snapshot();
-
-    if (finalState.usage && finalState.usage.totalTokens > 0) {
-      try {
-        await store.setGroupContextTokens({
-          groupId: ctx.groupId,
-          tokens: finalState.usage.totalTokens,
-        });
-      } catch {
-        // Best effort
-      }
-    }
+    this.emitAgentDone(ctx, finalState.finishReason ?? null);
+    await this.saveTokenUsage(ctx.groupId, finalState.usage?.totalTokens ?? 0);
 
     return {
-      assistantText,
-      assistantThinking,
+      assistantText: finalState.content,
+      assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
     };
@@ -5496,105 +5288,14 @@ class AgentRunner {
     }
 
     const assembler = new OpenAIStreamAssembler();
-    let prev = assembler.snapshot();
-    let assistantText = "";
-    let assistantThinking = "";
+    const finalState = await this.runSseLoop(upstream.body, assembler, ctx);
 
-    for await (const evt of parseSSEJsonLines(upstream.body)) {
-      const state = assembler.push(evt as any);
-
-      const reasoningDelta = state.reasoningContent.slice(prev.reasoningContent.length);
-      const contentDelta = state.content.slice(prev.content.length);
-      const toolCallDeltas = extractToolCallDeltas(evt as any, prev, state);
-
-      if (reasoningDelta) {
-        assistantThinking += reasoningDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "reasoning", delta: reasoningDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "reasoning",
-          delta: reasoningDelta,
-        });
-      }
-
-      if (contentDelta) {
-        assistantText += contentDelta;
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: { kind: "content", delta: contentDelta },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "content",
-          delta: contentDelta,
-        });
-      }
-
-      for (const delta of toolCallDeltas) {
-        this.bus.emit(this.agentId, {
-          event: "agent.stream",
-          data: {
-            kind: "tool_calls",
-            delta: delta.delta,
-            tool_call_id: delta.tool_call_id,
-            tool_call_name: delta.tool_call_name,
-          },
-        });
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          round: ctx.round,
-          kind: "tool_calls",
-          delta: delta.delta,
-          tool_call_id: delta.tool_call_id,
-          tool_call_name: delta.tool_call_name,
-        });
-      }
-
-      prev = state;
-    }
-
-    this.bus.emit(this.agentId, {
-      event: "agent.done",
-      data: { finishReason: prev.finishReason ?? undefined },
-    });
-    void appendAgentStreamEvent({
-      agentId: this.agentId,
-      round: ctx.round,
-      kind: "done",
-      finishReason: prev.finishReason ?? null,
-    });
-    getWorkspaceUIBus().emit(ctx.workspaceId, {
-      event: "ui.agent.llm.done",
-      data: {
-        workspaceId: ctx.workspaceId,
-        agentId: this.agentId,
-        groupId: ctx.groupId,
-        round: ctx.round,
-        finishReason: prev.finishReason ?? undefined,
-      },
-    });
-
-    const finalState = assembler.snapshot();
-
-    if (finalState.usage && finalState.usage.totalTokens > 0) {
-      try {
-        await store.setGroupContextTokens({
-          groupId: ctx.groupId,
-          tokens: finalState.usage.totalTokens,
-        });
-      } catch {
-        // Best effort
-      }
-    }
+    this.emitAgentDone(ctx, finalState.finishReason ?? null);
+    await this.saveTokenUsage(ctx.groupId, finalState.usage?.totalTokens ?? 0);
 
     return {
-      assistantText,
-      assistantThinking,
+      assistantText: finalState.content,
+      assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
     };
