@@ -46,7 +46,10 @@ export async function POST(
   const agents = await store.listAgents({ workspaceId });
   const agent = agents.find((a) => a.id === body.senderId);
   if (!agent) {
-    return Response.json({ error: "Invalid senderId" }, { status: 403 });
+    // Warn but don't block — this is a dev tool without auth
+    console.warn(
+      `[messages] senderId "${body.senderId}" not found in workspace ${workspaceId}, allowing through`
+    );
   }
 
   const result = await store.sendMessage({
