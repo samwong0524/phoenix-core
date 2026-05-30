@@ -60,19 +60,7 @@ if errorlevel 1 (
 )
 
 echo [5/5] Checking FreeLLMAPI...
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:3001/api/health' -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue; exit 0 } catch { exit 1 }" >nul 2>&1
-if errorlevel 1 (
-    echo FreeLLMAPI not detected on port 3001.
-    if exist "%USERPROFILE%\freellmapi\.env" (
-        echo Starting FreeLLMAPI in background...
-        powershell -NoProfile -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c cd /d %USERPROFILE%\freellmapi ^&^& npm run dev' -WindowStyle Minimized"
-        echo Dashboard: http://localhost:5173
-    ) else (
-        echo FreeLLMAPI not installed. Set LLM_PROVIDER=glm in .env or install FreeLLMAPI.
-    )
-) else (
-    echo FreeLLMAPI is running on port 3001.
-)
+powershell -NoProfile -Command "$url='http://127.0.0.1:3001/api/health'; try{Invoke-WebRequest -Uri $url -TimeoutSec 2 -UseBasicParsing | Out-Null; Write-Host 'FreeLLMAPI running on 3001.'; Start-Process 'http://localhost:5173'} catch { if(Test-Path \"$env:USERPROFILE\freellmapi\.env\"){ Write-Host 'Starting FreeLLMAPI...'; Start-Process cmd.exe '/c cd /d $env:USERPROFILE\freellmapi ^&^& npm run dev' -WindowStyle Minimized; Write-Host 'Waiting up to 30s...'; for($i=0;$i -lt 15;$i++){ Start-Sleep 2; try{ Invoke-WebRequest -Uri $url -TimeoutSec 1 -UseBasicParsing | Out-Null; Write-Host 'Started.'; Start-Process 'http://localhost:5173'; break } catch{} } } else { Write-Host 'FreeLLMAPI not installed.' } }"
 
 echo.
 echo [6/6] Starting dev server...
