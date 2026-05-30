@@ -1869,6 +1869,8 @@ class AgentRunner {
         });
       } finally {
         this.running = false;
+        // Trim agent history after processing to prevent unbounded growth
+        void this.trimHistoryIfNeeded();
       }
       // Hermes idle timeout: 450s idle (no messages) / 1200s active (processing).
       // If processUntilIdle did no work and total elapsed exceeds idle budget, stop.
@@ -1880,6 +1882,38 @@ class AgentRunner {
         console.info(`[AgentRunner:loop] active timeout after ${elapsed}ms, stopping runner`);
         this.stopRunner(this.agentId);
       }
+    }
+  }
+
+  /**
+   * Trim agent history to prevent unbounded growth.
+   * Keep system messages + last 30 conversation messages.
+   * Runs async, best-effort — never blocks the loop.
+   */
+  private async trimHistoryIfNeeded() {
+    const MAX_CONVERSATION_MSGS = 30;
+    try {
+      const agent = await store.getAgent({ agentId: this.agentId });
+      const history = safeJsonParse<HistoryMessage[]>(agent.llmHistory, []);
+      if (!Array.isArray(history)) return;
+      if (history.length <= MAX_CONVERSATION_MSGS + 2) return; // already small
+
+      // Keep all system messages + last N non-system messages
+      const systemMsgs = history.filter((m) => m.role === "system");
+      const convMsgs = history.filter((m) => m.role !== "system");
+      const trimmedConvMsgs = convMsgs.slice(-MAX_CONVERSATION_MSGS);
+      const trimmed = [...systemMsgs, ...trimmedConvMsgs];
+
+      if (trimmed.length >= history.length) return; // nothing to trim
+
+      const trimmedJson = JSON.stringify(trimmed);
+      if (trimmedJson.length < 50_000) {
+        // Only trim if result is under 50KB
+        await store.setAgentHistory({ agentId: this.agentId, llmHistory: trimmedJson });
+        console.info(`[trimHistory] agent=${this.agentId.slice(0,8)} ${history.length}→${trimmed.length} msgs, ${agent.llmHistory.length}→${trimmedJson.length} chars`);
+      }
+    } catch {
+      // best-effort
     }
   }
 
