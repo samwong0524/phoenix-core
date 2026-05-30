@@ -1,6 +1,7 @@
 import {
   boolean,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -26,7 +27,9 @@ export const agents = pgTable("agents", {
   parentId: uuid("parent_id"),
   llmHistory: text("llm_history").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-});
+}, (t) => ({
+  workspaceIdx: index("agents_workspace_idx").on(t.workspaceId),
+}));
 
 export const groups = pgTable("groups", {
   id: uuid("id").primaryKey(),
@@ -36,7 +39,9 @@ export const groups = pgTable("groups", {
   name: text("name"),
   contextTokens: integer("context_tokens").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-});
+}, (t) => ({
+  workspaceIdx: index("groups_workspace_idx").on(t.workspaceId),
+}));
 
 export const groupMembers = pgTable(
   "group_members",
@@ -50,6 +55,7 @@ export const groupMembers = pgTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.groupId, t.userId] }),
+    userIdx: index("group_members_user_idx").on(t.userId),
   })
 );
 
@@ -65,7 +71,10 @@ export const messages = pgTable("messages", {
   contentType: text("content_type").notNull(),
   content: text("content").notNull(),
   sendTime: timestamp("send_time", { withTimezone: true }).notNull(),
-});
+}, (t) => ({
+  groupIdx: index("messages_group_idx").on(t.groupId),
+  workspaceIdx: index("messages_workspace_idx").on(t.workspaceId),
+}));
 
 export const workflows = pgTable("workflows", {
   id: uuid("id").primaryKey(),
@@ -80,7 +89,9 @@ export const workflows = pgTable("workflows", {
   status: text("status").notNull().default("draft"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-});
+}, (t) => ({
+  groupIdx: index("workflows_group_idx").on(t.groupId),
+}));
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey(),
