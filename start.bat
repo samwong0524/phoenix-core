@@ -60,7 +60,7 @@ if errorlevel 1 (
 )
 
 echo [5/5] Checking FreeLLMAPI...
-powershell -NoProfile -Command "$url='http://127.0.0.1:3001/api/health'; try{Invoke-WebRequest -Uri $url -TimeoutSec 2 -UseBasicParsing | Out-Null; Write-Host 'FreeLLMAPI running on 3001.'; Start-Process 'http://localhost:5173'} catch { if(Test-Path \"$env:USERPROFILE\freellmapi\.env\"){ Write-Host 'Starting FreeLLMAPI...'; Start-Process cmd.exe '/c cd /d $env:USERPROFILE\freellmapi ^&^& npm run dev' -WindowStyle Minimized; Write-Host 'Waiting up to 30s...'; for($i=0;$i -lt 15;$i++){ Start-Sleep 2; try{ Invoke-WebRequest -Uri $url -TimeoutSec 1 -UseBasicParsing | Out-Null; Write-Host 'Started.'; Start-Process 'http://localhost:5173'; break } catch{} } } else { Write-Host 'FreeLLMAPI not installed.' } }"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0backend\scripts\start-freellmapi.ps1"
 
 echo.
 echo [6/6] Starting dev server...
