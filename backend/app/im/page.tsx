@@ -1102,8 +1102,8 @@ function IMPageInner() {
     }
 
     setStatus("idle");
-    void refreshMessages(session, activeGroupId, { markRead: false, scrollToBottom: false });
-    void refreshGroups(session);
+    void refreshMessages(session, activeGroupId, { markRead: false, scrollToBottom: false, silent: true });
+    void refreshGroups(session, { silent: true });
   }, [
     activeGroupId,
     connectAgentStream,
