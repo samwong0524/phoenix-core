@@ -655,6 +655,11 @@ function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, 
     const { reasoning_content, ...rest } = msg as Exclude<HistoryMessage, { role: "tool" }>;
     const mapped: Record<string, unknown> = { ...rest };
 
+    // Fix 400 error: Some providers require content to be a string, not null
+    if (mapped.content === null || mapped.content === undefined) {
+      mapped.content = "";
+    }
+
     if (msg.role === "assistant" && reasoning_content) {
       mapped.reasoning = reasoning_content;
     }
@@ -1691,9 +1696,9 @@ class AgentRunner {
   private interruptRequested = false;
   private static readonly MAX_PROCESS_ITERATIONS = 3;
   private turnToolFailures = new Map<string, number>();
-  // Guardrail: same tool + same params连续失败计数
+  // Guardrail: consecutive failure count for same tool + params
   private exactFailureCount = new Map<string, number>();
-  // Guardrail: same tool总失败计数
+  // Guardrail: total failure count for same tool
   private sameToolFailureCount = new Map<string, number>();
   // Tools blocked due to exact failures >= 5
   private blockedTools = new Set<string>();

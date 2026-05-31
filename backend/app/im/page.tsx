@@ -959,8 +959,8 @@ function IMPageInner() {
             toolResultBuffersRef.current = new Map();
             const groupId = activeGroupIdRef.current;
             const nextSession = loadSession();
-            if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false, scrollToBottom: false });
-            if (nextSession) void refreshGroups(nextSession);
+            if (nextSession && groupId) void refreshMessages(nextSession, groupId, { markRead: false, scrollToBottom: false, silent: true });
+            if (nextSession) void refreshGroups(nextSession, { silent: true });
             const agentId = streamAgentIdRef.current;
             if (agentId) void refreshLlmHistory(agentId);
             return;
