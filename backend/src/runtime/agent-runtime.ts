@@ -356,6 +356,33 @@ const REPLY_TOOL_NAMES = new Set(["send_group_message"]);
 const MAX_AGENT_TURNS = 10;
 const groupAgentTurnCount = new Map<string, number>();
 
+// Circuit breaker for LLM calls: prevents repeated failed calls from wasting tokens
+const llmFailureCount = new Map<string, { count: number; lastFailure: number }>();
+const LLM_CIRCUIT_BREAKER_THRESHOLD = 3;  // consecutive failures to trip
+const LLM_CIRCUIT_BREAKER_COOLDOWN = 5 * 60 * 1000;  // 5 min cooldown
+
+function isLlmCircuitOpen(): boolean {
+  const state = llmFailureCount.get("global");
+  if (!state || state.count < LLM_CIRCUIT_BREAKER_THRESHOLD) return false;
+  if (Date.now() - state.lastFailure < LLM_CIRCUIT_BREAKER_COOLDOWN) {
+    return true;  // still in cooldown
+  }
+  // cooldown expired — reset
+  llmFailureCount.delete("global");
+  return false;
+}
+
+function recordLlmFailure() {
+  const state = llmFailureCount.get("global") ?? { count: 0, lastFailure: 0 };
+  state.count++;
+  state.lastFailure = Date.now();
+  llmFailureCount.set("global", state);
+}
+
+function recordLlmSuccess() {
+  llmFailureCount.delete("global");
+}
+
 function historyHasTool(history: HistoryMessage[], toolNames: Set<string>): boolean {
   return history.some((msg) => {
     if (msg.role !== "assistant" || !msg.tool_calls) return false;
@@ -1837,41 +1864,42 @@ class AgentRunner {
   private async loop() {
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      // Safety timeout: if no wakeup within 600s, agent is orphaned — stop
-      const timeoutMs = 600_000;
-      let woke = false;
-      await Promise.race([
-        this.wake.promise.then(() => { woke = true; }),
-        new Promise<void>((r) => setTimeout(r, timeoutMs)),
-      ]);
-      if (!woke) {
-        console.info(`[AgentRunner:loop] wakeup timeout ${timeoutMs}ms, stopping runner`);
-        this.stopRunner(this.agentId);
-      }
-      if (!this.started) continue; // stopRunner set started=false
-      if (this.running) continue;
-      this.running = true;
-      this.touchActive();
-      const iterationStart = Date.now();
-      let hadWork = false;
       try {
-        hadWork = await this.processUntilIdle();
-      } catch (err) {
-        this.bus.emit(this.agentId, {
-          event: "agent.error",
-          data: { message: err instanceof Error ? err.message : String(err) },
-        });
-        const message = err instanceof Error ? err.message : String(err);
-        void appendAgentStreamEvent({
-          agentId: this.agentId,
-          kind: "error",
-          error: message,
-        });
-      } finally {
-        this.running = false;
-        // Trim agent history after processing to prevent unbounded growth
-        void this.trimHistoryIfNeeded();
-      }
+        // Safety timeout: if no wakeup within 600s, agent is orphaned — stop
+        const timeoutMs = 600_000;
+        let woke = false;
+        await Promise.race([
+          this.wake.promise.then(() => { woke = true; }),
+          new Promise<void>((r) => setTimeout(r, timeoutMs)),
+        ]);
+        if (!woke) {
+          console.info(`[AgentRunner:loop] wakeup timeout ${timeoutMs}ms, stopping runner`);
+          this.stopRunner(this.agentId);
+        }
+        if (!this.started) continue; // stopRunner set started=false
+        if (this.running) continue;
+        this.running = true;
+        this.touchActive();
+        const iterationStart = Date.now();
+        let hadWork = false;
+        try {
+          hadWork = await this.processUntilIdle();
+        } catch (err) {
+          this.bus.emit(this.agentId, {
+            event: "agent.error",
+            data: { message: err instanceof Error ? err.message : String(err) },
+          });
+          const message = err instanceof Error ? err.message : String(err);
+          void appendAgentStreamEvent({
+            agentId: this.agentId,
+            kind: "error",
+            error: message,
+          });
+        } finally {
+          this.running = false;
+          // Trim agent history after processing to prevent unbounded growth
+          void this.trimHistoryIfNeeded();
+        }
       // Hermes idle timeout: 450s idle (no messages) / 1200s active (processing).
       // If processUntilIdle did no work and total elapsed exceeds idle budget, stop.
       const elapsed = Date.now() - iterationStart;
@@ -1881,6 +1909,16 @@ class AgentRunner {
       } else if (hadWork && elapsed >= 1_200_000) {
         console.info(`[AgentRunner:loop] active timeout after ${elapsed}ms, stopping runner`);
         this.stopRunner(this.agentId);
+      }
+      } catch (err) {
+        // Isolate agent crashes from crashing the entire runtime
+        console.error(`[AgentRunner:loop] agent ${this.agentId.slice(0,8)} crashed:`, err);
+        this.bus.emit(this.agentId, {
+          event: "agent.error",
+          data: { message: `Agent crashed: ${err instanceof Error ? err.message : String(err)}` },
+        });
+        // Wait before restarting to prevent crash loops
+        await new Promise((r) => setTimeout(r, 5000));
       }
     }
   }
@@ -4837,18 +4875,26 @@ class AgentRunner {
     history: HistoryMessage[],
     ctx: { workspaceId: UUID; groupId: UUID; round: number }
   ) {
+    // Circuit breaker: skip if too many consecutive failures
+    if (isLlmCircuitOpen()) {
+      console.warn(`[callLlmStreaming] circuit breaker open — skipping LLM call`);
+      throw new Error("LLM circuit breaker open: too many consecutive failures");
+    }
+
     const chain = getProviderChain();
     const errors: string[] = [];
 
     for (const provider of chain) {
       try {
         const result = await this.callLlmProvider(provider, history, ctx);
+        recordLlmSuccess();
         return result;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // Only retry on 429 (rate limit). 401/403/500 are fatal - no point wasting tokens on fallback.
         const is429 = msg.includes("429");
         if (!is429) throw err;
+        recordLlmFailure();
         errors.push(`${provider}: ${msg}`);
         console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" → ")}`);
         // Keep streaming to the UI so the user sees the fallback
