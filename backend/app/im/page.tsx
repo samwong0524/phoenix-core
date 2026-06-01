@@ -239,7 +239,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function fmtTime(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString([], { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit" });
 }
 
 function cx(...classes: Array<string | false | undefined | null>) {
@@ -1816,6 +1816,11 @@ function IMPageInner() {
           <div style={{ fontSize: 9 }}>
             assistant: {(session?.assistantAgentId ?? "-").slice(0, 22)}…
           </div>
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+            <a href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+              ← 返回首页
+            </a>
+          </div>
         </div>
         <div className="agent-scroll">
           <div className="section-label">AGENTS</div>
@@ -2272,7 +2277,7 @@ function IMPageInner() {
                   <div key={evt.id} className="event-item">
                     <span className={cx("event-dot", evt.kind)} />
                     <span className="event-name">{evt.label}</span>
-                    <div className="event-time">{new Date(evt.at).toLocaleTimeString()}</div>
+                    <div className="event-time">{new Date(evt.at).toLocaleTimeString([], { timeZone: "Asia/Shanghai" })}</div>
                   </div>
                 ))
               )}
