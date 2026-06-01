@@ -3720,6 +3720,7 @@ class AgentRunner {
               workspaceId,
               memberIds,
               name: args.name ?? undefined,
+              creatorId: this.agentId,
             })
           ).id;
         if (!existing) {
@@ -3729,7 +3730,7 @@ class AgentRunner {
           });
         }
       } else {
-        const created = await store.createGroup({ workspaceId, memberIds, name: args.name ?? undefined });
+        const created = await store.createGroup({ workspaceId, memberIds, name: args.name ?? undefined, creatorId: this.agentId });
         groupId = created.id;
         groupName = created.name;
         getWorkspaceUIBus().emit(workspaceId, {

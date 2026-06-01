@@ -621,7 +621,7 @@ export const store = {
     });
   },
 
-  async createGroup(input: { workspaceId: UUID; memberIds: UUID[]; name?: string }) {
+  async createGroup(input: { workspaceId: UUID; memberIds: UUID[]; name?: string; creatorId?: UUID }) {
     const db = getDb();
     const groupId = uuid();
     const createdAt = now();
@@ -631,6 +631,7 @@ export const store = {
         id: groupId,
         workspaceId: input.workspaceId,
         name: input.name ?? null,
+        creatorId: input.creatorId ?? null,
         createdAt,
       });
 
@@ -800,6 +801,7 @@ export const store = {
           workspaceId: input.workspaceId,
           memberIds,
           name: input.groupName ?? undefined,
+          creatorId: input.fromId,
         })
       ).id;
       channel = "new_thread";
@@ -822,6 +824,7 @@ export const store = {
             workspaceId: input.workspaceId,
             memberIds,
             name: input.groupName ?? undefined,
+            creatorId: input.fromId,
           })
         ).id;
       channel = existing ? "reuse_existing_group" : "new_group";

@@ -37,6 +37,7 @@ export const groups = pgTable("groups", {
     .notNull()
     .references(() => workspaces.id),
   name: text("name"),
+  creatorId: uuid("creator_id"),
   contextTokens: integer("context_tokens").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 }, (t) => ({
