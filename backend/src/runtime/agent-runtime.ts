@@ -1901,9 +1901,9 @@ class AgentRunner {
             error: message,
           });
         } finally {
+          // Trim history BEFORE releasing the running lock to prevent race conditions
+          await this.trimHistoryIfNeeded();
           this.running = false;
-          // Trim agent history after processing to prevent unbounded growth
-          void this.trimHistoryIfNeeded();
         }
       // Hermes idle timeout: 450s idle (no messages) / 1200s active (processing).
       // If processUntilIdle did no work and total elapsed exceeds idle budget, stop.

@@ -966,6 +966,8 @@ export const store = {
 
   async setAgentHistory(input: { agentId: UUID; llmHistory: string; workspaceId?: UUID }) {
     const db = getDb();
+    // Validate JSON before writing to prevent corrupted history
+    try { JSON.parse(input.llmHistory); } catch { return; }
     await db.update(agents).set({ llmHistory: input.llmHistory }).where(eq(agents.id, input.agentId));
 
     const workspaceId =
