@@ -1,0 +1,59 @@
+# Smoke-004: 工具调用执行
+# 验证 Agent 能正确调用内置工具并获取结果
+test_id: smoke-tool-exec-004
+name: 内置工具调用
+category: smoke
+description: |
+  创建一个 Agent 并指令它使用 bash 工具执行一条简单命令，
+  验证工具调用链路正常、结果正确返回。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "tool-test-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "tool-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "tool-test-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "请执行命令 echo hello-agent 并告诉我输出结果"
+      sender_id: "human-tester"
+
+  - action: wait_for_response
+    params:
+      agent_id: "{{agent_id}}"
+      timeout_ms: 45000
+    save_as: response
+
+assertions:
+  - type: not_empty
+    field: response
+    description: Agent 必须返回响应
+  - type: contains_any
+    field: response
+    values: ["hello-agent", "hello"]
+    description: 响应中应包含命令的输出结果
+  - type: tool_was_called
+    tool_name: "bash"
+    description: Agent 应该调用了 bash 工具
+  - type: response_time
+    max_ms: 45000
+    description: 含工具调用的响应应在 45 秒内完成
+
+timeout_ms: 90000
+priority: critical
+tags: [tools, bash]

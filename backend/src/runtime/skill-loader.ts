@@ -287,7 +287,8 @@ export class SkillLoader {
 
   async listAutoLoadSkills(): Promise<Skill[]> {
     await this.discoverSkills();
-    return Array.from(this.skills.values()).filter((skill) => skill.autoLoad);
+    const autoSkills = Array.from(this.skills.values()).filter((s) => s.autoLoad);
+    return topoSortSkills(autoSkills);
   }
 
   async getSkill(name: string): Promise<Skill | null> {
@@ -318,6 +319,42 @@ export function formatSkillPrompt(skill: Skill): string {
     rootInfo,
     skill.content,
   ].join("\n");
+}
+
+
+
+/**
+ * Topological sort for skills based on requires dependencies.
+ * Returns skills in dependency order, or throws on circular dependencies.
+ */
+function topoSortSkills(skills: Skill[]): Skill[] {
+  const skillMap = new Map<string, Skill>();
+  for (const s of skills) skillMap.set(s.name, s);
+
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const result: Skill[] = [];
+
+  function visit(name: string) {
+    if (visited.has(name)) return;
+    if (visiting.has(name)) {
+      console.warn(`[skill-loader] Circular dependency detected involving: ${name}`);
+      return; // Skip circular deps, don't throw
+    }
+    visiting.add(name);
+    const skill = skillMap.get(name);
+    if (skill?.requires) {
+      for (const dep of skill.requires) {
+        if (skillMap.has(dep)) visit(dep);
+      }
+    }
+    visiting.delete(name);
+    visited.add(name);
+    result.push(skill!);
+  }
+
+  for (const s of skills) visit(s.name);
+  return result;
 }
 
 let cachedLoader: SkillLoader | null = null;

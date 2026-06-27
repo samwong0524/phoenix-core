@@ -1,0 +1,23 @@
+{
+  "id": "deployment/production",
+  "title": "Production Deployment",
+  "description": "Building",
+  "source": "@site/docs/deployment/production.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/production",
+  "permalink": "/en/docs/deployment/production",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/deployment/production.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Configuration",
+    "permalink": "/en/docs/deployment/configuration"
+  }
+}

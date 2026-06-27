@@ -1,0 +1,53 @@
+# Consistency-004: 子 Agent 创建模式一致性
+# coordinator 多次被要求拆分任务时，创建子 Agent 的模式应一致
+test_id: cons-subagent-pattern-004
+name: 子 Agent 编排模式一致性
+category: consistency
+description: |
+  向 coordinator 发送 3 次"拆分任务"类指令，
+  验证每次创建子 Agent 的数量级和角色分配模式一致。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "cons-sub-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "cons-coord"
+      workspace_id: "{{workspace_id}}"
+    save_as: coord_id
+
+  - action: create_group
+    params:
+      name: "cons-sub-group"
+      members: ["{{coord_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_multiple_and_count_agents
+    params:
+      group_id: "{{group_id}}"
+      messages:
+        - "请把以下工作分配给不同的 Agent：1)调研 2)撰写 3)审核"
+        - "我需要你创建子 Agent 完成：研究、写作、校对三个步骤"
+        - "请委派三个任务给专门的 Agent：调研、写作、审核"
+      sender_id: "human-tester"
+      timeout_ms: 120000
+    save_as: agent_counts
+
+assertions:
+  - type: sub_agents_created
+    field: agent_counts
+    min_count: 1
+    description: 每次至少创建了 1 个子 Agent
+  - type: agent_count_consistent
+    field: agent_counts
+    max_variance: 2
+    description: 创建的子 Agent 数量偏差不超过 2
+
+timeout_ms: 420000
+priority: high
+tags: [consistency, multi-agent, orchestration]

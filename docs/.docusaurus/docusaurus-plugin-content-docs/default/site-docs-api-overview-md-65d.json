@@ -1,0 +1,27 @@
+{
+  "id": "api/overview",
+  "title": "API Reference",
+  "description": "SWARM IDE exposes a REST API through Next.js API routes. All endpoints are prefixed under the application's base path.",
+  "source": "@site/docs/api/overview.md",
+  "sourceDirName": "api",
+  "slug": "/api/overview",
+  "permalink": "/en/docs/api/overview",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/api/overview.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "MCP Integration",
+    "permalink": "/en/docs/architecture/mcp-integration"
+  },
+  "next": {
+    "title": "Agents API",
+    "permalink": "/en/docs/api/agents"
+  }
+}

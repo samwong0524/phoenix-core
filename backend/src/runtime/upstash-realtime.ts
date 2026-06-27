@@ -30,7 +30,7 @@ export function isUpstashRealtimeConfigured() {
   return !!getRedisUrl();
 }
 
-async function getRedisClient(): Promise<RedisClient> {
+export async function getRedisClient(): Promise<RedisClient> {
   if (cachedClient?.isOpen) return cachedClient;
   if (cachedPromise) return cachedPromise;
 
@@ -149,6 +149,10 @@ export function getUpstashRealtime(): RealtimeClient {
             // ignore if group already exists
           }
 
+          // Start periodic cleanup of orphaned consumer groups for this stream.
+          // startStreamCleanup is idempotent per streamKey.
+          startStreamCleanup(streamKey);
+
           if (opts.history?.start === "-") {
             await readGroup(client, streamKey, group, consumer, opts.events, opts.onData);
           }
@@ -178,4 +182,64 @@ export function getUpstashRealtime(): RealtimeClient {
 
 export async function getUpstashRedis(): Promise<RedisClient> {
   return await getRedisClient();
+}
+
+
+// Consumer group cleanup to prevent orphaned groups from accumulating
+const _cleanupIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * Periodically scan for and remove stale consumer groups.
+ * Groups are considered stale if they haven't had activity for more than maxIdleMs.
+ */
+async function cleanupStaleGroups(streamKey: string, client: any, maxIdleMs: number = 3600000) {
+  try {
+    // Get all consumer groups for this stream
+    // XINFO GROUPS returns: [name, consumers, pending, last-delivered-id, entries-read, lag]
+    const groups = await client.sendCommand(["XINFO", "GROUPS", streamKey]) as Array<any[]>;
+    if (!groups || groups.length === 0) return;
+
+    for (const groupInfo of groups) {
+      const groupName = groupInfo[1]; // 'name' field
+      const consumerCount = groupInfo[3]; // 'consumers' field
+      if (consumerCount === 0) {
+        // No consumers, destroy the group
+        await client.sendCommand(["XGROUP", "DESTROY", streamKey, groupName]).catch(() => undefined);
+        console.info(`[redis:cleanup] destroyed empty group ${groupName} on stream ${streamKey}`);
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Start periodic cleanup for a stream.
+ */
+export function startStreamCleanup(streamKey: string, intervalMs: number = 60000) {
+  if (_cleanupIntervals.has(streamKey)) return;
+  console.info(`[redis:cleanup] starting cleanup for stream ${streamKey} every ${intervalMs/1000}s`);
+  const interval = setInterval(async () => {
+    try {
+      const { getRedisClient } = await import("./upstash-realtime");
+      const client = await getRedisClient();
+      await cleanupStaleGroups(streamKey, client);
+    } catch {
+      // best-effort
+    }
+  }, intervalMs);
+  interval.unref();
+  _cleanupIntervals.set(streamKey, interval);
+}
+
+/**
+ * Stop periodic cleanup for a stream.
+ */
+export function stopStreamCleanup(streamKey: string) {
+  const interval = _cleanupIntervals.get(streamKey);
+  if (interval) {
+    clearInterval(interval);
+    _cleanupIntervals.delete(streamKey);
+    console.info(`[redis:cleanup] stopped cleanup for stream ${streamKey}`);
+  }
 }

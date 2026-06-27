@@ -1,0 +1,58 @@
+# Smoke-006: Workflow 引擎
+# 验证 Workflow 创建 → 激活 → 任务分配 → 完成的全链路
+test_id: smoke-workflow-006
+name: Workflow 全链路
+category: smoke
+description: |
+  创建一个包含多个任务的 Workflow，激活后验证
+  WorkflowEngine 能正确调度任务并推进状态。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "workflow-test-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "wf-coordinator"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_workflow
+    params:
+      workspace_id: "{{workspace_id}}"
+      name: "test-workflow"
+      tasks:
+        - name: "step-1-research"
+          description: "调研 AI 趋势"
+          assignee_role: "researcher"
+        - name: "step-2-write"
+          description: "撰写报告"
+          assignee_role: "writer"
+          depends_on: ["step-1-research"]
+    save_as: workflow_id
+
+  - action: activate_workflow
+    params:
+      workflow_id: "{{workflow_id}}"
+
+  - action: wait_for_workflow_progress
+    params:
+      workflow_id: "{{workflow_id}}"
+      timeout_ms: 90000
+    save_as: workflow_state
+
+assertions:
+  - type: workflow_activated
+    field: workflow_state
+    description: Workflow 必须成功激活
+  - type: task_started
+    field: workflow_state
+    task_name: "step-1-research"
+    description: 第一个任务应被启动
+
+timeout_ms: 120000
+priority: high
+tags: [workflow, engine]

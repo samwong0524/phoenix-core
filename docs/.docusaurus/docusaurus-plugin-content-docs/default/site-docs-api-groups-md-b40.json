@@ -1,0 +1,27 @@
+{
+  "id": "api/groups",
+  "title": "Groups API",
+  "description": "List Groups",
+  "source": "@site/docs/api/groups.md",
+  "sourceDirName": "api",
+  "slug": "/api/groups",
+  "permalink": "/en/docs/api/groups",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/api/groups.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Agents API",
+    "permalink": "/en/docs/api/agents"
+  },
+  "next": {
+    "title": "Workflows API",
+    "permalink": "/en/docs/api/workflows"
+  }
+}

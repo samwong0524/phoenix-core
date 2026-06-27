@@ -1,0 +1,168 @@
+# Phoenix-Core 告警规则配置
+version: "1.0"
+
+# 告警通知渠道
+channels:
+  - name: im
+    type: webhook
+    description: 飞书/钉钉/Slack Webhook
+    url: "${ALERT_WEBHOOK_URL}"
+
+  - name: log
+    type: file
+    description: 写入 alert_events 表
+    path: "backend/.agent_logs/alerts.jsonl"
+
+# 告警规则组
+alert_groups:
+
+  # ── 可用性告警 ──
+  - name: availability
+    description: Agent 服务可用性和稳定性
+    alerts:
+      - name: agent_success_rate_drop
+        display: Agent 成功率下降
+        metric: agent_success_rate
+        window: 5m
+        condition: "value < 0.95 AND request_count >= 10"
+        severity: critical
+        channels: [im, log]
+        message: "Agent 成功率降至 {{value}}%，低于 95% 阈值（5 分钟窗口，{{request_count}} 次请求）"
+        runbook: |
+          1. 检查 LLM Provider 状态（是否 429/503）
+          2. 检查 agent-scheduler 排队情况
+          3. 检查 circuit breaker 状态
+          4. 查看最近的 error 日志
+
+      - name: agent_timeout_rate_high
+        display: Agent 超时率上升
+        metric: agent_timeout_rate
+        window: 5m
+        condition: "value > 0.05 AND request_count >= 10"
+        severity: warning
+        channels: [im, log]
+        message: "超时率升至 {{value}}%，超过 5% 阈值"
+        runbook: |
+          1. 检查 LLM API 响应时间是否变慢
+          2. 检查是否有大量并发请求导致排队
+          3. 考虑调整 MIN_LLM_INTERVAL_MS 或增加 API Key
+
+      - name: circuit_breaker_open
+        display: LLM 熔断器触发
+        metric: circuit_breaker_state
+        condition: "state == 'open'"
+        severity: critical
+        channels: [im]
+        message: "LLM 熔断器已打开（连续 3 次失败），5 分钟冷却中"
+        runbook: |
+          1. 检查 LLM Provider 服务状态
+          2. 检查网络连接
+          3. 等待 5 分钟冷却后自动恢复
+          4. 若持续触发，考虑切换 Provider
+
+  # ── 性能告警 ──
+  - name: performance
+    description: 响应延迟和吞吐量
+    alerts:
+      - name: latency_p95_high
+        display: P95 延迟过高
+        metric: agent_latency_p95
+        window: 5m
+        condition: "value > 15000"
+        severity: critical
+        channels: [im, log]
+        message: "P95 延迟升至 {{value}}ms，超过 15 秒阈值"
+        runbook: |
+          1. 检查是否是模型侧响应慢
+          2. 检查 scheduler 排队等待时间
+          3. 查看是否有异常长的工具调用
+          4. 检查 Token 消耗是否异常增大
+
+      - name: latency_p50_degradation
+        display: P50 延迟劣化
+        metric: agent_latency_p50
+        window: 15m
+        condition: "value > 5000"
+        severity: warning
+        channels: [log]
+        message: "P50 延迟升至 {{value}}ms，超过 5 秒基线"
+
+      - name: ttft_slow
+        display: 首 Token 延迟慢
+        metric: agent_ttft_p95
+        window: 10m
+        condition: "value > 8000"
+        severity: warning
+        channels: [log]
+        message: "TTFT P95 升至 {{value}}ms，用户感知明显卡顿"
+
+  # ── 质量告警 ──
+  - name: quality
+    description: 输出质量和安全
+    alerts:
+      - name: safety_flag_rate_high
+        display: 安全过滤标记异常
+        metric: safety_flag_rate
+        window: 30m
+        condition: "value > 0.10"
+        severity: critical
+        channels: [im, log]
+        message: "安全过滤标记率升至 {{value}}%，可能存在攻击或模型异常"
+        runbook: |
+          1. 检查最近的请求日志中是否有注入攻击
+          2. 检查 soul.md 是否有异常修改
+          3. 检查模型版本是否发生变化
+
+      - name: tool_error_rate_high
+        display: 工具调用失败率高
+        metric: tool_call_failure_rate
+        window: 15m
+        condition: "value > 0.10 AND tool_call_count >= 5"
+        severity: warning
+        channels: [log]
+        message: "工具调用失败率 {{value}}%，超过 10% 阈值"
+
+      - name: fallback_rate_high
+        display: Fallback 比例过高
+        metric: provider_fallback_rate
+        window: 15m
+        condition: "value > 0.30"
+        severity: warning
+        channels: [log]
+        message: "Provider Fallback 比例升至 {{value}}%，主 Provider 可能不稳定"
+
+  # ── 成本告警 ──
+  - name: cost
+    description: LLM API 调用费用
+    alerts:
+      - name: daily_cost_80pct
+        display: 日成本达预算 80%
+        metric: daily_cost
+        window: realtime
+        condition: "value > budget * 0.80"
+        severity: warning
+        channels: [im, log]
+        message: "今日 Agent 调用费用已达预算 80%（当前 ${{value}}）"
+
+      - name: daily_cost_100pct
+        display: 日成本超预算
+        metric: daily_cost
+        window: realtime
+        condition: "value > budget"
+        severity: critical
+        channels: [im]
+        message: "今日 Agent 调用费用已超预算！当前 ${{value}}，预算 ${{budget}}"
+        action: "consider_throttle"
+
+      - name: token_spike
+        display: Token 消耗异常飙升
+        metric: tokens_per_request_avg
+        window: 10m
+        condition: "value > baseline * 2.0 AND request_count >= 20"
+        severity: warning
+        channels: [log]
+        message: "平均每请求 Token 消耗升至 {{value}}，是基线的 {{ratio}} 倍"
+        runbook: |
+          1. 检查是否有 Agent 陷入循环调用
+          2. 检查历史压缩是否正常工作
+          3. 检查 Prompt 是否意外增大

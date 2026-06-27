@@ -1,0 +1,27 @@
+{
+  "id": "architecture/workflow-engine",
+  "title": "Workflow Engine",
+  "description": "The workflow engine enables agents to define and execute DAG-based task pipelines with human-in-the-loop approval.",
+  "source": "@site/docs/architecture/workflow-engine.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/workflow-engine",
+  "permalink": "/en/docs/architecture/workflow-engine",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/workflow-engine.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Agent System",
+    "permalink": "/en/docs/architecture/agent-system"
+  },
+  "next": {
+    "title": "Tool System",
+    "permalink": "/en/docs/architecture/tool-system"
+  }
+}

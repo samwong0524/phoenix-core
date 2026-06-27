@@ -1,0 +1,67 @@
+# Smoke-005: 多 Agent 协作
+# 验证 coordinator 能创建子 Agent 并委派任务
+test_id: smoke-multi-agent-005
+name: 多 Agent 协作编排
+category: smoke
+description: |
+  创建一个 coordinator Agent 并给它一个需要拆分的任务，
+  验证它能动态创建子 Agent、分配任务、汇总结果。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "multi-agent-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "task-coordinator"
+      workspace_id: "{{workspace_id}}"
+    save_as: coord_id
+
+  - action: create_group
+    params:
+      name: "task-group"
+      members: ["{{coord_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: |
+        请帮我完成以下任务：
+        1. 创建两个 worker Agent，分别负责"调研"和"撰写"
+        2. 让调研 Agent 总结 AI Agent 的 3 个关键特点
+        3. 让撰写 Agent 基于调研结果写一段简介
+        4. 最终汇总两个 Agent 的产出
+      sender_id: "human-tester"
+
+  - action: wait_for_response
+    params:
+      agent_id: "{{coord_id}}"
+      timeout_ms: 120000
+    save_as: response
+
+  - action: check_sub_agents
+    params:
+      workspace_id: "{{workspace_id}}"
+      min_count: 2
+    save_as: sub_agents
+
+assertions:
+  - type: not_empty
+    field: response
+    description: coordinator 必须返回响应
+  - type: sub_agents_created
+    field: sub_agents
+    min_count: 1
+    description: coordinator 应创建了至少 1 个子 Agent
+  - type: response_time
+    max_ms: 120000
+    description: 多 Agent 协作应在 2 分钟内完成
+
+timeout_ms: 180000
+priority: critical
+tags: [multi-agent, orchestration]

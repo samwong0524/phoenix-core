@@ -1,0 +1,23 @@
+{
+  "id": "intro",
+  "title": "Introduction",
+  "description": "SWARM IDE is a multi-agent orchestration platform built for production environments. It enables teams to deploy, coordinate, and manage multiple AI agents that collaborate through persistent chat groups, execute DAG-based workflows, and leverage an extensible tool ecosystem via the Model Context Protocol (MCP).",
+  "source": "@site/docs/intro.md",
+  "sourceDirName": ".",
+  "slug": "/intro",
+  "permalink": "/en/docs/intro",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/intro.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1
+  },
+  "sidebar": "docSidebar",
+  "next": {
+    "title": "Architecture Overview",
+    "permalink": "/en/docs/architecture/overview"
+  }
+}

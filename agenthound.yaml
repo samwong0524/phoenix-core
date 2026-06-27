@@ -1,0 +1,38 @@
+# AgentHound 配置文件 — Phoenix-Core
+# 当 AgentHound 正式安装后，本文件作为配置入口
+
+version: "1.0"
+
+project:
+  name: "phoenix-core"
+  agent_endpoint: "http://localhost:3100/api"  # Phoenix-Core 主 API
+  default_timeout: 60000
+
+suites:
+  smoke:
+    paths: ["tests/automated/smoke/"]
+    fail_fast: true          # 任一冒烟测试失败立即停止
+    on_fail: "block"         # 阻止上线
+  consistency:
+    paths: ["tests/automated/consistency/"]
+    fail_fast: false
+    on_fail: "warn"          # 仅警告
+  boundary:
+    paths: ["tests/automated/boundary/"]
+    fail_fast: false
+    on_fail: "warn"          # 仅警告
+
+baseline:
+  storage: "evals/results/baselines/"
+  auto_update: false         # 基线必须人工确认后更新
+  drift_threshold: 0.15      # 语义相似度偏差阈值 (创造性输出可放宽至 0.25)
+
+reporting:
+  format: "markdown"
+  output: "evals/results/reports/"
+  compare_baseline: true     # 报告中展示与基线的 diff
+
+runner:
+  script: "tests/agenthound_runner.py"
+  python: "python"
+  requirements: "tests/requirements.txt"

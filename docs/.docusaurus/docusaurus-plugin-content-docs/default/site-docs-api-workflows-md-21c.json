@@ -1,0 +1,27 @@
+{
+  "id": "api/workflows",
+  "title": "Workflows API",
+  "description": "Create Workflow",
+  "source": "@site/docs/api/workflows.md",
+  "sourceDirName": "api",
+  "slug": "/api/workflows",
+  "permalink": "/en/docs/api/workflows",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/api/workflows.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "sidebar_position": 4
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Groups API",
+    "permalink": "/en/docs/api/groups"
+  },
+  "next": {
+    "title": "Memories API",
+    "permalink": "/en/docs/api/memories"
+  }
+}

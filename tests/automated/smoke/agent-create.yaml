@@ -1,0 +1,60 @@
+# Smoke-001: Agent 创建与响应
+# 验证最基本的 Agent 创建 → 发消息 → 收到响应的完整链路
+test_id: smoke-agent-create-001
+name: Agent 创建与基本响应
+category: smoke
+description: |
+  创建一个 coordinator Agent，向其群组发送一条简单消息，
+  验证 Agent 能正常接收并产出非空响应。
+
+# 测试步骤（由 runner 按序执行）
+steps:
+  - action: create_workspace
+    params:
+      name: "smoke-test-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "test-coordinator"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "smoke-test-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "你好，请简单介绍一下你自己"
+      sender_id: "human-tester"
+
+  - action: wait_for_response
+    params:
+      agent_id: "{{agent_id}}"
+      timeout_ms: 30000
+
+assertions:
+  - type: not_empty
+    field: response_content
+    description: Agent 必须返回非空响应
+  - type: length
+    field: response_content
+    min: 10
+    description: 响应至少 10 个字符
+  - type: not_contains
+    field: response_content
+    values: ["error", "undefined", "null"]
+    description: 响应不应包含错误关键词
+  - type: response_time
+    max_ms: 30000
+    description: 响应必须在 30 秒内返回
+
+timeout_ms: 60000
+priority: critical
+tags: [agent-lifecycle, basic]

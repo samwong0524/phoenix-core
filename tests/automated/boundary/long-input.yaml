@@ -1,0 +1,61 @@
+# Boundary-002: 超长输入不崩溃
+# 发送超长文本（>100KB），系统应优雅降级
+test_id: boundary-long-input-002
+name: 超长输入容错
+category: boundary
+description: |
+  发送一段超长的文本消息（约 100K 字符），
+  验证系统不崩溃，能返回合理响应或截断提示。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "boundary-long-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "boundary-long-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "boundary-long-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: generate_long_text
+    params:
+      char_count: 100000
+      template: "这是一段测试文本，编号 {{index}}。"
+    save_as: long_text
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "{{long_text}}"
+      sender_id: "human-tester"
+
+  - action: wait_for_response_or_error
+    params:
+      agent_id: "{{agent_id}}"
+      timeout_ms: 60000
+    save_as: result
+
+assertions:
+  - type: no_server_error
+    field: result
+    description: 不应返回 500 或崩溃
+  - type: agent_alive
+    agent_id: "{{agent_id}}"
+    description: Agent 在处理超长输入后仍应存活
+  - type: response_time
+    max_ms: 60000
+    description: 应在 60 秒内返回响应或错误提示
+
+timeout_ms: 90000
+priority: medium
+tags: [boundary, input-validation]

@@ -88,11 +88,10 @@ export default async function HomePage() {
           desc="管理本地技能，搜索安装远程技能"
         />
         <NavCard
-          href="http://localhost:5173"
+          href="/models"
           title="模型管理"
           desc="FreeLLMAPI — 配置 API Key，管理模型"
-          external
-        />
+          />
       </div>
 
       {/* Workspaces */}

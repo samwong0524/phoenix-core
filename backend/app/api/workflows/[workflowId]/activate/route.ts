@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
+import { WorkflowEngine } from "@/runtime/workflow-engine";
 
 export async function POST(
   req: Request,
@@ -35,6 +36,10 @@ export async function POST(
              now()
       FROM tasks WHERE workflow_id = ${workflowId}`
   );
+
+  // Trigger the workflow engine to start processing tasks
+  const engine = WorkflowEngine.getInstance();
+  void engine.triggerWorkflow(workflowId);
 
   return Response.json({ id: workflowId, name: wf.name, status: "active" });
 }

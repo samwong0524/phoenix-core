@@ -157,6 +157,7 @@ textarea {
   grid-template-columns: 260px 1fr auto;
   position: relative;
   z-index: 1;
+  background: var(--bg-void);
 }
 
 .panel {
@@ -307,6 +308,7 @@ textarea {
   min-height: 0;
   z-index: 1;
   position: relative;
+  background: var(--bg-void);
 }
 
 .mid-stack {

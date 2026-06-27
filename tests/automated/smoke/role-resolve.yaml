@@ -1,0 +1,69 @@
+# Smoke-002: 角色解析正确性
+# 验证不同角色名称能被正确解析为对应的行为模板
+test_id: smoke-role-resolve-002
+name: Agent 角色解析
+category: smoke
+description: |
+  创建多个不同角色的 Agent，验证系统能将角色名正确映射到
+  行为模板（coordinator/worker/specialist/reviewer/researcher）。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "role-test-workspace"
+    save_as: workspace_id
+
+  # 测试英文角色名
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "eng-coordinator"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "coordinator"
+
+  - action: create_agent
+    params:
+      role: "frontend developer"
+      name: "eng-frontend"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "specialist"
+
+  - action: create_agent
+    params:
+      role: "reviewer"
+      name: "eng-reviewer"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "reviewer"
+
+  # 测试中文角色名
+  - action: create_agent
+    params:
+      role: "产品经理"
+      name: "cn-pm"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "coordinator"
+
+  - action: create_agent
+    params:
+      role: "程序员"
+      name: "cn-coder"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "specialist"
+
+  # 测试未知角色回退
+  - action: create_agent
+    params:
+      role: "unknown_role_xyz"
+      name: "fallback-agent"
+      workspace_id: "{{workspace_id}}"
+    assert_role_template: "worker"
+
+assertions:
+  - type: all_agents_created
+    description: 所有 Agent 都必须成功创建
+  - type: role_mapping_correct
+    description: 角色映射必须与预期一致
+
+timeout_ms: 30000
+priority: critical
+tags: [role-resolution, soul]

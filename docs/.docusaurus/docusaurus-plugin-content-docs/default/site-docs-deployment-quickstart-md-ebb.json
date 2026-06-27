@@ -1,0 +1,27 @@
+{
+  "id": "deployment/quickstart",
+  "title": "Quick Start",
+  "description": "Local Development",
+  "source": "@site/docs/deployment/quickstart.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/quickstart",
+  "permalink": "/en/docs/deployment/quickstart",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/deployment/quickstart.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Deployment Overview",
+    "permalink": "/en/docs/deployment/overview"
+  },
+  "next": {
+    "title": "Configuration",
+    "permalink": "/en/docs/deployment/configuration"
+  }
+}

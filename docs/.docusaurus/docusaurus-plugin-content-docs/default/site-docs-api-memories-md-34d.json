@@ -1,0 +1,27 @@
+{
+  "id": "api/memories",
+  "title": "Memories API",
+  "description": "Add Memory",
+  "source": "@site/docs/api/memories.md",
+  "sourceDirName": "api",
+  "slug": "/api/memories",
+  "permalink": "/en/docs/api/memories",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/api/memories.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "sidebar_position": 5
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Workflows API",
+    "permalink": "/en/docs/api/workflows"
+  },
+  "next": {
+    "title": "Deployment Overview",
+    "permalink": "/en/docs/deployment/overview"
+  }
+}

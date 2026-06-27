@@ -1,0 +1,27 @@
+{
+  "id": "architecture/core-concepts",
+  "title": "Core Concepts",
+  "description": "Agent",
+  "source": "@site/docs/architecture/core-concepts.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/core-concepts",
+  "permalink": "/en/docs/architecture/core-concepts",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/core-concepts.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Architecture Overview",
+    "permalink": "/en/docs/architecture/overview"
+  },
+  "next": {
+    "title": "Agent System",
+    "permalink": "/en/docs/architecture/agent-system"
+  }
+}

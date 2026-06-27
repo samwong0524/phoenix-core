@@ -1,0 +1,31 @@
+{
+  "defaultLocale": "zh-CN",
+  "locales": [
+    "zh-CN",
+    "en"
+  ],
+  "path": "i18n",
+  "currentLocale": "en",
+  "localeConfigs": {
+    "zh-CN": {
+      "label": "中文（中国）",
+      "direction": "ltr",
+      "htmlLang": "zh-CN",
+      "calendar": "gregory",
+      "path": "zh-CN",
+      "translate": false,
+      "url": "https://swarm-ide.com",
+      "baseUrl": "/"
+    },
+    "en": {
+      "label": "English",
+      "direction": "ltr",
+      "htmlLang": "en",
+      "calendar": "gregory",
+      "path": "en",
+      "translate": false,
+      "url": "https://swarm-ide.com",
+      "baseUrl": "/en/"
+    }
+  }
+}

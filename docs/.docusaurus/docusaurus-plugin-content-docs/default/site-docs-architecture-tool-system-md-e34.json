@@ -1,0 +1,27 @@
+{
+  "id": "architecture/tool-system",
+  "title": "Tool System",
+  "description": "The tool system provides 25+ built-in tools organized by domain, plus extensibility through MCP servers.",
+  "source": "@site/docs/architecture/tool-system.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/tool-system",
+  "permalink": "/en/docs/architecture/tool-system",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/tool-system.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "sidebar_position": 5
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Workflow Engine",
+    "permalink": "/en/docs/architecture/workflow-engine"
+  },
+  "next": {
+    "title": "MCP Integration",
+    "permalink": "/en/docs/architecture/mcp-integration"
+  }
+}

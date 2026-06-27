@@ -1,0 +1,1 @@
+- generic [ref=e2]: "{\"error\":\"Database not ready\",\"message\":\"Failed query: select \\\"id\\\", \\\"name\\\", \\\"created_at\\\" from \\\"workspaces\\\" order by \\\"workspaces\\\".\\\"created_at\\\" desc\\nparams: \",\"hint\":\"Run POST /api/admin/init-db after starting Postgres\"}"

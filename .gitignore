@@ -32,3 +32,6 @@ backend/msgs.json
 backend/nul
 backend/test-mcp.js
 backend/.debug-archive/
+
+# AgentHound regression test reports (auto-generated, not tracked)
+evals/results/reports/

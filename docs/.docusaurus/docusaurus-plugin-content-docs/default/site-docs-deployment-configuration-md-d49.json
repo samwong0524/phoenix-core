@@ -1,0 +1,27 @@
+{
+  "id": "deployment/configuration",
+  "title": "Configuration",
+  "description": "LLM Provider",
+  "source": "@site/docs/deployment/configuration.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/configuration",
+  "permalink": "/en/docs/deployment/configuration",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/deployment/configuration.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Quick Start",
+    "permalink": "/en/docs/deployment/quickstart"
+  },
+  "next": {
+    "title": "Production Deployment",
+    "permalink": "/en/docs/deployment/production"
+  }
+}

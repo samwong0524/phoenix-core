@@ -1,0 +1,147 @@
+
+> phoenix-core-backend@0.0.1 dev
+> next dev -H 127.0.0.1 -p 3017 --webpack
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of F:\swarm-ide\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * F:\swarm-ide\backend\package-lock.json
+
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://127.0.0.1:3017
+- Network:       http://127.0.0.1:3017
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 2.6s
+○ Compiling /im ...
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+⚠ Unsupported metadata themeColor is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /api/ui-stream?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 12.3s (compile: 11.5s, render: 788ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28/context-stream?groupId=86630625-7848-4997-9721-97f866835a42 200 in 12.3s
+[redis:cleanup] starting cleanup for stream ui:b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 every 60s
+ GET /im?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 12.8s (compile: 11.5s, render: 1274ms)
+[WorkflowEngine] Starting task processor
+[AgentRuntime] Workflow engine started
+[redis:cleanup] starting cleanup for stream agent:4c51be8c-6783-4ae6-8c4d-92a3cf322c28 every 60s
+[AgentRunner:wakeup] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 reason=context_stream
+[processUntilIdle] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 iterations=1 batches=0
+○ Compiling /api/models ...
+⚠ Unsupported metadata themeColor is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /im?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 86ms (compile: 45ms, render: 41ms)
+ GET /api/workspace-init?overrideWorkspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 4.0s (compile: 3.8s, render: 224ms)
+ GET /api/models 200 in 4.3s (compile: 3.8s, render: 582ms)
+[redis:cleanup] starting cleanup for stream ui:b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 every 60s
+⚠ Unsupported metadata themeColor is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+[AgentRunner:wakeup] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 reason=context_stream
+ GET /im?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 114ms (compile: 56ms, render: 58ms)
+[redis:cleanup] starting cleanup for stream agent:4c51be8c-6783-4ae6-8c4d-92a3cf322c28 every 60s
+[processUntilIdle] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 iterations=1 batches=0
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 2.4s (compile: 2.4s, render: 47ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 583ms (compile: 542ms, render: 41ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?markRead=true&readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 2.6s (compile: 2.5s, render: 46ms)
+⚠ Unsupported metadata themeColor is configured in metadata export in /. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 1930ms (compile: 1741ms, render: 190ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 2.1s (compile: 1903ms, render: 191ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 45ms (compile: 34ms, render: 11ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 52ms (compile: 33ms, render: 19ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 23ms (compile: 15ms, render: 8ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 27ms (compile: 10ms, render: 17ms)
+ GET / 200 in 2.5s (compile: 2.2s, render: 327ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 2.7s (compile: 2.4s, render: 345ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 11ms (compile: 3ms, render: 8ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 34ms (compile: 3ms, render: 31ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 28ms (compile: 2ms, render: 26ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 30ms (compile: 2ms, render: 28ms)
+⚠ Unsupported metadata themeColor is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /im?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 42ms (compile: 16ms, render: 26ms)
+ GET /api/workspace-init?overrideWorkspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 78ms (compile: 13ms, render: 65ms)
+ GET /api/workspace-init?overrideWorkspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 49ms (compile: 4ms, render: 45ms)
+ GET /api/ui-stream?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 170ms (compile: 145ms, render: 25ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 178ms (compile: 18ms, render: 160ms)
+[redis:cleanup] starting cleanup for stream ui:b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 every 60s
+[AgentRunner:wakeup] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 reason=context_stream
+[redis:cleanup] starting cleanup for stream agent:4c51be8c-6783-4ae6-8c4d-92a3cf322c28 every 60s
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?markRead=true&readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 238ms (compile: 161ms, render: 78ms)
+[processUntilIdle] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 iterations=1 batches=0
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?markRead=true&readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 19ms (compile: 3ms, render: 16ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 22ms (compile: 9ms, render: 13ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 18ms (compile: 10ms, render: 8ms)
+ GET /api/models 200 in 481ms (compile: 8ms, render: 473ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 34ms (compile: 3ms, render: 31ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 36ms (compile: 7ms, render: 29ms)
+ GET /api/models 200 in 10ms (compile: 6ms, render: 4ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 15ms (compile: 3ms, render: 12ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 16ms (compile: 7ms, render: 9ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 16ms (compile: 4ms, render: 12ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 17ms (compile: 10ms, render: 7ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 132ms (compile: 6ms, render: 126ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 33ms (compile: 2ms, render: 31ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 33ms (compile: 2ms, render: 31ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 29ms (compile: 3ms, render: 27ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 34ms (compile: 2ms, render: 32ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 32ms (compile: 2ms, render: 29ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 34ms (compile: 2ms, render: 32ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 31ms (compile: 2ms, render: 28ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 32ms (compile: 2ms, render: 29ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 31ms (compile: 2ms, render: 29ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 11ms (compile: 3ms, render: 9ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 42ms (compile: 4ms, render: 38ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 25ms (compile: 14ms, render: 11ms)
+⚠ Unsupported metadata themeColor is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+⚠ Unsupported metadata viewport is configured in metadata export in /im. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /im?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 208ms (compile: 7ms, render: 201ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 262ms (compile: 6ms, render: 256ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 11ms (compile: 3ms, render: 8ms)
+ GET /api/ui-stream?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 9.8s (compile: 1602ms, render: 8.2s)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28/context-stream?groupId=86630625-7848-4997-9721-97f866835a42 200 in 9.8s (compile: 1595ms, render: 8.2s)
+ GET /api/models 200 in 15ms (compile: 10ms, render: 5ms)
+ GET /api/workspace-init?overrideWorkspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 57ms (compile: 4ms, render: 53ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 40ms (compile: 15ms, render: 26ms)
+[AgentRunner:wakeup] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 reason=context_stream
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?markRead=true&readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 95ms (compile: 30ms, render: 65ms)
+[processUntilIdle] agent=4c51be8c-6783-4ae6-8c4d-92a3cf322c28 iterations=1 batches=0
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 29ms (compile: 12ms, render: 17ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 23ms (compile: 11ms, render: 12ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 19ms (compile: 5ms, render: 14ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 20ms (compile: 11ms, render: 9ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 19ms (compile: 4ms, render: 15ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 20ms (compile: 9ms, render: 11ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28 200 in 20ms (compile: 5ms, render: 16ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 131ms (compile: 8ms, render: 123ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 24ms (compile: 11ms, render: 14ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 36ms (compile: 3ms, render: 33ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 37ms (compile: 4ms, render: 33ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 42ms (compile: 4ms, render: 38ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 42ms (compile: 4ms, render: 38ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 37ms (compile: 3ms, render: 34ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 36ms (compile: 3ms, render: 33ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 37ms (compile: 3ms, render: 34ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 12ms (compile: 3ms, render: 8ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 58ms (compile: 3ms, render: 55ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 48ms (compile: 5ms, render: 42ms)
+ GET /api/groups/86630625-7848-4997-9721-97f866835a42/messages?readerId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 21ms (compile: 12ms, render: 9ms)
+ GET /api/groups?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6&agentId=25d5111d-5ab9-4092-aa88-3640adb85fd0 200 in 58ms (compile: 5ms, render: 52ms)
+ GET /api/agents/4c51be8c-6783-4ae6-8c4d-92a3cf322c28/context-stream?groupId=86630625-7848-4997-9721-97f866835a42 200 in 83s (compile: 44ms, render: 83s)
+ GET /api/ui-stream?workspaceId=b9c7c2b2-ca43-4faf-b00a-ce995f980ac6 200 in 83s (compile: 27ms, render: 83s)

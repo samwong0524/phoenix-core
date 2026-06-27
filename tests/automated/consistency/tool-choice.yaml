@@ -1,0 +1,53 @@
+# Consistency-003: 工具选择一致性
+# 对类似的任务指令，Agent 应选择相同的工具集
+test_id: cons-tool-choice-003
+name: 工具选择一致性
+category: consistency
+description: |
+  多次发送"执行命令"类指令，验证 Agent 每次
+  都选择 bash 工具而非其他工具。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "cons-tool-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "cons-tool-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "cons-tool-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_and_check_tools
+    params:
+      group_id: "{{group_id}}"
+      messages:
+        - "请运行 echo test1"
+        - "执行命令 echo test2"
+        - "帮我在终端跑一下 echo test3"
+      sender_id: "human-tester"
+      timeout_ms: 45000
+    save_as: tool_calls
+
+assertions:
+  - type: same_tool_chosen
+    field: tool_calls
+    expected_tool: "bash"
+    min_match_pct: 66
+    description: 至少 2/3 的 shell 类指令应使用 bash 工具
+  - type: all_responded
+    field: tool_calls
+    description: 每次都应成功返回结果
+
+timeout_ms: 180000
+priority: medium
+tags: [consistency, tools]

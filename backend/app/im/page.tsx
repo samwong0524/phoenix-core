@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useSearchParams } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
@@ -2024,7 +2024,23 @@ function IMPageInner() {
                   style={{ position: "absolute", inset: 0 }}
                 >
                   <g>
-                    {/* Static edges rendered by TopoAnimCanvas canvas overlay instead */}
+                    {vizLayout.edges.map((edge) => {
+                      const from = vizLayout.positions.get(edge.fromId);
+                      const to = vizLayout.positions.get(edge.toId);
+                      if (!from || !to) return null;
+                      return (
+                        <line
+                          key={`edge-${edge.fromId}-${edge.toId}`}
+                          x1={from.x}
+                          y1={from.y}
+                          x2={to.x}
+                          y2={to.y}
+                          stroke="var(--border-bright)"
+                          strokeWidth={1.5}
+                          opacity={0.4}
+                        />
+                      );
+                    })}
                   </g>
                   <AnimatePresence>
                     {vizBeams.map((beam) => {

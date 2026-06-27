@@ -1,0 +1,32 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @keyframes glow {
+        0%, 100% { filter: drop-shadow(0 0 4px #00d4ff) drop-shadow(0 0 8px #00d4ff); }
+        50% { filter: drop-shadow(0 0 8px #00d4ff) drop-shadow(0 0 16px #00d4ff); }
+      }
+      .neon-blue { fill: none; stroke: #00d4ff; stroke-width: 3; animation: glow 2s infinite; }
+      .neon-purple { fill: none; stroke: #b700ff; stroke-width: 3; animation: glow 2s infinite 0.3s; }
+    </style>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="128" height="128" fill="#0a0e27" rx="8"/>
+  
+  <!-- 立方体 - 紫蓝色霓虹风格 -->
+  <!-- 前面正方形 -->
+  <rect x="32" y="40" width="40" height="40" class="neon-blue"/>
+  
+  <!-- 顶面平行四边形 -->
+  <path d="M 32 40 L 48 20 L 88 20 L 72 40" class="neon-purple"/>
+  
+  <!-- 右侧平行四边形 -->
+  <path d="M 72 40 L 88 20 L 88 60 L 72 80" class="neon-blue"/>
+  
+  <!-- 内部细节线条 -->
+  <line x1="52" y1="40" x2="68" y2="20" class="neon-purple" opacity="0.5"/>
+  <line x1="32" y1="60" x2="48" y2="40" class="neon-blue" opacity="0.5"/>
+  
+  <!-- 中心发光点 -->
+  <circle cx="64" cy="64" r="3" fill="#00d4ff" filter="drop-shadow(0 0 6px #00d4ff)"/>
+</svg>

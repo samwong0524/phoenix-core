@@ -1,0 +1,27 @@
+{
+  "id": "api/agents",
+  "title": "Agents API",
+  "description": "List Agents",
+  "source": "@site/docs/api/agents.md",
+  "sourceDirName": "api",
+  "slug": "/api/agents",
+  "permalink": "/en/docs/api/agents",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/api/agents.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "sidebar_position": 2
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "API Reference",
+    "permalink": "/en/docs/api/overview"
+  },
+  "next": {
+    "title": "Groups API",
+    "permalink": "/en/docs/api/groups"
+  }
+}

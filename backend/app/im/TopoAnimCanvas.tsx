@@ -5,6 +5,17 @@ import { useEffect, useRef } from "react";
 type TopoNode = { id: string; x: number; y: number; color: string; r: number; status: string };
 type TopoEdge = { fromId: string; toId: string };
 
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace(/^#/, "");
+  const r = parseInt(h.substring(0, 2), 16);
+  if (isNaN(r)) return `rgba(100,100,100,${a})`;
+  const g = parseInt(h.substring(2, 4), 16);
+  if (isNaN(g)) return `rgba(100,100,100,${a})`;
+  const b = parseInt(h.substring(4, 6), 16);
+  if (isNaN(b)) return `rgba(100,100,100,${a})`;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 export function TopoAnimCanvas({
   width,
   height,
@@ -71,10 +82,10 @@ export function TopoAnimCanvas({
       // --- Nodes: outer ring glow ---
       for (const n of nodes) {
         const nx = n.x, ny = n.y;
-        const alpha = n.status === "BUSY" ? "40" : "30";
+        const alpha = n.status === "BUSY" ? 0.25 : 0.19;
         const g = ctx.createRadialGradient(nx, ny, n.r - 2, nx, ny, n.r + 28);
-        g.addColorStop(0, n.color + alpha);
-        g.addColorStop(0.5, n.color + "10");
+        g.addColorStop(0, hexToRgba(n.color, alpha));
+        g.addColorStop(0.5, hexToRgba(n.color, 0.06));
         g.addColorStop(1, "transparent");
         ctx.beginPath();
         ctx.arc(nx, ny, n.r + 28, 0, Math.PI * 2);

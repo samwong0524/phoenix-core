@@ -1,0 +1,27 @@
+{
+  "id": "architecture/mcp-integration",
+  "title": "MCP Integration",
+  "description": "SWARM IDE integrates with the Model Context Protocol (MCP) to extend agent capabilities with external tools and resources.",
+  "source": "@site/docs/architecture/mcp-integration.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/mcp-integration",
+  "permalink": "/en/docs/architecture/mcp-integration",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/mcp-integration.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 6,
+  "frontMatter": {
+    "sidebar_position": 6
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Tool System",
+    "permalink": "/en/docs/architecture/tool-system"
+  },
+  "next": {
+    "title": "API Reference",
+    "permalink": "/en/docs/api/overview"
+  }
+}

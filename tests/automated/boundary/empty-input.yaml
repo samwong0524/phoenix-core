@@ -1,0 +1,57 @@
+# Boundary-001: 空输入不崩溃
+# 向 Agent 发送空消息或纯空白消息，系统不应崩溃
+test_id: boundary-empty-input-001
+name: 空输入容错
+category: boundary
+description: |
+  发送空字符串和纯空白字符串消息，验证系统能优雅处理，
+  不产生未捕获异常或 500 错误。
+
+inputs:
+  - ""
+  - "   "
+  - "\n\n"
+
+steps:
+  - action: create_workspace
+    params:
+      name: "boundary-empty-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "boundary-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "boundary-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_each_and_check
+    params:
+      group_id: "{{group_id}}"
+      messages: "{{inputs}}"
+      sender_id: "human-tester"
+      timeout_ms: 15000
+    save_as: results
+
+assertions:
+  - type: no_server_error
+    field: results
+    description: 不应返回 500 或内部错误
+  - type: agent_alive
+    agent_id: "{{agent_id}}"
+    description: Agent 在处理空输入后仍应存活
+  - type: contains_any
+    field: results
+    values: ["请输入", "请提供", "没有收到", "请发送", "请问"]
+    description: Agent 应引导用户输入有效内容
+
+timeout_ms: 60000
+priority: medium
+tags: [boundary, input-validation]

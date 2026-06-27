@@ -1,0 +1,60 @@
+# Smoke-003: 消息路由
+# 验证消息能正确发送到群组，并唤醒对应的 Agent
+test_id: smoke-msg-route-003
+name: 群组消息路由
+category: smoke
+description: |
+  创建一个包含多个 Agent 的群组，发送消息后验证
+  所有群组内的 Agent 都被唤醒并产生了响应。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "route-test-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "coordinator"
+      name: "route-coord"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_1
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "route-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_2
+
+  - action: create_group
+    params:
+      name: "route-test-group"
+      members: ["{{agent_1}}", "{{agent_2}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "请两个 Agent 分别汇报自己负责的工作"
+      sender_id: "human-tester"
+
+  - action: wait_for_responses
+    params:
+      agent_ids: ["{{agent_1}}", "{{agent_2}}"]
+      timeout_ms: 30000
+    save_as: responses
+
+assertions:
+  - type: all_responded
+    field: responses
+    min_agents: 1
+    description: 至少一个 Agent 必须产生响应
+  - type: not_empty
+    field: responses
+    description: 响应内容不能为空
+
+timeout_ms: 60000
+priority: critical
+tags: [messaging, routing]

@@ -1,0 +1,59 @@
+# Consistency-002: 同类任务响应一致性
+# 向同一 Agent 发送语义相同的不同表述，输出应保持主题一致
+test_id: cons-task-response-002
+name: 同类任务响应一致性
+category: consistency
+description: |
+  向 worker Agent 发送 3 条语义相同但措辞不同的消息，
+  验证响应在主题和结构上保持一致。
+
+inputs:
+  - "什么是 Agent 自主性？请简要说明"
+  - "请解释一下智能体的自主决策能力"
+  - "Agent autonomy 是什么概念？"
+
+steps:
+  - action: create_workspace
+    params:
+      name: "cons-task-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "cons-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "cons-task-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_multiple_and_collect
+    params:
+      group_id: "{{group_id}}"
+      messages: "{{inputs}}"
+      sender_id: "human-tester"
+      timeout_ms: 30000
+    save_as: responses
+
+assertions:
+  - type: same_topic
+    field: responses
+    keywords: ["自主", "决策", "autonomy", "独立", "agent"]
+    description: 三条响应都应围绕 Agent 自主性主题
+  - type: response_length_consistent
+    field: responses
+    max_variance_pct: 50
+    description: 响应长度不应差异过大（排除模型随机截断）
+  - type: not_contains
+    field: responses
+    values: ["无法回答", "抱歉", "error"]
+    description: 不应出现拒绝回答或错误
+
+timeout_ms: 120000
+priority: high
+tags: [consistency, semantic]

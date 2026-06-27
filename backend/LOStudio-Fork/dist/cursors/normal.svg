@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <defs>
+    <filter id="g"><feDropShadow dx="0" dy="0" stdDeviation="0.6" flood-color="#06d6a0" flood-opacity="0.9"/></filter>
+  </defs>
+  <path d="M2 1L2 16L6 12L9.5 18.5L11.5 17.5L8 11L13 11Z" fill="#080818" stroke="#06d6a0" stroke-width="1" stroke-linejoin="round" filter="url(#g)"/>
+</svg>

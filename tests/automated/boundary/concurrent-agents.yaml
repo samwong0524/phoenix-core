@@ -1,0 +1,62 @@
+# Boundary-004: 并发 Agent 压力
+# 同时创建多个 Agent 并发送消息，验证系统稳定性
+test_id: boundary-concurrent-004
+name: 并发 Agent 稳定性
+category: boundary
+description: |
+  同时创建 5 个 Agent 并向它们发送消息，
+  验证所有 Agent 都能正常响应，无竞态条件。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "boundary-concurrent-workspace"
+    save_as: workspace_id
+
+  - action: create_agents_parallel
+    params:
+      workspace_id: "{{workspace_id}}"
+      agents:
+        - { role: "worker", name: "concurrent-1" }
+        - { role: "worker", name: "concurrent-2" }
+        - { role: "worker", name: "concurrent-3" }
+        - { role: "researcher", name: "concurrent-4" }
+        - { role: "specialist", name: "concurrent-5" }
+    save_as: agent_ids
+
+  - action: create_group
+    params:
+      name: "concurrent-group"
+      members: "{{agent_ids}}"
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "请每个 Agent 用一句话介绍自己"
+      sender_id: "human-tester"
+
+  - action: wait_for_responses
+    params:
+      agent_ids: "{{agent_ids}}"
+      timeout_ms: 60000
+      min_responses: 3
+    save_as: responses
+
+assertions:
+  - type: all_agents_created
+    field: agent_ids
+    expected_count: 5
+    description: 5 个 Agent 必须全部成功创建
+  - type: min_responses_received
+    field: responses
+    min_count: 3
+    description: 至少 3 个 Agent 应返回响应
+  - type: no_server_error
+    field: responses
+    description: 不应有 500 错误或超时异常
+
+timeout_ms: 120000
+priority: medium
+tags: [boundary, concurrency, stability]

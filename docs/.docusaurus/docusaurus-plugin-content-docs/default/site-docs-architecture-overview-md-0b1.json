@@ -1,0 +1,27 @@
+{
+  "id": "architecture/overview",
+  "title": "Architecture Overview",
+  "description": "SWARM IDE is designed around a runtime-per-agent model where each agent runs in its own event loop, sharing infrastructure through the database and message bus.",
+  "source": "@site/docs/architecture/overview.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/overview",
+  "permalink": "/en/docs/architecture/overview",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/overview.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Introduction",
+    "permalink": "/en/docs/intro"
+  },
+  "next": {
+    "title": "Core Concepts",
+    "permalink": "/en/docs/architecture/core-concepts"
+  }
+}

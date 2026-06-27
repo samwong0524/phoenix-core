@@ -1,0 +1,27 @@
+{
+  "id": "deployment/overview",
+  "title": "Deployment Overview",
+  "description": "SWARM IDE can be deployed in several configurations:",
+  "source": "@site/docs/deployment/overview.md",
+  "sourceDirName": "deployment",
+  "slug": "/deployment/overview",
+  "permalink": "/en/docs/deployment/overview",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/deployment/overview.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "sidebar_position": 1
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Memories API",
+    "permalink": "/en/docs/api/memories"
+  },
+  "next": {
+    "title": "Quick Start",
+    "permalink": "/en/docs/deployment/quickstart"
+  }
+}

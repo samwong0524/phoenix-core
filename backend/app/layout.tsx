@@ -1,19 +1,21 @@
-import "./globals.css";
+﻿import "./globals.css";
 import { RegisterSW } from "./register-sw";
 
 export const metadata = {
   title: "SWARM IDE",
   description: "Multi-agent collaboration platform",
   manifest: "/manifest.json",
-  themeColor: "#0a0a0a",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "SWARM" },
-  viewport: {
+};
+
+export function generateViewport() {
+  return {
     width: "device-width",
     initialScale: 1,
     maximumScale: 1,
     viewportFit: "cover",
-  },
-};
+    themeColor: "#0a0a0a",
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

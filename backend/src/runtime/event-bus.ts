@@ -107,7 +107,22 @@ export class AgentEventBus {
     const channel = this.getChannel(agentId);
     return channel.nextId - 1;
   }
+
+  /**
+   * Initialize cross-instance event bus pub/sub.
+   * No-op if Redis is not configured.
+   */
+  async initCrossInstance(): Promise<void> {
+    try {
+      const { getRedisClient } = await import("./upstash-realtime");
+      await getRedisClient();
+    } catch {
+      // Redis not available
+    }
+  }
 }
+
+
 
 export type { AgentEvent };
 

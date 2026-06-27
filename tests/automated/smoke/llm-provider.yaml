@@ -1,0 +1,65 @@
+# Smoke-007: LLM Provider 链路
+# 验证 LLM 流式响应正常、不报错
+test_id: smoke-llm-provider-007
+name: LLM Provider 流式响应
+category: smoke
+description: |
+  通过 Agent 发送消息触发 LLM 调用，验证流式响应
+  能正常返回完整内容，不中断、不乱码。
+
+steps:
+  - action: create_workspace
+    params:
+      name: "llm-test-workspace"
+    save_as: workspace_id
+
+  - action: create_agent
+    params:
+      role: "worker"
+      name: "llm-worker"
+      workspace_id: "{{workspace_id}}"
+    save_as: agent_id
+
+  - action: create_group
+    params:
+      name: "llm-test-group"
+      members: ["{{agent_id}}"]
+      workspace_id: "{{workspace_id}}"
+    save_as: group_id
+
+  - action: send_message
+    params:
+      group_id: "{{group_id}}"
+      content: "请用一段话解释什么是多智能体系统"
+      sender_id: "human-tester"
+
+  - action: wait_for_response
+    params:
+      agent_id: "{{agent_id}}"
+      timeout_ms: 60000
+    save_as: response
+
+  - action: check_stream_integrity
+    params:
+      agent_id: "{{agent_id}}"
+    save_as: stream_check
+
+assertions:
+  - type: not_empty
+    field: response
+    description: 流式响应合并后不能为空
+  - type: length
+    field: response
+    min: 20
+    description: 响应至少 20 个字符（非截断）
+  - type: no_stream_errors
+    field: stream_check
+    description: 流式传输过程中不应有错误事件
+  - type: contains_any
+    field: response
+    values: ["多智能体", "agent", "协作", "系统"]
+    description: 响应应与问题主题相关
+
+timeout_ms: 90000
+priority: critical
+tags: [llm, streaming, provider]

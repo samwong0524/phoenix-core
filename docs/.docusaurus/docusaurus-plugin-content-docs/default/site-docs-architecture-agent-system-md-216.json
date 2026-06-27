@@ -1,0 +1,27 @@
+{
+  "id": "architecture/agent-system",
+  "title": "Agent System",
+  "description": "AgentRunner Event Loop",
+  "source": "@site/docs/architecture/agent-system.md",
+  "sourceDirName": "architecture",
+  "slug": "/architecture/agent-system",
+  "permalink": "/en/docs/architecture/agent-system",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/swarm-ide/swarm-ide/edit/main/docs/docs/architecture/agent-system.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "sidebar_position": 3
+  },
+  "sidebar": "docSidebar",
+  "previous": {
+    "title": "Core Concepts",
+    "permalink": "/en/docs/architecture/core-concepts"
+  },
+  "next": {
+    "title": "Workflow Engine",
+    "permalink": "/en/docs/architecture/workflow-engine"
+  }
+}

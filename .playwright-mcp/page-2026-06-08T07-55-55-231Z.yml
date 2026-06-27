@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "PHOENIX CORE" [level=1] [ref=e5]
+      - generic [ref=e6]: Agent Wechat
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]: Provider
+        - generic [ref=e10]: freellmapi
+      - generic [ref=e11]:
+        - generic [ref=e12]: Agents
+        - generic [ref=e13]: "0"
+      - generic [ref=e14]:
+        - generic [ref=e15]: Skills
+        - generic [ref=e16]: "18"
+      - generic [ref=e17]:
+        - generic [ref=e18]: Groups
+        - generic [ref=e19]: "0"
+      - generic [ref=e20]:
+        - generic [ref=e21]: Workspaces
+        - generic [ref=e22]: "0"
+    - generic [ref=e23]: 快速导航
+    - generic [ref=e25]:
+      - link "IM 聊天 与 Agent 实时对话，创建群组工作流" [ref=e26] [cursor=pointer]:
+        - /url: /im
+        - generic [ref=e27]: IM 聊天
+        - generic [ref=e28]: 与 Agent 实时对话，创建群组工作流
+      - link "图谱 查看 Agent 关系网络" [ref=e29] [cursor=pointer]:
+        - /url: /graph
+        - generic [ref=e30]: 图谱
+        - generic [ref=e31]: 查看 Agent 关系网络
+      - link "技能管理 管理本地技能，搜索安装远程技能" [ref=e32] [cursor=pointer]:
+        - /url: /skills
+        - generic [ref=e33]: 技能管理
+        - generic [ref=e34]: 管理本地技能，搜索安装远程技能
+      - link "模型管理 FreeLLMAPI — 配置 API Key，管理模型" [ref=e35] [cursor=pointer]:
+        - /url: http://localhost:5173
+        - generic [ref=e36]: 模型管理
+        - generic [ref=e37]: FreeLLMAPI — 配置 API Key，管理模型
+    - generic [ref=e38]:
+      - generic [ref=e39]: 工作区
+      - paragraph [ref=e40]: 点击工作区打开 IM 对话，或使用右侧删除键删除。
+      - generic [ref=e41]: No workspaces yet. Open IM to create one.
+    - generic [ref=e42]:
+      - generic [ref=e43]: 新建工作区
+      - generic [ref=e44]:
+        - textbox "Workspace name" [ref=e45]: New Workspace
+        - button "Create" [ref=e46] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e52] [cursor=pointer]:
+    - img [ref=e53]

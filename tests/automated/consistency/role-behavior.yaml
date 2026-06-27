@@ -1,0 +1,39 @@
+# Consistency-001: 角色行为一致性
+# 相同角色多次创建，其系统提示词应包含相同的行为模板
+test_id: cons-role-behavior-001
+name: 角色行为模板一致性
+category: consistency
+description: |
+  多次创建同一角色的 Agent，验证注入的系统提示词
+  中行为模板的核心指令保持一致。
+
+runs: 3  # 重复 3 次取一致性
+
+steps:
+  - action: create_workspace
+    params:
+      name: "cons-role-workspace"
+    save_as: workspace_id
+
+  - action: loop_create_and_inspect
+    params:
+      role: "coordinator"
+      name_prefix: "cons-coord"
+      workspace_id: "{{workspace_id}}"
+      repeat: 3
+      inspect_field: "system_prompt"
+    save_as: prompts
+
+assertions:
+  - type: same_template_keywords
+    field: prompts
+    keywords: ["coordinator", "delegate", "review", "管理", "协调"]
+    description: 每次创建 coordinator 的系统提示词应包含相同核心指令词
+  - type: prompt_length_consistent
+    field: prompts
+    max_variance_pct: 10
+    description: 系统提示词长度偏差不应超过 10%
+
+timeout_ms: 30000
+priority: high
+tags: [consistency, role, soul]

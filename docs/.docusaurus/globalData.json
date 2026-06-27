@@ -1,0 +1,108 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/en/docs",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/en/docs",
+          "mainDocId": "intro",
+          "docs": [
+            {
+              "id": "api/agents",
+              "path": "/en/docs/api/agents",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "api/groups",
+              "path": "/en/docs/api/groups",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "api/memories",
+              "path": "/en/docs/api/memories",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "api/overview",
+              "path": "/en/docs/api/overview",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "api/workflows",
+              "path": "/en/docs/api/workflows",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/agent-system",
+              "path": "/en/docs/architecture/agent-system",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/core-concepts",
+              "path": "/en/docs/architecture/core-concepts",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/mcp-integration",
+              "path": "/en/docs/architecture/mcp-integration",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/overview",
+              "path": "/en/docs/architecture/overview",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/tool-system",
+              "path": "/en/docs/architecture/tool-system",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "architecture/workflow-engine",
+              "path": "/en/docs/architecture/workflow-engine",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "deployment/configuration",
+              "path": "/en/docs/deployment/configuration",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "deployment/overview",
+              "path": "/en/docs/deployment/overview",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "deployment/production",
+              "path": "/en/docs/deployment/production",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "deployment/quickstart",
+              "path": "/en/docs/deployment/quickstart",
+              "sidebar": "docSidebar"
+            },
+            {
+              "id": "intro",
+              "path": "/en/docs/intro",
+              "sidebar": "docSidebar"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "docSidebar": {
+              "link": {
+                "path": "/en/docs/intro",
+                "label": "intro"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}
