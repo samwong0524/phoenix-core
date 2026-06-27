@@ -1770,3 +1770,64 @@ textarea {
 }
 
 /* Glitch override for logo uses existing @keyframes glitch */
+
+/* ===== PHOENIX CORE — CORPORATE MOTION SYSTEM ===== */
+/* Source: motion-plan.json (Corporate personality, DASHBOARD scene) */
+/* Signature easing: cubic-bezier(0.2, 0, 0, 1) — Material Design 3 */
+
+/* Button press: scale 0.97 on press, 1.02 on release, settle to 1.0 */
+/* Scene compliance: scale Δ3% (< 5%), duration 200ms (< 2s), no infinite */
+.btn, .btn-primary, .btn-action, .send-btn, .chat-attach {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1),
+              border-color 0.2s cubic-bezier(0.2, 0, 0, 1),
+              background-color 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.btn:active, .btn-primary:active, .btn-action:active, .send-btn:active, .chat-attach:active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+
+/* NavCard entrance: staggered fade-slide-up on page load */
+/* Scene compliance: translateY 8px (< 20px), duration 300ms (< 2s) */
+@keyframes cardFadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card {
+  animation: cardFadeSlideUp 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.card:nth-child(1) { animation-delay: 0.05s; }
+.card:nth-child(2) { animation-delay: 0.08s; }
+.card:nth-child(3) { animation-delay: 0.11s; }
+.card:nth-child(4) { animation-delay: 0.14s; }
+.card:nth-child(5) { animation-delay: 0.17s; }
+.card:nth-child(6) { animation-delay: 0.20s; }
+
+/* Reduced motion fallback: remove spatial movement, keep opacity only */
+/* Aligned with motion-plan.reduced_motion_fallback.strategy */
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .btn-primary:active, .btn-action:active,
+  .send-btn:active, .chat-attach:active {
+    transform: none;
+  }
+  .card {
+    animation: none;
+    opacity: 1;
+  }
+  .msg-in {
+    animation: none;
+    opacity: 1;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

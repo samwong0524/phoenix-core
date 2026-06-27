@@ -1,0 +1,172 @@
+{
+  "$schema": "motion-apply-v1",
+  "project_name": "Phoenix-Core",
+  "created": "2026-06-28",
+  "framework": {
+    "name": "Next.js",
+    "version": "16.1.6",
+    "react_version": "19.2.4",
+    "variant": "TS-TW",
+    "typescript": true,
+    "tailwind": "v4",
+    "animation_engine": "framer-motion",
+    "animation_engine_version": "^11.2.10"
+  },
+  "scene": {
+    "detected": "DASHBOARD",
+    "source": "motion-plan-link",
+    "rationale": "motion-plan.scope.target_pages 包含 chat/graph/settings，项目为开发者工具管理后台",
+    "intensity_ceiling": "subtle/functional"
+  },
+  "personality_applied": {
+    "archetype": "Corporate",
+    "source": "motion-plan-link",
+    "confirmed_by_user": true,
+    "signature_easing": "cubic-bezier(0.2, 0, 0, 1)",
+    "duration_palette": { "quick": 200, "standard": 300, "slow": 400 }
+  },
+  "path_decisions": [
+    {
+      "target": "button_press",
+      "path": "Phase 0a — 直接写 CSS",
+      "reason": "scale 收缩反馈用 CSS transition + :active 即可，无需装组件",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "file": "app/globals.css",
+      "details": {
+        "scale_on_press": 0.97,
+        "transition_duration_ms": 200,
+        "easing": "cubic-bezier(0.2, 0, 0, 1)",
+        "applied_to": [".btn", ".btn-primary", ".btn-action", ".send-btn", ".chat-attach"]
+      }
+    },
+    {
+      "target": "card_entrance",
+      "path": "Phase 0a — 直接写 CSS",
+      "reason": "staggered fade-slide-up 用 CSS @keyframes + animation-delay 即可",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "file": "app/globals.css",
+      "details": {
+        "translateY_px": 8,
+        "duration_ms": 300,
+        "stagger_delay_ms": 30,
+        "max_items": 6,
+        "total_stagger_ms": 150
+      }
+    },
+    {
+      "target": "message_bubble_entrance",
+      "path": "Phase 4 — framer-motion (已安装)",
+      "reason": "消息列表需要逐条 stagger 入场，framer-motion 的 variants + AnimatePresence 是最优解",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "file": "app/im/IMMessageList.tsx",
+      "installed_components": [],
+      "engine_used": "framer-motion",
+      "prop_overrides": {
+        "translateY_px": 8,
+        "opacity_from": 0,
+        "duration_ms": 300,
+        "easing": [0.2, 0, 0, 1],
+        "reduced_motion": "opacity-only fallback via getReducedVariant()"
+      }
+    },
+    {
+      "target": "graph_node_entrance",
+      "path": "跳过 — Canvas 渲染",
+      "reason": "Graph 拓扑使用 Canvas 2D API 渲染（TopoAnimCanvas.tsx），framer-motion 无法作用于 canvas 内元素。Graph 页面的统计卡片已通过 CSS card 动画覆盖。",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "fallback": "graph 页面统计卡片通过 .card CSS animation 获得入场动效"
+    },
+    {
+      "target": "sidebar_panel",
+      "path": "待实现 — 页面尚未创建",
+      "reason": "app/settings/ 目录为空，sidebar 组件尚未开发。variants 已在 src/lib/motion.ts 中预定义（sidebarSlide），待页面开发时接入。",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "prepared_variants": "sidebarSlide in src/lib/motion.ts"
+    },
+    {
+      "target": "modal",
+      "path": "待实现 — 无现有模态框组件",
+      "reason": "项目中暂无模态框组件。variants 已预定义（modalOverlay + modalPanel），待需要时创建 Modal wrapper 组件接入。",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "prepared_variants": "modalOverlay + modalPanel in src/lib/motion.ts"
+    },
+    {
+      "target": "onboarding_transition",
+      "path": "待实现 — Onboarding 页面尚未创建",
+      "reason": "无独立 onboarding 页面。variants 已预定义（stepTransition），待开发时接入。",
+      "scene": "DASHBOARD",
+      "scene_compliance_passed": true,
+      "prepared_variants": "stepTransition in src/lib/motion.ts"
+    }
+  ],
+  "files_created": [
+    {
+      "path": "src/lib/motion.ts",
+      "type": "shared_module",
+      "description": "Corporate 动效 variants 共享模块，含 10 个 variants + reduced motion helper"
+    },
+    {
+      "path": "app/globals.css (appended)",
+      "type": "css_addition",
+      "description": "Button press CSS + card staggered entrance + reduced-motion media query"
+    }
+  ],
+  "files_modified": [
+    {
+      "path": "app/im/IMMessageList.tsx",
+      "type": "component_wiring",
+      "description": "MessageItem 外层 div → motion.div，接入 fadeSlideUp variant"
+    }
+  ],
+  "css_snippets": [
+    {
+      "name": "button_press_transition",
+      "file": "app/globals.css",
+      "scene_compliance_passed": true,
+      "checks": {
+        "no_infinite": true,
+        "no_continuous_keyframes": true,
+        "duration_under_2s": true,
+        "translate_under_20px": true,
+        "scale_under_1_05": true,
+        "rotate_under_5deg": true,
+        "user_trigger_gate": ":active pseudo-class"
+      }
+    },
+    {
+      "name": "card_staggered_entrance",
+      "file": "app/globals.css",
+      "scene_compliance_passed": true,
+      "checks": {
+        "no_infinite": true,
+        "no_continuous_keyframes": true,
+        "duration_under_2s": true,
+        "translate_under_20px": "8px",
+        "scale_under_1_05": "N/A (no scale)",
+        "rotate_under_5deg": "N/A (no rotation)",
+        "user_trigger_gate": "animation-fill-mode: both (plays once on load)"
+      }
+    },
+    {
+      "name": "reduced_motion_fallback",
+      "file": "app/globals.css",
+      "scene_compliance_passed": true,
+      "checks": {
+        "media_query": "@media (prefers-reduced-motion: reduce)",
+        "removes_spatial_movement": true,
+        "keeps_opacity": true,
+        "disables_continuous": true
+      }
+    }
+  ],
+  "installed_components": [],
+  "engine_coexistence_warning": false,
+  "profile_path": "spark-output/profile/motion-apply.md",
+  "upstream_motion_plan": "spark-output/context/motion-plan.json"
+}

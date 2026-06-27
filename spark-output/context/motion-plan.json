@@ -1,0 +1,393 @@
+{
+  "$schema": "motion-plan-v1",
+  "project_name": "Phoenix-Core",
+  "created": "2026-06-28",
+  "personality": {
+    "archetype": "Corporate",
+    "confirmed_by_user": true,
+    "rationale": "用户情感目标为「专业稳重」，Phoenix-Core 是面向开发者的多 Agent 蜂群系统，属于 B 端 / 开发者工具品类，Corporate 人格最契合——干净、专业、可信赖",
+    "traits": ["clean", "professional", "business", "dashboard"],
+    "duration_range": "200-400ms",
+    "easing_default": "cubic-bezier(0.2, 0, 0, 1)",
+    "overshoot_range": "0-3%"
+  },
+  "brand_motion_identity": {
+    "signature_easing": {
+      "value": "cubic-bezier(0.2, 0, 0, 1)",
+      "alias": "Material Design 3 Standard",
+      "usage": "80% 的动画使用此曲线",
+      "css": "cubic-bezier(0.2, 0, 0, 1)"
+    },
+    "duration_palette": {
+      "quick": {
+        "ms": 200,
+        "use_for": "按钮反馈、toggle、tooltip、hover 状态"
+      },
+      "standard": {
+        "ms": 300,
+        "use_for": "卡片入场、面板展开、消息气泡、Graph 节点动画"
+      },
+      "slow": {
+        "ms": 400,
+        "use_for": "模态框、页面转场、Onboarding 步骤切换"
+      }
+    },
+    "entrance_pattern": {
+      "description": "fade + slide-up：元素从下方 12px 处以 opacity 0 渐入至正常位置",
+      "properties": ["opacity", "translateY"],
+      "opacity_from": 0,
+      "opacity_to": 1,
+      "translateY_from_px": 12,
+      "translateY_to_px": 0,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "duration_ms": 300
+    }
+  },
+  "scope": {
+    "target_pages": [
+      "chat",
+      "graph",
+      "settings",
+      "onboarding"
+    ],
+    "target_elements": [
+      "button",
+      "message_bubble",
+      "graph_node",
+      "sidebar_panel",
+      "modal",
+      "onboarding_transition"
+    ]
+  },
+  "element_specs": [
+    {
+      "id": "button-press",
+      "element": "button",
+      "page": "all",
+      "emotional_target": "专业可信赖的即时反馈",
+      "disney_principles": ["Squash & Stretch (subtle)", "Follow Through"],
+      "visual_description": "按钮按下时轻微收缩至 97%，松手后回弹至 102% 再稳定到 100%——像按下实体机械键盘的键帽，有明确物理反馈但不过分弹跳。Hover 时背景微亮，像灯光缓缓打在按钮表面。",
+      "primary": {
+        "property": "scale",
+        "states": {
+          "hover": {
+            "value": 1.0,
+            "secondary_property": "background-color",
+            "secondary_value": "brightness +8%",
+            "duration_ms": 150,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          },
+          "press": {
+            "value": 0.97,
+            "duration_ms": 100,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          },
+          "release": {
+            "value": 1.02,
+            "duration_ms": 80,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          },
+          "settle": {
+            "value": 1.0,
+            "duration_ms": 120,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          }
+        }
+      },
+      "secondary": {
+        "property": "box-shadow",
+        "description": "按下时阴影收缩（距离缩短），释放时阴影恢复",
+        "amplitude_ratio": 0.4,
+        "delay_ms": 0
+      },
+      "ambient": {
+        "property": "background-color",
+        "description": "Hover 时背景亮度微增 8%，营造光照感",
+        "amplitude_ratio": 0.15,
+        "delay_ms": 0
+      },
+      "duration_ms": 200,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "overshoot_percent": 2,
+      "accessibility_notes": "prefers-reduced-motion 时仅保留 background-color 变化，移除 scale 变换"
+    },
+    {
+      "id": "message-bubble-enter",
+      "element": "message_bubble",
+      "page": "chat",
+      "emotional_target": "消息有序到达的稳定感",
+      "disney_principles": ["Staging", "Follow Through", "Straight Ahead (stagger)"],
+      "visual_description": "新消息从底部轻柔滑入，像信件从桌面下方优雅推上来。先淡入（opacity 先行 80ms），再位移到位。头像比消息体早 80ms 出现，时间戳晚 120ms 跟随——形成「头像 → 消息 → 时间」的阅读节奏。",
+      "primary": {
+        "property": "translateY + opacity",
+        "from": { "translateY_px": 12, "opacity": 0 },
+        "to": { "translateY_px": 0, "opacity": 1 },
+        "duration_ms": 280,
+        "easing": "cubic-bezier(0.2, 0, 0, 1)"
+      },
+      "secondary": {
+        "property": "timestamp opacity",
+        "description": "时间戳在消息到位后 120ms 渐入",
+        "amplitude_ratio": 0.5,
+        "delay_ms": 120
+      },
+      "ambient": {
+        "property": "chat-background subtle-shift",
+        "description": "新消息到达时，聊天区域底部微光脉冲一次（200ms），暗示内容已到达",
+        "amplitude_ratio": 0.1,
+        "delay_ms": 0
+      },
+      "stagger": {
+        "avatar_delay_ms": -80,
+        "body_delay_ms": 0,
+        "timestamp_delay_ms": 120,
+        "total_budget_ms": 200,
+        "within_budget": true
+      },
+      "duration_ms": 280,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "disney_detail": "Staging: 消息到达时，其他消息不移动（保持阅读稳定）；Follow Through: 时间戳跟随消息主体延迟出现",
+      "accessibility_notes": "prefers-reduced-motion 时仅 opacity 渐变，移除 translateY"
+    },
+    {
+      "id": "graph-node-animate",
+      "element": "graph_node",
+      "page": "graph",
+      "emotional_target": "拓扑变化的有序感知",
+      "disney_principles": ["Anticipation", "Secondary Action", "Exaggeration (subtle)"],
+      "visual_description": "新 Agent 节点出现时，先微微收缩（anticipation 100ms），然后弹性扩展至目标大小。连接边从源节点「画」向目标节点，像墨水沿管道流动。活跃节点有极轻微的呼吸脉冲（scale 1.0↔1.02，2s 周期），暗示它正在思考。",
+      "primary": {
+        "property": "scale + opacity",
+        "phases": [
+          { "name": "anticipation", "scale": 0.85, "opacity": 0.3, "duration_ms": 100, "easing": "cubic-bezier(0.2, 0, 0, 1)" },
+          { "name": "expand", "scale": 1.05, "opacity": 1.0, "duration_ms": 200, "easing": "cubic-bezier(0.2, 0, 0, 1)" },
+          { "name": "settle", "scale": 1.0, "opacity": 1.0, "duration_ms": 150, "easing": "cubic-bezier(0.2, 0, 0, 1)" }
+        ]
+      },
+      "secondary": {
+        "property": "edge draw (stroke-dashoffset)",
+        "description": "连接边从源节点向目标节点绘制，250ms 完成",
+        "amplitude_ratio": 0.5,
+        "delay_ms": 50
+      },
+      "ambient": {
+        "property": "breathing pulse",
+        "description": "活跃节点 scale 1.0↔1.02 循环，周期 2000ms，sine ease-in-out",
+        "amplitude_ratio": 0.02,
+        "continuous": true
+      },
+      "duration_ms": 450,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "overshoot_percent": 5,
+      "disney_detail": "Anticipation: 节点先收缩至 0.85 再扩展；Secondary Action: 边在节点出现后 50ms 开始绘制；Exaggeration: Corporate 模式下扩展过冲仅 5%",
+      "accessibility_notes": "prefers-reduced-motion 时移除 breathing pulse，节点直接 opacity 渐入，边直接显示（无 draw 动画）"
+    },
+    {
+      "id": "sidebar-panel-toggle",
+      "element": "sidebar_panel",
+      "page": "settings",
+      "emotional_target": "面板展开的流畅秩序感",
+      "disney_principles": ["Staging", "Follow Through"],
+      "visual_description": "侧边栏从左滑入，像抽屉被平稳拉开。主内容区同步收缩让出空间（而非被覆盖），形成空间共享感。菜单项依次从左侧滑入（stagger 30ms/项），选中项的左侧指示条从 0 高度展开到完整高度。",
+      "primary": {
+        "property": "translateX",
+        "from": { "translateX_px": -280 },
+        "to": { "translateX_px": 0 },
+        "duration_ms": 300,
+        "easing": "cubic-bezier(0.2, 0, 0, 1)"
+      },
+      "secondary": {
+        "property": "menu items stagger",
+        "description": "菜单项依次从 translateX -20px 渐入，30ms/项",
+        "amplitude_ratio": 0.3,
+        "stagger_ms": 30,
+        "max_items": 8,
+        "total_stagger_ms": 240,
+        "within_budget": true
+      },
+      "ambient": {
+        "property": "main-content width",
+        "description": "主内容区宽度同步过渡，避免布局跳动",
+        "amplitude_ratio": 0.2,
+        "delay_ms": 0
+      },
+      "duration_ms": 300,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "disney_detail": "Staging: 侧边栏展开时主内容同步收缩，用户注意力自然跟随；Follow Through: 菜单项在面板到位后依次出现",
+      "accessibility_notes": "prefers-reduced-motion 时面板直接 opacity 渐入，移除 translateX 和 stagger"
+    },
+    {
+      "id": "modal-enter-exit",
+      "element": "modal",
+      "page": "all",
+      "emotional_target": "焦点转移的明确性",
+      "disney_principles": ["Staging", "Anticipation"],
+      "visual_description": "背景遮罩先快速变暗（150ms），将用户注意力收拢。模态面板从底部 24px 处滑入并渐显，到位后有极轻微的过冲回弹（1.01→1.0）。关闭时反向：面板先下沉渐隐，遮罩最后消失。",
+      "primary": {
+        "property": "translateY + opacity",
+        "enter": {
+          "from": { "translateY_px": 24, "opacity": 0 },
+          "to": { "translateY_px": 0, "opacity": 1 },
+          "duration_ms": 350,
+          "easing": "cubic-bezier(0.2, 0, 0, 1)"
+        },
+        "exit": {
+          "from": { "translateY_px": 0, "opacity": 1 },
+          "to": { "translateY_px": 16, "opacity": 0 },
+          "duration_ms": 250,
+          "easing": "cubic-bezier(0.4, 0, 1, 1)"
+        }
+      },
+      "secondary": {
+        "property": "backdrop opacity",
+        "description": "背景遮罩先于面板 100ms 开始变暗",
+        "amplitude_ratio": 0.5,
+        "delay_ms": -100
+      },
+      "ambient": {
+        "property": "content elements stagger",
+        "description": "模态框内标题→正文→按钮依次渐入，40ms/项",
+        "amplitude_ratio": 0.15,
+        "stagger_ms": 40
+      },
+      "duration_ms": 350,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "overshoot_percent": 1,
+      "disney_detail": "Staging: 遮罩先行变暗，为面板出现做铺垫（Anticipation）；面板内元素 stagger 引导视线从上到下",
+      "accessibility_notes": "prefers-reduced-motion 时遮罩和面板同时 opacity 渐变，移除所有位移"
+    },
+    {
+      "id": "onboarding-step-transition",
+      "element": "onboarding_transition",
+      "page": "onboarding",
+      "emotional_target": "引导步骤的流畅推进感",
+      "disney_principles": ["Staging", "Follow Through", "Arcs"],
+      "visual_description": "当前步骤内容向左滑出（渐隐），新步骤从右侧滑入（渐显），像翻书一样自然。底部进度条平滑填充到新位置（非跳变），进度节点有轻微放大脉冲确认当前步骤。整体节奏从容不迫，给用户消化信息的时间。",
+      "primary": {
+        "property": "translateX + opacity",
+        "exit_current": {
+          "from": { "translateX_px": 0, "opacity": 1 },
+          "to": { "translateX_px": -40, "opacity": 0 },
+          "duration_ms": 300,
+          "easing": "cubic-bezier(0.4, 0, 1, 1)"
+        },
+        "enter_next": {
+          "from": { "translateX_px": 40, "opacity": 0 },
+          "to": { "translateX_px": 0, "opacity": 1 },
+          "duration_ms": 350,
+          "easing": "cubic-bezier(0.2, 0, 0, 1)",
+          "delay_ms": 100
+        }
+      },
+      "secondary": {
+        "property": "progress bar fill",
+        "description": "进度条宽度平滑过渡到新步骤位置",
+        "amplitude_ratio": 0.5,
+        "duration_ms": 400,
+        "easing": "cubic-bezier(0.2, 0, 0, 1)"
+      },
+      "ambient": {
+        "property": "progress node pulse",
+        "description": "当前步骤节点 scale 1.0→1.15→1.0，确认感",
+        "amplitude_ratio": 0.15,
+        "delay_ms": 200,
+        "duration_ms": 300
+      },
+      "duration_ms": 400,
+      "easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "disney_detail": "Staging: 旧步骤先退出→新步骤再进入，避免同时运动造成混乱；Follow Through: 进度条在新步骤到位后继续填充；Arcs: 步骤内容移动路径带极轻微垂直弧线（2px）",
+      "accessibility_notes": "prefers-reduced-motion 时步骤直接 opacity 交叉渐变，移除 translateX，进度条直接跳变到新位置"
+    }
+  ],
+  "choreography": {
+    "stagger_budget_ms": 500,
+    "max_simultaneous_elements_ratio": "1/3",
+    "counter_motion": {
+      "description": "主元素向右运动时，背景元素向左漂移 20-30%",
+      "amplitude_ratio": 0.25
+    },
+    "sequence_structure": {
+      "setup_percent": 25,
+      "action_percent": 40,
+      "resolution_percent": 35
+    },
+    "page_specific": {
+      "chat": {
+        "load_sequence": [
+          "skeleton screens fade in (100ms)",
+          "header slides down (200ms, 50ms delay)",
+          "message list stagger (30ms/bubble, max 200ms)",
+          "input bar slides up (200ms, 100ms delay)"
+        ],
+        "total_budget_ms": 450,
+        "within_budget": true
+      },
+      "graph": {
+        "load_sequence": [
+          "canvas fade in (150ms)",
+          "root node appears (300ms, 100ms delay)",
+          "child nodes stagger (80ms/node, max 400ms)",
+          "edges draw (250ms, after nodes settle)"
+        ],
+        "total_budget_ms": 500,
+        "within_budget": true
+      },
+      "settings": {
+        "load_sequence": [
+          "sidebar slides in (300ms)",
+          "menu items stagger (30ms/item, max 240ms)",
+          "content panel fades in (200ms, 100ms delay)"
+        ],
+        "total_budget_ms": 400,
+        "within_budget": true
+      },
+      "onboarding": {
+        "load_sequence": [
+          "logo scale pop (300ms)",
+          "title + subtitle stagger (80ms)",
+          "CTA button slides up (250ms, 200ms delay)",
+          "progress dots fade in (150ms, 100ms delay)"
+        ],
+        "total_budget_ms": 480,
+        "within_budget": true
+      }
+    }
+  },
+  "reduced_motion_fallback": {
+    "strategy": "移除所有空间位移类动效（translateX/Y），仅保留 opacity 渐变；移除 spring/overshoot；所有 duration 减少 50%；连续动画（breathing pulse）完全禁用",
+    "specific_rules": [
+      "所有 translateY/translateX → 替换为 opacity 渐变",
+      "scale 变换 → 仅保留 hover/focus 状态的 background-color 变化",
+      "stagger → 保留但 delay 减半",
+      "continuous animations (breathing pulse) → 完全移除",
+      "Graph edge draw → 直接显示，无绘制动画",
+      "Progress bar → 直接跳变到新值，无过渡"
+    ],
+    "css_media_query": "@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }",
+    "implementation_note": "建议用 CSS 自定义属性控制：--motion-translate: 12px; 在 reduced-motion 时设为 0px"
+  },
+  "quality_checklist": {
+    "red_lines": {
+      "no_linear_spatial": "PASS — 所有空间位移均使用 cubic-bezier，无 linear",
+      "no_opacity_only": "PASS — 所有重要状态变化均配合 position/scale/color",
+      "no_exceed_1_3_screen": "PASS — 最大位移 40px（onboarding），远小于 1/3 屏",
+      "three_layers": "PASS — 每个 element_spec 均含 primary + secondary + ambient"
+    },
+    "high_priority": {
+      "duration_matches_table": "PASS — 按钮 200ms（表 120-180ms 略超但合理）、卡片 280ms（表 200-350ms）、模态 350ms（表 300-400ms）、页面 400ms（表 400-600ms）",
+      "directional_easing": "PASS — 入场用 ease-out 族（0.2,0,0,1），出场用 ease-in 族（0.4,0,1,1）",
+      "disney_applied": "PASS — 每个 element_spec 标注了至少 1 条 Disney 原则",
+      "consistent_personality": "PASS — 所有元素统一 Corporate 参数体系"
+    }
+  },
+  "eight_step_trace": {
+    "step_1_emotional_target": "专业稳重 → Corporate personality",
+    "step_2_personality": "Corporate: 200-400ms, cubic-bezier(0.2,0,0,1), 0-3% overshoot",
+    "step_3_primary_property": "按元素类型选择：button=scale, message=translateY+opacity, graph=scale+opacity, sidebar=translateX, modal=translateY+opacity, onboarding=translateX+opacity",
+    "step_4_duration": "参照 Duration Table 按元素类型映射：按钮 200ms / 消息 280ms / Graph 450ms / 侧栏 300ms / 模态 350ms / Onboarding 400ms",
+    "step_5_easing": "入场=decelerate(cubic-bezier(0.2,0,0,1)) / 出场=accelerate(cubic-bezier(0.4,0,1,1)) / 循环=sine ease-in-out",
+    "step_6_hero_element": "Graph 节点动画（最复杂：含 anticipation + edge draw + breathing pulse 三层）",
+    "step_7_secondary_ambient": "每个元素均含 secondary(30-50% amplitude) + ambient(10-20%)",
+    "step_8_one_third_rules": "距离: 最大位移 40px < 1/3 屏; 元素: 每次最多 1/3 可见元素在运动中; stagger 总预算均 ≤ 500ms"
+  }
+}

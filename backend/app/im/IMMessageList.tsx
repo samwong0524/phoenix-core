@@ -1,5 +1,7 @@
 ﻿import { memo } from "react";
 import type { ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { fadeSlideUp, getReducedVariant } from "@/lib/motion";
 
 type Message = {
   id: string;
@@ -71,14 +73,19 @@ const MessageItem = memo(function MessageItem({
   const avLabel = getAvatarLabel(senderRole);
   const roleName = getRoleName(senderRole);
   const isSystem = m.contentType === 'system' || senderRole === 'system';
+  const shouldReduce = useReducedMotion();
+  const variants = shouldReduce ? getReducedVariant(fadeSlideUp) : fadeSlideUp;
 
   return (
-    <div
+    <motion.div
       className={cx(
         'msg',
         isMe ? 'user' : 'agent',
         isSystem && 'system-msg',
       )}
+      variants={variants}
+      initial="hidden"
+      animate="visible"
     >
       <div className='msg-sender'>
         {!isMe ? (
@@ -93,7 +100,7 @@ const MessageItem = memo(function MessageItem({
       <div className='msg-bubble'>
         {renderContent(m.content, m.contentType)}
       </div>
-    </div>
+    </motion.div>
   );
 });
 
