@@ -59,8 +59,6 @@ if errorlevel 1 (
     )
 )
 
-echo [5/5] Checking FreeLLMAPI...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0backend\scripts\start-freellmapi.ps1"
 
 echo.
 echo [6/6] Starting dev server...
@@ -68,7 +66,7 @@ if exist .next (
     rmdir /s /q .next 2>nul
 )
 echo.
-echo Server: http://127.0.0.1:3017
+echo Server: http://127.0.0.1:3100
 echo.
 echo [1] Run in foreground (window stays open)
 echo [2] Run in background (window minimized, close this to detach)
@@ -82,13 +80,13 @@ if "%mode%"=="2" (
     powershell -NoProfile -Command "$p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c npm run dev ^> dev-server.log 2^> dev-server-error.log' -WindowStyle Hidden -PassThru -WorkingDirectory '%CD%'; Start-Sleep -Seconds 3; Write-Host ('PID: ' + $p.Id); Get-Content dev-server.log -Tail 5 2>$null"
     echo.
     echo Opening browser...
-    start http://127.0.0.1:3017
+    start http://127.0.0.1:3100
     echo.
     echo Server started in background. You can close this window.
     echo To stop: call stop.bat
 ) else (
     echo Opening browser...
-    start http://127.0.0.1:3017
+    start http://127.0.0.1:3100
     call npm run dev
     if errorlevel 1 (
         echo.

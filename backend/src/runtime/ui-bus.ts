@@ -99,6 +99,48 @@ export type UIEvent =
         action: "insert" | "update" | "delete";
         recordId?: string | null;
       };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.start";
+      data: { pipelineId: string; workflowId: string; groupId: string; stageCount: number };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_start";
+      data: { pipelineId: string; stageName: string; role: string };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_complete";
+      data: { pipelineId: string; stageName: string; status: string; output: string };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_done";
+      data: { agentId: string; groupId: string; stageName: string; output: string };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.complete";
+      data: { pipelineId: string; overallStatus: string };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "pipeline.review";
+      data: { pipelineId: string; stageName: string; output: string };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "llm.429";
+      data: { agentId: string; workspaceId: string; retryAfter: number };
     };
 
 type Listener = (evt: UIEvent) => void;
@@ -115,69 +157,55 @@ export class WorkspaceUIBus {
   private readonly channels = new Map<string, ChannelState>();
   constructor(private readonly maxBuffer = DEFAULT_MAX_BUFFER) {}
 
-  private getChannel(workspaceId: string): ChannelState {
-    const existing = this.channels.get(workspaceId);
+  private getChannel(channelId: string): ChannelState {
+    const existing = this.channels.get(channelId);
     if (existing) return existing;
-
-    const created: ChannelState = {
-      nextId: 1,
-      buffer: [],
-      listeners: new Set(),
-    };
-    this.channels.set(workspaceId, created);
+    const created: ChannelState = { nextId: 1, buffer: [], listeners: new Set() };
+    this.channels.set(channelId, created);
     return created;
   }
 
-  emit(workspaceId: string, event: Omit<UIEvent, "id" | "at">) {
-    const channel = this.getChannel(workspaceId);
+  emit(channelId: string, event: Omit<UIEvent, "id" | "at">) {
+    const channel = this.getChannel(channelId);
     const evt = { ...event, id: channel.nextId++, at: Date.now() } as UIEvent;
-
     channel.buffer.push(evt);
     if (channel.buffer.length > this.maxBuffer) {
       channel.buffer.splice(0, channel.buffer.length - this.maxBuffer);
     }
-
-    // Best-effort persistence for cross-process/history replay (optional).
-    void persistUIEvent(workspaceId, evt);
-
     for (const listener of channel.listeners) {
       listener(evt);
     }
   }
 
-  subscribe(workspaceId: string, listener: Listener): () => void {
-    const channel = this.getChannel(workspaceId);
+  subscribe(channelId: string, listener: Listener): () => void {
+    const channel = this.getChannel(channelId);
     channel.listeners.add(listener);
-    return () => channel.listeners.delete(listener);
+    return () => { channel.listeners.delete(listener); };
   }
 
-  getSince(workspaceId: string, afterId: number): UIEvent[] {
-    const channel = this.getChannel(workspaceId);
-    return channel.buffer.filter((e) => e.id > afterId);
+  getSince(channelId: string, sinceId: number): UIEvent[] {
+    const channel = this.channels.get(channelId);
+    if (!channel) return [];
+    return channel.buffer.filter((e) => e.id > sinceId);
+  }
+
+  getAgentEventsSince(agentId: string, sinceId: number): UIEvent[] {
+    const events: UIEvent[] = [];
+    for (const [, channel] of this.channels) {
+      for (const evt of channel.buffer) {
+        if (evt.id > sinceId && (evt as any).data?.agentId === agentId) {
+          events.push(evt);
+        }
+      }
+    }
+    return events;
   }
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __agentWechatUIBus: WorkspaceUIBus | undefined;
-}
-
-export function getWorkspaceUIBus() {
-  if (globalThis.__agentWechatUIBus) return globalThis.__agentWechatUIBus;
-  globalThis.__agentWechatUIBus = new WorkspaceUIBus();
-  return globalThis.__agentWechatUIBus;
-}
-
-async function persistUIEvent(workspaceId: string, evt: UIEvent) {
-  const { isUpstashRealtimeConfigured, getUpstashRealtime } = await import("./upstash-realtime");
-  if (!isUpstashRealtimeConfigured()) return;
-  try {
-    await getUpstashRealtime().channel(`ui:${workspaceId}`).emit(evt.event, {
-      id: evt.id,
-      at: evt.at,
-      data: evt.data,
-    });
-  } catch (err) {
-    console.warn("[emitUiToUpstash] UI event publish failed:", err);
+let _workspaceUIBus: WorkspaceUIBus | null = null;
+export function getWorkspaceUIBus(): WorkspaceUIBus {
+  if (!_workspaceUIBus) {
+    _workspaceUIBus = new WorkspaceUIBus();
   }
+  return _workspaceUIBus;
 }

@@ -1,4 +1,4 @@
-export const runtime = "nodejs";
+﻿export const runtime = "nodejs";
 
 // Cache models for 60s to avoid hitting FreeLLMAPI on every page load
 let modelsCache: Array<{ id: string; displayName: string; platform: string }> | null = null;
@@ -14,14 +14,11 @@ export async function GET() {
   const baseUrl = process.env.FREELLMAPI_URL ?? "http://127.0.0.1:3001/v1";
   const apiKey = process.env.FREELLMAPI_API_KEY;
 
-  if (!apiKey) {
-    // FreeLLMAPI not configured — return empty list
-    return Response.json({ models: [] });
-  }
-
   try {
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const res = await fetch(`${baseUrl}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers,
       signal: AbortSignal.timeout(5000),
     });
 

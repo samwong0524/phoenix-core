@@ -162,8 +162,11 @@ class McpRegistry {
     return this.tools.has(name);
   }
 
-  getToolDefinitions() {
-    return Array.from(this.tools.values()).map((tool) => ({
+  getToolDefinitions(skipServers?: Set<string>) {
+    const tools = skipServers
+      ? Array.from(this.tools.values()).filter((t) => !skipServers.has(t.serverName))
+      : Array.from(this.tools.values());
+    return tools.map((tool) => ({
       type: "function" as const,
       function: {
         name: tool.exposedName,

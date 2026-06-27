@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SWARM IDE â€” Command-line interface
+ * SWARM IDE â€?Command-line interface
  *
  * Usage:
  *   node bin/swarm.js <command> [options]
@@ -17,13 +17,13 @@
  *   watch <wsId>        Watch SSE event stream for a workspace
  *
  * Options:
- *   --port, -p          Server port (default: 3017, or SWARM_PORT env)
+ *   --port, -p          Server port (default: 3100, or SWARM_PORT env)
  *   --host              Server host (default: 127.0.0.1)
  *   --json              Raw JSON output
  *   --help, -h          Show this help
  */
 
-const PORT = process.env.SWARM_PORT ?? 3017;
+const PORT = process.env.SWARM_PORT ?? 3100;
 const HOST = "127.0.0.1";
 const BASE = `http://${HOST}:${PORT}`;
 
@@ -31,7 +31,7 @@ const [cmd, ...args] = process.argv.slice(2);
 
 function usage() {
   const help = `
-SWARM IDE CLI â€” Usage: node bin/swarm.js <command> [options]
+SWARM IDE CLI â€?Usage: node bin/swarm.js <command> [options]
 
   Commands:
     status                Server health check
@@ -124,7 +124,7 @@ function isJsonFlag(arg) {
 async function cmdStatus(json) {
   const data = await getJson(`${BASE}/api/health`);
   if (json) return console.log(JSON.stringify(data));
-  console.log(`  Status: ${data.ok ? "âœ“ healthy" : "âœ— unhealthy"}`);
+  console.log(`  Status: ${data.ok ? "âœ?healthy" : "âœ?unhealthy"}`);
 }
 
 async function cmdAgents(json) {

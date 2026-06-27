@@ -27,12 +27,12 @@
 
 | Item | Kimi-Swarm | Claude Agent Team | Phoenix-Core |
 | --- | --- | --- | --- |
-| Nested agents | âŒ | âŒ | âœ… |
-| Inter-agent messaging | âŒ | âœ… | âœ… |
-| Human to sub-agent messaging | âŒ | âœ… | âœ… |
-| Group chat mode | âŒ | âŒ | âœ… |
-| Visualization | âŒ | âŒ | âœ… |
-| Open source | âŒ | âŒ | âœ… |
+| Nested agents | â?| â?| âœ?|
+| Inter-agent messaging | â?| âœ?| âœ?|
+| Human to sub-agent messaging | â?| âœ?| âœ?|
+| Group chat mode | â?| â?| âœ?|
+| Visualization | â?| â?| âœ?|
+| Open source | â?| â?| âœ?|
 | Release date | 2026.1.27 | 2026.2.6 | 2026.1.2 |
 
 ## UI Design
@@ -43,11 +43,11 @@
 
 ## Philosophy
 - Minimal primitives: only a few communication primitives are required (core is create + send)
-- Liquid topology: topology evolves during runtime; agents â€œhireâ€ subâ€‘agents on demand
+- Liquid topology: topology evolves during runtime; agents â€œhireâ€?subâ€‘agents on demand
 - Flat collaboration: humans can step into any layer at any time
 
 ## Concept
-No complex nodes/edges abstraction â€” just think of â€œmany peopleâ€:
+No complex nodes/edges abstraction â€?just think of â€œmany peopleâ€?
 
 Everyone can spawn children and talk to anyone.
 
@@ -62,16 +62,16 @@ cp .env.example .env.local
 # Fill your keys and model names in .env.local
 
 docker compose up -d
-curl -X POST http://127.0.0.1:3017/api/admin/init-db
+curl -X POST http://127.0.0.1:3100/api/admin/init-db
 bun install
 bun dev
 ```
 
-Open http://localhost:3017
+Open http://localhost:3100
 
 Click init-db, then create a workspace to start.
 
-Try: â€œCreate 3 children, ask them to message each other, then have each create 3 grandchildren.â€
+Try: â€œCreate 3 children, ask them to message each other, then have each create 3 grandchildren.â€?
 
 ## Zhihu
 https://zhuanlan.zhihu.com/p/2000736341479138182

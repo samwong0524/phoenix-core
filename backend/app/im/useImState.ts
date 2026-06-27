@@ -256,11 +256,12 @@ export function useImState(workspaceOverrideId: string | null) {
           const nextSession = loadSession();
           const gid = activeGroupIdRef.current;
           if (nextSession && gid) void refreshMessages(nextSession, gid, { markRead: false, scrollToBottom: false, silent: true });
-          if (nextSession) void refreshGroups(nextSession, { silent: true });
+          if (nextSession) { void refreshGroups(nextSession, { silent: true }); void refreshAgents(nextSession); }
           const aid = streamAgentIdRef.current;
           if (aid) void refreshLlmHistory(aid);
           return;
         }
+
         if (payload.event === "agent.error") setAgentError(payload.data.message);
       } catch { /* ignore */ }
     };
@@ -491,12 +492,11 @@ export function useImState(workspaceOverrideId: string | null) {
           const agentId = (payload.data?.agent as any)?.id;
           const parentId = (payload.data?.agent as any)?.parentId;
           pushVizEvent(payload, `New agent: ${role}`, "agent");
-          // Update UI immediately
-          const fullAgent = (payload.data?.agent as any);
-          if (fullAgent && fullAgent.id) {
-            setAgents((prev) => [...prev, fullAgent]);
-          }
-          if (agentId) {
+                    // Refresh agents list from API instead of adding incomplete data
+          const nextSession = loadSession();
+          if (nextSession) void refreshAgents(nextSession);
+
+if (agentId) {
             const fromId = parentId || session.humanAgentId;
             pushBeam({ fromId, toId: agentId, kind: "create", label: role });
             setAgentStatusById((prev) => ({ ...prev, [agentId]: "IDLE" }));

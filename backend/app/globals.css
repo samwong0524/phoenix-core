@@ -133,7 +133,9 @@ body::before {
 }
 
 .msg-in {
+  opacity: 0;
   animation: msg-in 0.4s ease-out;
+  animation-fill-mode: both;
 }
 
 * {
@@ -1107,7 +1109,11 @@ textarea {
   display: flex;
   flex-direction: column;
   max-width: 80%;
+}
+.msg-in {
+  opacity: 0;
   animation: msg-in 0.4s ease-out;
+  animation-fill-mode: both;
 }
 .msg.user {
   align-self: flex-end;

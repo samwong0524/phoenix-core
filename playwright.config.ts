@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['line'], ['html', { outputFolder: 'e2e/report' }]],
   use: {
-    baseURL: 'http://localhost:3017',
+    baseURL: 'http://localhost:3100',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

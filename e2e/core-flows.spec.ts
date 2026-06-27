@@ -1,7 +1,7 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 test.describe('SWARM IDE Core User Flows', () => {
-  const BASE_URL = 'http://localhost:3017';
+  const BASE_URL = 'http://localhost:3100';
 
   test.use({
     actionTimeout: 30000,

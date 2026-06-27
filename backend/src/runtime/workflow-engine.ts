@@ -1,4 +1,4 @@
-import { uuid } from "./agent-types";
+﻿import { uuid } from "./agent-types";
 export const runtime = "nodejs";
 
 import { getDb } from "@/db";
@@ -48,7 +48,7 @@ export class WorkflowEngine {
   private static instance: WorkflowEngine | null = null;
   private processing = false;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
-  private static readonly POLL_INTERVAL_MS = 15000; // Check every 15 seconds
+  private static readonly POLL_INTERVAL_MS = 3000; // Check every 15 seconds
   private static readonly MAX_TASK_DURATION_MS = 30 * 60 * 1000; // 30 min timeout
 
   static getInstance(): WorkflowEngine {

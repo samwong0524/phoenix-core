@@ -1,4 +1,4 @@
-import { getMcpRegistry } from "./mcp";
+﻿import { getMcpRegistry } from "./mcp";
 
 export type ToolGroup =
   | "agent"       // Agent lifecycle: create, self, list, delete, reload
@@ -452,6 +452,34 @@ export const AGENT_TOOLS_WORKFLOW = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "dispatch_pipeline",
+      description:
+        "[Workflow] Execute a multi-stage pipeline. Stages run in order with dependency resolution. Results from each stage are passed to the next. This is a DIRECT execution model — not group chat — each stage calls the appropriate agent directly.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          stages: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Stage name (unique, kebab-case)" },
+                role: { type: "string", description: "Agent role name to execute this stage (e.g. 'coder', 'reviewer', 'designer')" },
+                dependsOn: { type: "array", items: { type: "string" }, description: "Stage names this stage depends on. Empty for first stage." },
+                input: { type: "string", description: "Detailed task instructions for this stage" },
+              },
+              required: ["name", "role", "dependsOn", "input"],
+            },
+          },
+        },
+        required: ["stages"],
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -647,7 +675,7 @@ export async function getAgentTools(context?: ToolContext) {
   const loadTimeoutMs =
     Number(process.env.MCP_LOAD_TIMEOUT_MS) > 0 ? Number(process.env.MCP_LOAD_TIMEOUT_MS) : 2000;
   const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES, { loadTimeoutMs });
-  const mcpTools = mcp.getToolDefinitions();
+  const mcpTools = mcp.getToolDefinitions(new Set(["PrimeMatrixData-http"]));
 
   if (!context) return [...AGENT_TOOLS, ...mcpTools];
 

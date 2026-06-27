@@ -1,6 +1,7 @@
-import { store } from "@/lib/storage";
+﻿import { store } from "@/lib/storage";
 import { GLMStreamAssembler, parseSSEJsonLines, GLMAssembledState } from "@/lib/glm-stream";
 import { OpenAIStreamAssembler, OpenAIAssembledState } from "@/lib/openai-stream";
+import { getSetting } from "@/lib/settings";
 
 import { AgentEventBus } from "./event-bus";
 import { createDeferred, safeJsonParse } from "./utils";
@@ -18,7 +19,7 @@ function buildTextArray(arr: string[]): ReturnType<typeof sql> {
   return sql`ARRAY[${sql.join(arr.map((v) => sql`${v}`), sql`, `)}]::text[]`;
 }
 
-// Runtime settings — mutable at request time for live model switching without restart.
+// Runtime settings 鈥?mutable at request time for live model switching without restart.
 const runtimeSettings = new Map<string, string>();
 
 const RUNTIME_SETTINGS: Record<string, { validate: (v: string) => boolean }> = {
@@ -49,7 +50,7 @@ import path from "node:path";
 
 const MAX_LLM_RETRIES = 5;
 const LLM_RETRY_BASE_MS = 3000;
-const LLM_REQUEST_TIMEOUT_MS = 60000; // 60s max per request
+const LLM_REQUEST_TIMEOUT_MS = 120000; // 120s max per request
 const MAX_CONCURRENT_LLM = 1;
 const MIN_LLM_INTERVAL_MS = 1200; // minimum gap between LLM calls (~50 QPM ceiling)
 
@@ -60,17 +61,17 @@ const MIN_LLM_INTERVAL_MS = 1200; // minimum gap between LLM calls (~50 QPM ceil
 const NUDGE_INTERVAL = 15; // rounds between nudge analyses
 const MAX_AUTO_SKILLS_PER_AGENT_PER_DAY = 3; // shared with autoCreateSkillFromWorkflow
 
-// Context compression configuration (design doc §6.3)
+// Context compression configuration (design doc 搂6.3)
 const COMPRESS_PROTECT_FIRST = 2; // protect first N system messages
-const COMPRESS_PROTECT_LAST = 6;  // keep last N messages intact
-const COMPRESS_TRIGGER = 8;       // trigger compression when history > N
+const COMPRESS_PROTECT_LAST = 8;  // keep last N messages intact
+const COMPRESS_TRIGGER = 12;       // trigger compression when history > N
 const COMPRESS_MAX_CONTENT = 2000; // max chars per individual message before truncation
 
 // Key Pool: per-provider API key rotation with 429 cooldown
 
-// Skill lifecycle constants (design doc §11.4)
-const SKILL_STALE_DAYS = 30;       // days without use → stale warning
-const SKILL_ARCHIVE_DAYS = 90;     // days without use → archive
+// Skill lifecycle constants (design doc 搂11.4)
+const SKILL_STALE_DAYS = 30;       // days without use 鈫?stale warning
+const SKILL_ARCHIVE_DAYS = 90;     // days without use 鈫?archive
 const SKILL_MERGE_SIMILARITY = 0.7; // description overlap threshold for dedup
 // Keys are parsed from *_API_KEYS env var (comma-separated)
 // Falls back to single *_API_KEY if *_API_KEYS is not set
@@ -180,7 +181,7 @@ export function invalidateKeyPools(): void {
  * Global LLM request scheduler.
  * Ensures at most 1 concurrent LLM request with a minimum gap between calls,
  * forming a natural rate limiter (~50 requests/minute ceiling).
- * All agents share this single queue — when one agent's LLM call is retrying
+ * All agents share this single queue 鈥?when one agent's LLM call is retrying
  * on 429, others wait their turn instead of compounding the rate-limit.
  */
 const llmScheduler = {
@@ -367,7 +368,7 @@ function isLlmCircuitOpen(): boolean {
   if (Date.now() - state.lastFailure < LLM_CIRCUIT_BREAKER_COOLDOWN) {
     return true;  // still in cooldown
   }
-  // cooldown expired — reset
+  // cooldown expired 鈥?reset
   llmFailureCount.delete("global");
   return false;
 }
@@ -445,7 +446,7 @@ async function buildSkillsBlock(role?: string): Promise<string> {
     const skillsMeta = roleFiltered.length > 0
       ? `## Available Skills\nYou have access to specialized skills. Load a skill using the get_skill tool when needed.\n\n${roleFiltered.map((s) => `- \`${s.name}\`: ${s.description}`).join("\n")}`
       : "";
-    // Design doc §11.5: only inject name+description (~200 chars), not full skill content
+    // Design doc 搂11.5: only inject name+description (~200 chars), not full skill content
     const skillsParts = [skillsMeta].filter((part) => part && part.trim());
     if (skillsParts.length === 0) return "";
     return `${SKILLS_MARKER}\n\n${skillsParts.join("\n\n")}`;
@@ -649,13 +650,49 @@ function compressHistory(history: HistoryMessage[]) {
 }
 
 function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, unknown>> {
-  return history.map((msg) => {
+  // Qwen/llama.cpp Jinja template: system messages ONLY at index 0.
+  // Merge ALL system messages into one at the front to avoid 400 errors.
+
+  // First pass: collect all tool_call IDs from assistant messages
+  const toolCallIds = new Set<string>();
+  for (const msg of history) {
+    if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls as Array<Record<string, unknown>>) {
+        if (typeof tc.id === "string" && tc.id) toolCallIds.add(tc.id);
+      }
+    }
+  }
+
+  // Second pass: drop orphaned tool messages (no matching tool_call_id)
+  const cleaned: HistoryMessage[] = [];
+  for (const msg of history) {
+    if (msg.role === "tool") {
+      const tcid = (msg as any).tool_call_id;
+      if (typeof tcid !== "string" || !toolCallIds.has(tcid)) continue; // orphaned — drop
+    }
+    cleaned.push(msg);
+  }
+
+  const systemParts: string[] = [];
+  const nonSystem: HistoryMessage[] = [];
+  for (const msg of cleaned) {
+    if (msg.role === "system") {
+      systemParts.push(msg.content as string);
+    } else {
+      nonSystem.push(msg);
+    }
+  }
+
+  const result: Array<Record<string, unknown>> = [];
+  if (systemParts.length > 0) {
+    result.push({ role: "system", content: systemParts.join("\n\n") });
+  }
+  return result.concat(nonSystem.map((msg) => {
     if (msg.role === "tool") return msg;
 
     const { reasoning_content, ...rest } = msg as Exclude<HistoryMessage, { role: "tool" }>;
     const mapped: Record<string, unknown> = { ...rest };
 
-    // Fix 400 error: Some providers require content to be a string, not null
     if (mapped.content === null || mapped.content === undefined) {
       mapped.content = "";
     }
@@ -664,25 +701,16 @@ function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, 
       mapped.reasoning = reasoning_content;
     }
 
-    // Sanitize tool_calls: ensure all function.arguments are valid JSON strings
     if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls)) {
       mapped.tool_calls = (msg.tool_calls as Array<Record<string, unknown>>).map((tc) => {
         if (tc.function && typeof tc.function === "object") {
           const fn = tc.function as Record<string, unknown>;
           const args = fn.arguments;
           if (typeof args === "string") {
-            // Already a string — try to parse and re-stringify to ensure valid JSON
-            try {
-              JSON.parse(args);
-            } catch {
-              // Not valid JSON — replace with empty object
-              fn.arguments = "{}";
-            }
+            try { JSON.parse(args); } catch { fn.arguments = "{}"; }
           } else if (typeof args === "object" && args !== null) {
-            // Already an object — stringify it
             fn.arguments = JSON.stringify(args);
           } else {
-            // Missing or invalid — default to empty object
             fn.arguments = "{}";
           }
         }
@@ -691,11 +719,11 @@ function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<string, 
     }
 
     return mapped;
-  });
+  }));
 }
 
 // ---------------------------------------------------------------------------
-// Tool group categories — ordered by typical usage frequency.
+// Tool group categories 鈥?ordered by typical usage frequency.
 // Each group is a comment marker only; the flat array is what the LLM sees.
 // ---------------------------------------------------------------------------
 type ToolGroup =
@@ -717,7 +745,7 @@ const AGENT_TOOLS_AGENT = [
     function: {
       name: "create",
       description:
-        "[Agent] Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead. When the human asks you to create, execute directly — do not re-verify history or search for existing agents first.",
+        "[Agent] Create a sub-agent with the given role. Only use when the human explicitly asks you to create a new agent. For delegation, use existing agents instead. When the human asks you to create, execute directly 鈥?do not re-verify history or search for existing agents first.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -756,7 +784,7 @@ const AGENT_TOOLS_AGENT = [
     function: {
       name: "delete_agent",
       description:
-        "[Agent] Delete a direct child agent that you created. Only your own sub-agents can be deleted (agents whose parent is you). The target agent must have no sub-agents of its own — delete those first. This operation is irreversible and removes all associated P2P groups and workflows.",
+        "[Agent] Delete a direct child agent that you created. Only your own sub-agents can be deleted (agents whose parent is you). The target agent must have no sub-agents of its own 鈥?delete those first. This operation is irreversible and removes all associated P2P groups and workflows.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -982,7 +1010,7 @@ const AGENT_TOOLS_GROUP = [
     type: "function" as const,
     function: {
       name: "create_group",
-      description: "[Group] Create a group with the given member role names. Returns the groupId (UUID) and name. memberIds accepts agent role names from list_agents — this includes 'human' (the human user), which you should include in any group where a human needs to see progress. Use this groupId when calling send_group_message.",
+      description: "[Group] Create a group with the given member role names. Returns the groupId (UUID) and name. memberIds accepts agent role names from list_agents 鈥?this includes 'human' (the human user), which you should include in any group where a human needs to see progress. Use this groupId when calling send_group_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -1020,7 +1048,7 @@ const AGENT_TOOLS_GROUP = [
     function: {
       name: "delete_group",
       description:
-        "[Group] Delete a group and all its associated data (messages, workflows, tasks, task_logs, assignments). Only the group creator (coordinator) can use this. This operation is irreversible — use only when a project is completed or cancelled.",
+        "[Group] Delete a group and all its associated data (messages, workflows, tasks, task_logs, assignments). Only the group creator (coordinator) can use this. This operation is irreversible 鈥?use only when a project is completed or cancelled.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -1147,6 +1175,34 @@ const AGENT_TOOLS_WORKFLOW = [
           action: { type: "string", enum: ["assign", "release"] },
         },
         required: ["agentId", "groupId", "action"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "dispatch_pipeline",
+      description:
+        "[Workflow] Execute a multi-stage pipeline. Each stage directly calls the appropriate agent. Results flow to the next stage.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          stages: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                role: { type: "string" },
+                dependsOn: { type: "array", items: { type: "string" } },
+                input: { type: "string" },
+              },
+              required: ["name", "role", "dependsOn", "input"],
+            },
+          },
+        },
+        required: ["stages"],
       },
     },
   },
@@ -1282,7 +1338,7 @@ const AGENT_TOOLS_BACKUP = [
     function: {
       name: "restore_backup",
       description:
-        "[Backup] Restore a workspace from a backup. This deletes all current workspace data and replaces it with the backup snapshot. IRREVERSIBLE — use list_backups first to confirm the backup ID.",
+        "[Backup] Restore a workspace from a backup. This deletes all current workspace data and replaces it with the backup snapshot. IRREVERSIBLE 鈥?use list_backups first to confirm the backup ID.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -1297,7 +1353,7 @@ const AGENT_TOOLS_BACKUP = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Combined tool list — the flat array the LLM sees (grouped for readability).
+// Combined tool list 鈥?the flat array the LLM sees (grouped for readability).
 // ---------------------------------------------------------------------------
 const AGENT_TOOLS: readonly { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }[] = [
   ...AGENT_TOOLS_AGENT,
@@ -1313,7 +1369,7 @@ const AGENT_TOOLS: readonly { type: "function"; function: { name: string; descri
 const BUILTIN_TOOL_NAMES = new Set(AGENT_TOOLS.map((tool) => tool.function.name));
 
 // ---------------------------------------------------------------------------
-// check_fn — tool availability filtering (Sprint 2 — check_fn).
+// check_fn 鈥?tool availability filtering (Sprint 2 鈥?check_fn).
 // Each predicate receives runtime context and returns true if the tool
 // should be visible to the LLM in the current state.
 // ---------------------------------------------------------------------------
@@ -1374,14 +1430,9 @@ function getGlmConfig() {
 
 function getFreellmapiConfig() {
   const pool = getFreellmapiKeyPool();
-  const apiKey = pool.getNext() ?? "";
-  const baseUrl = (process.env.FREELLMAPI_URL ?? "http://127.0.0.1:3001/v1").replace(/\/+$/, "");
-  // Runtime model switching: check runtime setting first, then env var, then "auto".
-  const model = getRuntimeSetting("freellmapi_model") ?? process.env.FREELLMAPI_MODEL ?? "auto";
-
-  if (!apiKey) {
-    throw new Error("Missing FreeLLMAPI API key (set FREELLMAPI_API_KEY or FREELLMAPI_API_KEYS)");
-  }
+  const apiKey = getSetting("llm_api_key") ?? pool.getNext() ?? "";
+  const baseUrl = (getSetting("llm_base_url") ?? process.env.FREELLMAPI_URL ?? "http://127.0.0.1:3001/v1").replace(/\/+$/, "");
+  const model = getSetting("llm_model") ?? getRuntimeSetting("freellmapi_model") ?? process.env.FREELLMAPI_MODEL ?? "auto";
 
   return { baseUrl, apiKey, model, keyPool: pool };
 }
@@ -1399,12 +1450,13 @@ function getLlmProvider(): LlmProvider {
 
 /** Returns whether each LLM provider has the required env vars configured. */
 function isProviderConfigured(provider: LlmProvider): boolean {
+  const hasGlobalKey = !!(getSetting("llm_api_key") || getSetting("llm_base_url"));
   switch (provider) {
-    case "openrouter": return !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEYS);
-    case "anthropic": return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEYS);
-    case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.GLM_API_KEYS);
+    case "openrouter": return !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEYS || hasGlobalKey);
+    case "anthropic": return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEYS || hasGlobalKey);
+    case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.GLM_API_KEYS || hasGlobalKey);
     case "ollama": return true; // local, always available
-    case "freellmapi": return !!(process.env.FREELLMAPI_API_KEY || process.env.FREELLMAPI_API_KEYS);
+    case "freellmapi": return !!(process.env.FREELLMAPI_URL || process.env.FREELLMAPI_API_KEY || process.env.FREELLMAPI_API_KEYS || hasGlobalKey);
   }
 }
 
@@ -1443,7 +1495,7 @@ function getProviderChain(): LlmProvider[] {
 }
 
 // ---------------------------------------------------------------------------
-// RuntimeProvider abstraction — replace switch with registry (Sprint 2).
+// RuntimeProvider abstraction 鈥?replace switch with registry (Sprint 2).
 // Adding a new provider: add config function + method + registry entry.
 // ---------------------------------------------------------------------------
 type StreamContext = { workspaceId: UUID; groupId: UUID; round: number };
@@ -1455,7 +1507,7 @@ interface LlmStreamResult {
   finishReason: string | null;
 }
 
-// Keyed by LlmProvider (string) for extensibility — no switch needed.
+// Keyed by LlmProvider (string) for extensibility 鈥?no switch needed.
 const PROVIDER_REGISTRY: Record<string, (self: AgentRunner, history: HistoryMessage[], ctx: StreamContext) => Promise<LlmStreamResult>> = {
   openrouter: (self, h, ctx) => self.callOpenRouterStreaming(h, ctx),
   anthropic: (self, h, ctx) => self.callAnthropicStreaming(h, ctx),
@@ -1639,13 +1691,13 @@ function toRawGitHubUrl(url: string): string {
   // Already a raw URL
   if (url.startsWith("https://raw.githubusercontent.com")) return url;
 
-  // github.com/blob/... → raw.githubusercontent.com
+  // github.com/blob/... 鈫?raw.githubusercontent.com
   const blobMatch = url.match(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)/);
   if (blobMatch) {
     return `https://raw.githubusercontent.com/${blobMatch[1]}/${blobMatch[2]}/${blobMatch[3]}`;
   }
 
-  // github.com/.../tree/... → not a file URL, try to append SKILL.md
+  // github.com/.../tree/... 鈫?not a file URL, try to append SKILL.md
   const treeMatch = url.match(/https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(.*)/);
   if (treeMatch) {
     return `https://raw.githubusercontent.com/${treeMatch[1]}/${treeMatch[2]}/${treeMatch[3]}${treeMatch[4]}/SKILL.md`;
@@ -1689,7 +1741,7 @@ function scanSkillContent(content: string): { ok: true } | { ok: false; reason: 
   return { ok: true };
 }
 
-class AgentRunner {
+export class AgentRunner {
   private wake = createDeferred<void>();
   private started = false;
   private running = false;
@@ -1704,11 +1756,11 @@ class AgentRunner {
   private blockedTools = new Set<string>();
   // Agent paused due to total failures >= 8
   private agentPaused = false;
-  // Free mode memory search cache: query -> results (design doc §6.5)
+  // Free mode memory search cache: query -> results (design doc 搂6.5)
   private memoryCache = new Map<string, Array<Record<string, unknown>>>();
   // Track last activity time for cleanup
   private lastActiveTime = Date.now();
-  // Memory snapshot flag — injected once per fresh session to stabilize prompt caching
+  // Memory snapshot flag 鈥?injected once per fresh session to stabilize prompt caching
   private memorySnapshotAdded = false;
   // Tool context for check_fn availability filtering (updated each turn)
   private toolContext: ToolContext | null = null;
@@ -1721,6 +1773,8 @@ class AgentRunner {
   private _searchCountThisTurn = 0;
   // search_skill query cache: query -> { results, timestamp }
   private static _searchCache = new Map<string, { results: unknown[]; ts: number }>();
+  // Pipeline context: when agent is woken via pipeline (not group message), store the instruction here
+  private pipelineContext: { groupId: string; instruction: string; stageName: string } | null = null;
 
   /**
    * Record a structured decision event for self-learning.
@@ -1752,12 +1806,12 @@ class AgentRunner {
             VALUES (${uuid()}, ${this.agentId}, ${input.groupId ?? null}, ${ws.workspace_id}, ${input.decisionType}, ${input.targetType ?? null}, ${input.targetId ?? null}, ${(input.inputSummary ?? "").slice(0, MAX_SUMMARY)}, ${(input.outputSummary ?? "").slice(0, MAX_SUMMARY)}, ${input.success ?? null}, ${new Date()})`
       );
     } catch {
-      // best-effort — table may not exist or decision extraction is non-critical
+      // best-effort 鈥?table may not exist or decision extraction is non-critical
     }
   }
 
   /**
-   * Archive a completed session — generate summary and clear llm_history.
+   * Archive a completed session 鈥?generate summary and clear llm_history.
    * Inspired by human episodic memory: distill events into a structured summary,
    * don't keep the raw conversation forever.
    */
@@ -1844,7 +1898,7 @@ class AgentRunner {
 
   wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" = "manual") {
     console.info(`[AgentRunner:wakeup] agent=${this.agentId} reason=${reason}`);
-    // Run skill evaluation on wakeup — async, non-blocking (design doc §11.4)
+    // Run skill evaluation on wakeup 鈥?async, non-blocking (design doc 搂11.4)
     void this.evaluateSkills();
     this.wake.resolve();
     this.wake = createDeferred<void>();
@@ -1860,6 +1914,10 @@ class AgentRunner {
     this.wake = createDeferred<void>();
   }
 
+  setPipelineContext(ctx: { groupId: string; instruction: string; stageName: string; toolGroups?: string[] } | null) {
+    this.pipelineContext = ctx;
+  }
+
   private consumeInterruptRequest() {
     if (!this.interruptRequested) return false;
     this.interruptRequested = false;
@@ -1870,7 +1928,7 @@ class AgentRunner {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
-        // Safety timeout: if no wakeup within 600s, agent is orphaned — stop
+        // Safety timeout: if no wakeup within 600s, agent is orphaned 鈥?stop
         const timeoutMs = 600_000;
         let woke = false;
         await Promise.race([
@@ -1931,7 +1989,7 @@ class AgentRunner {
   /**
    * Trim agent history to prevent unbounded growth.
    * Keep system messages + last 30 conversation messages.
-   * Runs async, best-effort — never blocks the loop.
+   * Runs async, best-effort 鈥?never blocks the loop.
    */
   private async trimHistoryIfNeeded() {
     const MAX_CONVERSATION_MSGS = 30;
@@ -1953,7 +2011,7 @@ class AgentRunner {
       if (trimmedJson.length < 50_000) {
         // Only trim if result is under 50KB
         await store.setAgentHistory({ agentId: this.agentId, llmHistory: trimmedJson });
-        console.info(`[trimHistory] agent=${this.agentId.slice(0,8)} ${history.length}→${trimmed.length} msgs, ${agent.llmHistory.length}→${trimmedJson.length} chars`);
+        console.info(`[trimHistory] agent=${this.agentId.slice(0,8)} ${history.length}鈫?{trimmed.length} msgs, ${agent.llmHistory.length}鈫?{trimmedJson.length} chars`);
       }
     } catch {
       // best-effort
@@ -1973,6 +2031,19 @@ class AgentRunner {
       if (this.consumeInterruptRequest()) return hadWork;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
       console.info(`[processUntilIdle] agent=${this.agentId} iterations=${iterations} batches=${batches.length}`);
+      // Pipeline mode: check for pending pipeline instruction first (Phase 1 - deterministic execution)
+      if (this.pipelineContext) {
+        console.info(`[processUntilIdle] agent=${this.agentId} processing pipeline stage="${this.pipelineContext.stageName}"`);
+        try {
+          await this.processPipelineInstruction(this.pipelineContext.groupId, this.pipelineContext.instruction);
+          hadWork = true;
+        } catch (err) {
+          console.error(`[processUntilIdle] Pipeline processing failed:`, err);
+        }
+        this.pipelineContext = null; // clear after processing
+        return hadWork;
+      }
+
       if (batches.length === 0) return hadWork;
 
       this.bus.emit(this.agentId, {
@@ -2031,9 +2102,9 @@ class AgentRunner {
       console.error(`[processGroupUnread] workflow check error:`, err);
     }
 
-    // 群主 = coordinator（铁律 #6）。谁创建的群/工作流，谁就是 coordinator
+    // 缇や富 = coordinator锛堥搧寰?#6锛夈€傝皝鍒涘缓鐨勭兢/宸ヤ綔娴侊紝璋佸氨鏄?coordinator
     const isCoordinator = wfRow ? wfRow.creator_id === this.agentId : false;
-    // Free mode: no workflow or only draft → all agents respond freely
+    // Free mode: no workflow or only draft 鈫?all agents respond freely
     const isFreeMode = wfRow === null || wfRow.status === "draft";
 
     // activeWf: only non-draft workflows count as "active workflow mode"
@@ -2065,7 +2136,7 @@ class AgentRunner {
     // If workflow is paused and this agent is not coordinator, skip
     if (activeWf && activeWf.status === "paused" && !isCoordinator) { console.info('[processGroupUnread] SKIP: workflow paused, not coordinator'); return; }
 
-    // If workflow active and this is the coordinator: check if human just spoke → auto-pause
+    // If workflow active and this is the coordinator: check if human just spoke 鈫?auto-pause
     if (activeWf && activeWf.status === "active" && isCoordinator) {
       if (hasHumanSender) {
         console.info('[processGroupUnread] SKIP: human spoke during active workflow, auto-pause');
@@ -2116,13 +2187,13 @@ class AgentRunner {
         .map((m) => `${m.id.substring(0, 8)}(${m.role})`)
         .join(", ");
 
-      // Load role template from disk (design doc §11.1 D20)
+      // Load role template from disk (design doc 搂11.1 D20)
       const roleTemplatePath = path.join(__dirname, "..", "prompts", "roles", `${role}.md`);
       let roleContent = "";
       try {
         roleContent = await fs.readFile(roleTemplatePath, "utf-8");
       } catch {
-        // No template for this role — continue with default prompt
+        // No template for this role 鈥?continue with default prompt
       }
 
       const workflowContext = activeWf
@@ -2135,7 +2206,7 @@ class AgentRunner {
       const systemContent =
         `You are an agent in an IM system. Agent ID: ${this.agentId}, workspace: ${workspaceId}, role: ${role}.\n` +
         `Group members: [${membersList}]. Reference agents by role only.\n` +
-        `Act as your role. Replies are NOT auto-delivered — use send_group_message or send_direct_message.\n` +
+        `Act as your role. Replies are NOT auto-delivered 鈥?use send_group_message or send_direct_message.\n` +
         `When creating groups, always include 'human' in memberIds.\n` +
         `Use bash for shell commands. Save solved patterns as skills with create_skill.` +
         workflowContext +
@@ -2186,7 +2257,7 @@ class AgentRunner {
               const imgData = await this.fetchImageAsBase64(parsed.url);
               parts.push({
                 type: "text",
-                text: `[group:${groupId}] ${senderLabel} (发送了一张图片):`,
+                text: `[group:${groupId}] ${senderLabel} (鍙戦€佷簡涓€寮犲浘鐗?:`,
               });
               parts.push({
                 type: "image_url",
@@ -2197,7 +2268,7 @@ class AgentRunner {
               console.warn(`[processGroupUnread] image fetch failed: ${parsed.url}`);
             }
           }
-          parts.push({ type: "text", text: `[group:${groupId}] ${senderLabel}: [图片] ${m.content}` });
+          parts.push({ type: "text", text: `[group:${groupId}] ${senderLabel}: [鍥剧墖] ${m.content}` });
         } else {
           parts.push({ type: "text", text: `[group:${groupId}] ${senderLabel}: ${m.content}` });
         }
@@ -2216,7 +2287,7 @@ class AgentRunner {
     if (hasHumanSender) {
       groupAgentTurnCount.set(groupId, 0);
     } else {
-      // Skip cascade counter when workflow is active — workflow has its own coordinator review
+      // Skip cascade counter when workflow is active 鈥?workflow has its own coordinator review
       if (activeWf && activeWf.status === "active") {
         // Active workflow: managed by coordinator, no cascade limit needed
       } else {
@@ -2250,7 +2321,7 @@ class AgentRunner {
       // When LLM is unavailable (429 quota, etc.), send a short notice to human so they
       // aren't left wondering why the agent is silently BUSY.
       if (hasHumanSender && !this.interruptRequested) {
-        assistantText = `[系统: LLM 服务暂不可用 (${errMsg.slice(0, 80)}), 请稍后再试]`;
+        assistantText = `[绯荤粺: LLM 鏈嶅姟鏆備笉鍙敤 (${errMsg.slice(0, 80)}), 璇风◢鍚庡啀璇昡`;
         await store.sendMessage({
           groupId,
           senderId: this.agentId,
@@ -2286,7 +2357,7 @@ class AgentRunner {
     // When assistantText is empty, send a short system notice so the human isn't left waiting.
     if (hasHumanSender && !didSend && !this.interruptRequested) {
       const content = assistantText.trim()
-        || `[系统: ${this.agentId.substring(0, 8)} 本轮无法回复，请检查上下文或重试]`;
+        || `[绯荤粺: ${this.agentId.substring(0, 8)} 鏈疆鏃犳硶鍥炲锛岃妫€鏌ヤ笂涓嬫枃鎴栭噸璇昡`;
       const members = await store.listGroupMemberIds({ groupId });
       const result = await store.sendMessage({
         groupId,
@@ -2344,7 +2415,7 @@ class AgentRunner {
         this.meaningfulActions = 0;
         history.push({
           role: "system",
-          content: `[Self-Learning] Patterns discovered — save with create_skill if worth preserving.`,
+          content: `[Self-Learning] Patterns discovered 鈥?save with create_skill if worth preserving.`,
         });
         console.info(`[processGroupUnread] injected skill auto-trigger nudge for agent ${this.agentId}`);
       }
@@ -2359,7 +2430,7 @@ class AgentRunner {
       workspaceId,
     });
 
-    // Session archive: archive the conversation for cross-session FTS search (design doc §6.3).
+    // Session archive: archive the conversation for cross-session FTS search (design doc 搂6.3).
     void this.archiveSessionToDb(history, groupId, workspaceId);
 
     try {
@@ -2396,8 +2467,8 @@ class AgentRunner {
 
   /**
    * Archive the current LLM history to session_archives for cross-session retrieval.
-   * Async, best-effort — does not block the main loop.
-   * Called after every LLM turn (design doc §6.3).
+   * Async, best-effort 鈥?does not block the main loop.
+   * Called after every LLM turn (design doc 搂6.3).
    */
   private async archiveSessionToDb(
     history: HistoryMessage[],
@@ -2444,6 +2515,7 @@ class AgentRunner {
     workspaceId: UUID;
     history: HistoryMessage[];
     hasHumanSender?: boolean; // when true, agent MUST reply to the human
+    isPipeline?: boolean; // when true, pipeline mode: direct execution, no group messages
   }) {
     const maxToolRounds = 10;
     let assistantText = "";
@@ -2461,9 +2533,11 @@ class AgentRunner {
     }
 
     for (let round = 0; round < maxToolRounds; round++) {
-      const senderHint = input.hasHumanSender
-        ? "Human waiting — fulfill request then confirm with send_group_message."
-        : "No human input — stay silent unless meaningful reason to speak.";
+      const senderHint = input.isPipeline
+        ? "Pipeline mode: execute the task directly. Mark PIPELINE_STAGE_COMPLETE and OUTPUT: when done."
+        : input.hasHumanSender
+        ? "Human waiting 鈥?fulfill request then confirm with send_group_message."
+        : "No human input 鈥?stay silent unless meaningful reason to speak.";
       input.history.push({
         role: "system",
         content: `[turn ${round}] ${senderHint}. One action per message.`,
@@ -2588,17 +2662,12 @@ class AgentRunner {
         }
       }
 
-      // Inject failure alert when a tool keeps failing — triggers agent self-learning
+      // Inject failure alert when a tool keeps failing 鈥?triggers agent self-learning
       for (const [toolName, count] of this.turnToolFailures) {
         if (count >= 3) {
           input.history.push({
             role: "system",
-            content: `Tool "${toolName}" has failed ${count} times in this turn. Your current approach is not working. Options:
-1. Call \`search_skill("<problem domain>")\` to search GitHub for relevant skills
-2. Call \`get_skill("<name>")\` to load an existing local skill
-3. Call \`install_skill("<name>", "<source_url>")\` to install a remote skill
-4. Call \`create_skill\` to document a new fix pattern
-5. Try a completely different approach`,
+            content: `Tool "${toolName}" has failed ${count} times in this turn. Your current approach is not working. Options:\n1. Call \x60search_skill("<problem domain>")\x60 to search GitHub for relevant skills\n2. Call \x60get_skill("<name>")\x60 to load an existing local skill\n3. Call \x60install_skill("<name>", "<source_url>")\x60 to install a remote skill\n4. Call \x60create_skill\x60 to document a new fix pattern\n5. Try a completely different approach`,
           });
           break;
         }
@@ -2618,8 +2687,70 @@ class AgentRunner {
   }
 
   /**
+   * Process a pipeline instruction directly (Phase 1 - deterministic execution).
+   * Unlike processGroupUnread, this uses the pipeline instruction as the user message
+   * and does NOT rely on group messages. Results are captured via the agent history.
+   */
+  private async processPipelineInstruction(groupId: UUID, instruction: string) {
+    console.info(`[processPipelineInstruction] agent=${this.agentId.slice(0,8)} stage="${this.pipelineContext?.stageName}"`);
+    try {
+      const workspaceId = await store.getGroupWorkspaceId({ groupId });
+      const agent = await store.getAgent({ agentId: this.agentId });
+      const history = safeJsonParse<HistoryMessage[]>(agent.llmHistory, []);
+
+      // Inject pipeline instruction as user message
+      history.push({
+        role: "user",
+        content: instruction,
+      });
+
+      // Save updated history
+      await store.setAgentHistory({ agentId: this.agentId, llmHistory: JSON.stringify(history), workspaceId });
+
+      // Call LLM with tools (same as normal flow but pipeline context)
+      const result = await this.runWithTools({
+        groupId,
+        workspaceId,
+        history,
+        hasHumanSender: false, // pipeline mode: no human waiting
+        isPipeline: true,
+      });
+
+      // Update history with assistant response
+      history.push({
+        role: "assistant",
+        content: result.assistantText,
+        reasoning_content: result.assistantThinking || undefined,
+      });
+      await store.setAgentHistory({ agentId: this.agentId, llmHistory: JSON.stringify(history), workspaceId });
+
+      // Emit pipeline completion event
+      this.bus.emit(this.agentId, {
+        event: "pipeline.stage_done",
+        data: {
+          agentId: this.agentId,
+          groupId,
+          stageName: this.pipelineContext?.stageName,
+          output: result.assistantText.slice(0, 3000),
+        },
+      });
+
+      console.info(`[processPipelineInstruction] done output=${result.assistantText.slice(0, 100)}...`);
+    } catch (err) {
+      // Pipeline stage failed — emit error so waitForStageCompletion can exit immediately
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[processPipelineInstruction] failed: ${msg}`);
+      this.bus.emit(this.agentId, {
+        event: "agent.error",
+        data: { agentId: this.agentId, message: msg },
+      });
+      throw err; // re-throw so processUntilIdle catches it too
+    }
+  }
+
+  /**
    * Auto-create a skill when all tasks in a workflow are complete.
-   * Best-effort — failures are silently ignored.
+   * Best-effort 鈥?failures are silently ignored.
    * Triggered after update_task returns taskDone === true.
    */
   private async autoCreateSkillFromWorkflow(groupId: UUID) {
@@ -2655,7 +2786,7 @@ class AgentRunner {
 
       // Generate skill name from workflow name
       const wfName = wf.name.trim();
-      const skillName = `auto-${wfName.toLowerCase().replace(/[^a-z0-9一-鿿]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)}`;
+      const skillName = `auto-${wfName.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)}`;
 
       const doneTasks = tasks.filter((t) => t.status === "done" || t.status === "approved");
       if (doneTasks.length === 0) return;
@@ -2716,13 +2847,13 @@ class AgentRunner {
 
       console.info(`[autoCreateSkill] auto-created skill "${skillName}" from workflow "${wfName}"`);
     } catch {
-      // best-effort — skill auto-creation should never block the agent
+      // best-effort 鈥?skill auto-creation should never block the agent
     }
   }
 
   /**
    * Nudge Engine: full LLM-based background analysis of recent conversation.
-   * Runs every NUDGE_INTERVAL rounds. Fire-and-forget — never blocks the agent.
+   * Runs every NUDGE_INTERVAL rounds. Fire-and-forget 鈥?never blocks the agent.
    *
    * Sends recent history to the primary LLM provider for semantic analysis,
    * asking it to identify reusable patterns, fix recipes, and improvement
@@ -2949,7 +3080,7 @@ class AgentRunner {
       // ---- Create new skill (default, or fallback from failed patch) ----
       const skillName = `auto-nudge-${(result.skillName ?? "pattern")
         .toLowerCase()
-        .replace(/[^a-z0-9一-鿿-]+/g, "-")
+        .replace(/[^a-z0-9涓€-榭?]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 60)}`;
       const skillDescription = (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200);
@@ -2982,14 +3113,14 @@ class AgentRunner {
 
       console.info(`[nudgeAnalysis] LLM created skill "${skillName}" from conversation analysis`);
     } catch {
-      // best-effort — nudge analysis should never block the agent
+      // best-effort 鈥?nudge analysis should never block the agent
     }
   }
 
   /**
    * Skill lifecycle maintenance: detect stale skills, archive old ones,
    * and merge duplicates. Runs once per nudge cycle as best-effort.
-   * (design doc §11.4 — skill lifecycle)
+   * (design doc 搂11.4 鈥?skill lifecycle)
    */
   private async skillMaintenance() {
     try {
@@ -3030,13 +3161,13 @@ class AgentRunner {
             );
             console.info(`[skillMaintenance] archived skill "${skill.name}" (last used ${lastUsed.slice(0, 10)})`);
           } catch {
-            // best-effort — skill archiving should not break anything
+            // best-effort 鈥?skill archiving should not break anything
           }
           invalidateSkillCache();
         }
-        // Stale: no usage in 30 days — add usage hint for future nudge analysis
+        // Stale: no usage in 30 days 鈥?add usage hint for future nudge analysis
         else if (lastUsed < staleThreshold) {
-          console.info(`[skillMaintenance] skill "${skill.name}" is stale (last used ${lastUsed.slice(0, 10)}) — consider merging or removing`);
+          console.info(`[skillMaintenance] skill "${skill.name}" is stale (last used ${lastUsed.slice(0, 10)}) 鈥?consider merging or removing`);
         }
       }
 
@@ -3053,20 +3184,20 @@ class AgentRunner {
           const overlap = [...aWords].filter(w => bWords.has(w)).length;
           const union = new Set([...aWords, ...bWords]).size;
           if (union > 3 && overlap / union >= SKILL_MERGE_SIMILARITY) {
-            console.info(`[skillMaintenance] potential duplicate skills: "${a.name}" and "${b.name}" — consider merging`);
+            console.info(`[skillMaintenance] potential duplicate skills: "${a.name}" and "${b.name}" 鈥?consider merging`);
           }
         }
       }
     } catch {
-      // best-effort — skill maintenance should never block the agent
+      // best-effort 鈥?skill maintenance should never block the agent
     }
   }
 
   /**
    * Per-turn file-mutation verifier: after a file-write tool call,
    * read back the target file to confirm it actually exists and has content.
-   * Best-effort — failures are logged, not surfaced to the agent.
-   * (design doc §11.5)
+   * Best-effort 鈥?failures are logged, not surfaced to the agent.
+   * (design doc 搂11.5)
    */
   private async verifyFileMutation(args: Record<string, unknown>, resultContent: string) {
     try {
@@ -3093,9 +3224,9 @@ class AgentRunner {
   }
 
   /**
-   * Build a memory snapshot — top N important memories frozen at session start.
+   * Build a memory snapshot 鈥?top N important memories frozen at session start.
    * Injected as a system message to stabilize prompt caching.
-   * Best-effort — returns null on failure or if no memories exist.
+   * Best-effort 鈥?returns null on failure or if no memories exist.
    */
   private async buildMemorySnapshot(): Promise<string | null> {
     try {
@@ -3110,7 +3241,7 @@ class AgentRunner {
       const lines = rows.map((r, i) => {
         const imp = r.importance ?? 3;
         const source = r.source ? ` (source: ${r.source})` : "";
-        return `${i + 1}. [${"★".repeat(Math.min(5, imp))}${"☆".repeat(5 - Math.min(5, imp))}] ${r.content}${source}`;
+        return `${i + 1}. [${"#".repeat(Math.min(5, imp))}${"-".repeat(5 - Math.min(5, imp))}] ${r.content}${source}`;
       });
 
       return [
@@ -3159,7 +3290,7 @@ class AgentRunner {
 
   /**
    * Record a skill/tool usage for self-evolution tracking.
-   * Best-effort — failures are silently ignored.
+   * Best-effort 鈥?failures are silently ignored.
    */
   private async recordSkillUsage(skillName: string, success: boolean) {
     try {
@@ -3177,7 +3308,7 @@ class AgentRunner {
    * Evaluate all skills based on usage history and classify them into tiers.
    * Bayesian smoothed scoring: score = (success + 1) / (total + 2)
    * Tiers: >90% excellent, 70-90% good, 30-70% needs_improve, <30% deprecated
-   * Design doc §11.4 skill evolution loop.
+   * Design doc 搂11.4 skill evolution loop.
    */
   private async evaluateSkills() {
     try {
@@ -3310,7 +3441,7 @@ class AgentRunner {
         return { ok: false, error: "Missing required fields: name, description, content" };
       }
 
-      // Frequency limit: max 3 skills per day per agent (design doc §11.4)
+      // Frequency limit: max 3 skills per day per agent (design doc 搂11.4)
       try {
         const db = getDb();
         const rows = await db.execute(
@@ -3322,7 +3453,7 @@ class AgentRunner {
           return { ok: false, error: "Daily skill creation limit reached (3 per day). Try again tomorrow." };
         }
       } catch {
-        // best-effort; table may not exist — proceed without limit
+        // best-effort; table may not exist 鈥?proceed without limit
       }
 
       const skillsDir = getSkillDirectory();
@@ -3411,7 +3542,7 @@ class AgentRunner {
         return { ok: true, results, count: results.length };
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        // GitHub API rate limit or network error → fallback to local skills
+        // GitHub API rate limit or network error 鈫?fallback to local skills
         if (errMsg.includes("403") || errMsg.includes("429") || errMsg.includes("rate")) {
           const localResults = await searchLocalSkills(query);
           emitToolDone(true);
@@ -3506,7 +3637,7 @@ class AgentRunner {
         return { ok: false, error: "Missing command" };
       }
 
-      // Destructive/dangerous command blacklist — code-level guard, cannot be bypassed by prompt
+      // Destructive/dangerous command blacklist 鈥?code-level guard, cannot be bypassed by prompt
       const DENIED_COMMANDS: RegExp[] = [
         /\brm\s+(-[a-zA-Z]*rf?)/,           // rm -rf
         /\bdel\s+\/[sfa]/i,                  // del /s /q /f
@@ -3635,7 +3766,7 @@ class AgentRunner {
         workspaceId,
         fromId: this.agentId,
         toId: to,
-        // Do not auto-add the human into agent↔agent threads; sidebar only shows human-participant chats.
+        // Do not auto-add the human into agent鈫攁gent threads; sidebar only shows human-participant chats.
         content,
         contentType: "text",
         groupName: null,
@@ -3738,7 +3869,7 @@ class AgentRunner {
           data: { workspaceId, group: { id: groupId, name: groupName, memberIds } },
         });
 
-        // 铁律 #6: 群主 = coordinator
+        // 閾佸緥 #6: 缇や富 = coordinator
         // Auto-create a draft workflow with the group creator as coordinator
         const now = new Date().toISOString();
         const workflowId = crypto.randomUUID();
@@ -3914,8 +4045,8 @@ class AgentRunner {
       const db = getDb();
 
       // Authorization: groups table has no creator_id column.
-      // Multi-member groups have a workflow → only the workflow creator (coordinator) can delete.
-      // P2P groups have no workflow → any member can delete.
+      // Multi-member groups have a workflow 鈫?only the workflow creator (coordinator) can delete.
+      // P2P groups have no workflow 鈫?any member can delete.
       const wfRows = await db.execute(
         sql`SELECT creator_id FROM workflows WHERE group_id = ${groupId} ORDER BY created_at DESC LIMIT 1`
       );
@@ -3939,7 +4070,7 @@ class AgentRunner {
       );
       const wfIds = (workflowIds as unknown as Array<{ id: string }>).map((r) => r.id);
 
-      // Cascade delete: task_logs → tasks → agent_assignments → workflows → messages → group_members → session_archive → groups
+      // Cascade delete: task_logs 鈫?tasks 鈫?agent_assignments 鈫?workflows 鈫?messages 鈫?group_members 鈫?session_archive 鈫?groups
       try {
         await db.transaction(async (tx) => {
           if (wfIds.length > 0) {
@@ -4104,7 +4235,7 @@ class AgentRunner {
       const msgLimit = args.limit && args.limit > 0 && args.limit <= 50 ? args.limit : 20;
       const messages = await store.listMessages({ groupId, limit: msgLimit });
 
-      // Return summary cards (library catalog pattern — metadata only, not full content)
+      // Return summary cards (library catalog pattern 鈥?metadata only, not full content)
       const cards = messages.map(m => ({
         id: m.id,
         sender: m.senderId,
@@ -4209,7 +4340,7 @@ class AgentRunner {
         success: true,
       });
 
-      // Auto-retrieve relevant memories for this workflow (design doc §6.5)
+      // Auto-retrieve relevant memories for this workflow (design doc 搂6.5)
       try {
         const searchQuery = [wfName, args.description ?? ""].filter(Boolean).join(" ");
         const memRows = await db.execute(
@@ -4313,7 +4444,7 @@ class AgentRunner {
         decisionType,
         targetType: "task",
         targetId: taskId,
-        inputSummary: `Task ${taskId} → ${finalStatus}`,
+        inputSummary: `Task ${taskId} 鈫?${finalStatus}`,
         outputSummary: args.result?.slice(0, 200) ?? finalStatus,
         success: finalStatus === "done" || finalStatus === "approved",
       });
@@ -4518,7 +4649,7 @@ class AgentRunner {
         return { ok: false, error: "Missing query" };
       }
 
-      // Free mode: check cache to avoid repeated searches in same cycle (design doc §6.5)
+      // Free mode: check cache to avoid repeated searches in same cycle (design doc 搂6.5)
       const cacheKey = `${query}:${(args.tags ?? []).sort().join(",")}:${args.limit ?? 10}`;
       const cached = this.memoryCache.get(cacheKey);
       if (cached) {
@@ -4531,7 +4662,7 @@ class AgentRunner {
         const limit = Math.min(50, args.limit ?? 10);
         const filterTags = args.tags ?? [];
 
-        // Layer 1: Keyword + tag exact match (design doc §6.1)
+        // Layer 1: Keyword + tag exact match (design doc 搂6.1)
         let layer1Rows;
         if (filterTags.length > 0) {
           const filterTagsSql = buildTextArray(filterTags);
@@ -4558,7 +4689,7 @@ class AgentRunner {
           source: r.source as string | null,
         }));
 
-        // Layer 2: TagMemo Spike propagation — tag co-occurrence expansion (design doc §6.2)
+        // Layer 2: TagMemo Spike propagation 鈥?tag co-occurrence expansion (design doc 搂6.2)
         // Extract tags from layer 1 results, find memories with co-occurring tags
         const layer1Tags = new Set<string>();
         for (const mem of layer1) {
@@ -4626,7 +4757,7 @@ class AgentRunner {
           source: m.source,
         }));
 
-        // Cache for free-mode reuse (design doc §6.5)
+        // Cache for free-mode reuse (design doc 搂6.5)
         this.memoryCache.set(cacheKey, resultMemories);
 
         emitToolDone(true);
@@ -4792,6 +4923,37 @@ class AgentRunner {
       }
     }
 
+    if (name === "dispatch_pipeline") {
+      const args = safeJsonParse<{ stages?: Array<{ name?: string; role?: string; dependsOn?: string[]; input?: string }> }>(input.call.argumentsText, {});
+      if (!args.stages || args.stages.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing stages: provide at least one pipeline stage with name, role, dependsOn, and input" };
+      }
+      for (const stage of args.stages) {
+        if (!stage.name || !stage.role || !stage.input) {
+          emitToolDone(false);
+          return { ok: false, error: "Each stage requires name, role, and input fields" };
+        }
+        if (!stage.dependsOn) stage.dependsOn = [];
+      }
+
+      const { getPipelineDispatcher } = await import("./pipeline-dispatcher");
+      const dispatcher = getPipelineDispatcher();
+      const pipelineResult = await dispatcher.execute({
+        workflowId: input.groupId,
+        groupId: input.groupId,
+        stages: args.stages.map(s => ({ name: s.name!, role: s.role!, dependsOn: s.dependsOn!, input: s.input! })),
+      });
+
+      emitToolDone(pipelineResult.overallStatus !== "failed");
+      return {
+        ok: pipelineResult.overallStatus !== "failed",
+        pipelineId: pipelineResult.pipelineId,
+        status: pipelineResult.overallStatus,
+        stages: pipelineResult.stages.map(s => ({ name: s.stageName, status: s.status, output: s.output.slice(0, 500) })),
+      };
+    }
+
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);
     if (mcp.hasTool(name)) {
       const args = safeJsonParse<Record<string, unknown>>(input.call.argumentsText, {});
@@ -4800,7 +4962,7 @@ class AgentRunner {
 
       // Per-turn file-mutation verifier: after file-write operations,
       // read back the file to confirm content was actually persisted.
-      // (design doc §11.5 — file-mutation verifier)
+      // (design doc 搂11.5 鈥?file-mutation verifier)
       const fileWriteTools = new Set(["write_file", "edit_file", "write", "str_replace_editor", "write_to_file", "create_file"]);
       if (fileWriteTools.has(name) && result.ok && result.content) {
         void this.verifyFileMutation(args, result.content);
@@ -4883,7 +5045,7 @@ class AgentRunner {
   ) {
     // Circuit breaker: skip if too many consecutive failures
     if (isLlmCircuitOpen()) {
-      console.warn(`[callLlmStreaming] circuit breaker open — skipping LLM call`);
+      console.warn(`[callLlmStreaming] circuit breaker open 鈥?skipping LLM call`);
       throw new Error("LLM circuit breaker open: too many consecutive failures");
     }
 
@@ -4902,7 +5064,7 @@ class AgentRunner {
         if (!is429) throw err;
         recordLlmFailure();
         errors.push(`${provider}: ${msg}`);
-        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" → ")}`);
+        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" 鈫?")}`);
         // Keep streaming to the UI so the user sees the fallback
         getWorkspaceUIBus().emit(ctx.workspaceId, {
           event: "ui.agent.llm.fallback",
@@ -4967,9 +5129,9 @@ class AgentRunner {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     if (httpReferer) headers["HTTP-Referer"] = httpReferer;
     if (appTitle) headers["X-Title"] = appTitle;
 
@@ -4984,6 +5146,12 @@ class AgentRunner {
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
+      if (upstream.status === 429) {
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "llm.429",
+          data: { agentId: this.agentId, workspaceId: ctx.workspaceId, retryAfter: 30 },
+        });
+      }
       throw new Error(`OpenRouter upstream error: ${upstream.status} ${text}`);
     }
 
@@ -5026,7 +5194,7 @@ class AgentRunner {
 
     // --- Anthropic Prompt Caching ---
     // Separate system messages from conversation, send as `system` param with cache_control.
-    // Strategy: "system_and_3" — cache breakpoints on system prompt + last 3 messages.
+    // Strategy: "system_and_3" 鈥?cache breakpoints on system prompt + last 3 messages.
     const systemMessages = history.filter((m) => m.role === "system");
     const chatMessages = history.filter((m) => m.role !== "system");
 
@@ -5097,6 +5265,12 @@ class AgentRunner {
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
+      if (upstream.status === 429) {
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "llm.429",
+          data: { agentId: this.agentId, workspaceId: ctx.workspaceId, retryAfter: 30 },
+        });
+      }
       throw new Error(`Anthropic upstream error: ${upstream.status} ${text}`);
     }
 
@@ -5259,6 +5433,13 @@ class AgentRunner {
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
+      // Emit 429 rate-limit event for UI notification
+      if (upstream.status === 429) {
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "llm.429",
+          data: { agentId: this.agentId, workspaceId: ctx.workspaceId, retryAfter: 30 },
+        });
+      }
       throw new Error(`GLM upstream error: ${upstream.status} ${text}`);
     }
 
@@ -5322,6 +5503,12 @@ class AgentRunner {
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
+      if (upstream.status === 429) {
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "llm.429",
+          data: { agentId: this.agentId, workspaceId: ctx.workspaceId, retryAfter: 30 },
+        });
+      }
       throw new Error(`Ollama upstream error: ${upstream.status} ${text}`);
     }
 
@@ -5360,12 +5547,13 @@ class AgentRunner {
       kind: "start",
     });
 
-    const tools = await getAgentTools(this.toolContext ?? undefined);
-    const payload: Record<string, unknown> = {
-      messages: mapOpenRouterMessages(history),
-      stream: true,
-      stream_options: { include_usage: true },
-    };
+  const tools = await getAgentTools(this.toolContext ?? undefined);
+  const payload: Record<string, unknown> = {
+    messages: mapOpenRouterMessages(history),
+    stream: true,
+    max_tokens: 4096,
+    temperature: 0.7,
+  };
     if (model) payload.model = model;
     if (tools.length > 0) {
       payload.tools = tools;
@@ -5373,9 +5561,11 @@ class AgentRunner {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
 
     const requestBody = JSON.stringify(payload);
     void appendAgentLlmRequestRaw({ agentId: this.agentId, body: requestBody });
@@ -5388,6 +5578,12 @@ class AgentRunner {
 
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => "");
+      if (upstream.status === 429) {
+        getWorkspaceUIBus().emit(ctx.workspaceId, {
+          event: "llm.429",
+          data: { agentId: this.agentId, workspaceId: ctx.workspaceId, retryAfter: 30 },
+        });
+      }
       throw new Error(`FreeLLMAPI upstream error: ${upstream.status} ${text}`);
     }
 
@@ -5572,6 +5768,32 @@ export class AgentRuntime {
     this.ensureRunner(agentId).wakeup(reason);
   }
 
+
+  /**
+   * Wake an agent with a pipeline instruction (Phase 1 - deterministic execution).
+   * Instead of reading group messages, the agent processes the pipeline instruction directly.
+   */
+  async wakeAgentWithPipeline(agentId: UUID, input: { groupId: UUID; pipelineInstruction: string; stageName: string; toolGroups?: string[] }) {
+    await this.bootstrap();
+    const role = await store.getAgentRole({ agentId }).catch(() => null);
+    if (role === "human" || role === null) return;
+    // Stop any existing runner
+    this.stopRunner(agentId);
+    // Create a fresh runner with pipeline context
+    const newRunner = this.ensureRunner(agentId);
+    console.info(`[wakeAgentWithPipeline] set pipeline context for agent=${agentId.slice(0,8)} stage=${input.stageName}`);
+    newRunner.setPipelineContext({
+      groupId: input.groupId,
+      instruction: input.pipelineInstruction,
+      stageName: input.stageName,
+      toolGroups: input.toolGroups,
+    });
+    // Set pipeline context first, then start the loop
+    newRunner.start();
+    // Give the loop time to enter Promise.race before waking
+    await new Promise(r => setTimeout(r, 100));
+    newRunner.wakeup("direct_message");
+  }
   async interruptAll(input?: { workspaceId?: UUID }) {
     await this.bootstrap();
     const workspaceId = input?.workspaceId?.trim();

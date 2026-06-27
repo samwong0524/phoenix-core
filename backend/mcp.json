@@ -4,11 +4,13 @@
             "description": "Windows Computer Use - Desktop automation (screenshot, click, type, scroll, list windows)",
             "type": "stdio",
             "command": "python",
-            "args": ["F:\\swarm-ide\\backend\\computer-use-mcp\\server.py"],
+            "args": [
+                "F:\\swarm-ide\\backend\\computer-use-mcp\\server.py"
+            ],
             "env": {
                 "COMPUTER_USE_SCREENSHOT_DIR": "F:\\swarm-ide\\backend\\.computer-use-screenshots"
             },
-            "disabled": false
+            "disabled": true
         },
         "tavily": {
             "description": "Tavily Search - Advanced web search and content analysis",
@@ -21,7 +23,7 @@
             "env": {
                 "TAVILY_API_KEY": ""
             },
-            "disabled": false
+            "disabled": true
         },
         "chrome-devtools": {
             "description": "Chrome DevTools - Browser automation and web scraping (local Edge)",
@@ -32,12 +34,11 @@
                 "chrome-devtools-mcp@latest",
                 "--browserUrl=http://localhost:9222"
             ],
-            "disabled": false
+            "disabled": true
         },
-            "PrimeMatrixData-http": {
-                "type": "http",
-      "url": "https://mcp.yidian.cn/mcp/16d05fda79166fdc7e1a0c5a8584ad5d"
-    }
-
+        "PrimeMatrixData-http": {
+            "type": "http",
+            "url": "https://mcp.yidian.cn/mcp/16d05fda79166fdc7e1a0c5a8584ad5d"
+        }
     }
 }

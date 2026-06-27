@@ -1,3 +1,4 @@
+﻿import { memo } from "react";
 import type { ReactNode } from "react";
 
 type Message = {
@@ -48,7 +49,55 @@ function getAgentRole(senderId: string, agentRoleById: Map<string, string>, isMe
   return agentRoleById.get(senderId) ?? senderId.slice(0, 8);
 }
 
-export function IMMessageList({
+// Memoized per-message component - prevents Streamdown re-parse for unchanged messages
+const MessageItem = memo(function MessageItem({
+  m,
+  humanAgentId,
+  agentRoleById,
+  fmtTime,
+  renderContent,
+  cx,
+}: {
+  m: Message;
+  humanAgentId?: string | null;
+  agentRoleById: Map<string, string>;
+  fmtTime: (iso: string) => string;
+  renderContent: (content: string, contentType: string) => ReactNode;
+  cx: (...classes: Array<string | false | undefined | null>) => string;
+}) {
+  const isMe = m.senderId === humanAgentId;
+  const senderRole = getAgentRole(m.senderId, agentRoleById, isMe);
+  const avClass = getAvatarClass(senderRole);
+  const avLabel = getAvatarLabel(senderRole);
+  const roleName = getRoleName(senderRole);
+  const isSystem = m.contentType === 'system' || senderRole === 'system';
+
+  return (
+    <div
+      className={cx(
+        'msg',
+        isMe ? 'user' : 'agent',
+        isSystem && 'system-msg',
+      )}
+    >
+      <div className='msg-sender'>
+        {!isMe ? (
+          <span className={cx('avatar', avClass)}>{avLabel}</span>
+        ) : null}
+        {!isMe ? <span>{roleName}</span> : null}
+        <span className='msg-time'>{fmtTime(m.sendTime)}</span>
+        {isMe ? (
+          <span className={cx('avatar', avClass)}>{avLabel}</span>
+        ) : null}
+      </div>
+      <div className='msg-bubble'>
+        {renderContent(m.content, m.contentType)}
+      </div>
+    </div>
+  );
+});
+
+export const IMMessageList = memo(function IMMessageList({
   messages,
   humanAgentId,
   agentRoleById,
@@ -58,39 +107,17 @@ export function IMMessageList({
 }: IMMessageListProps) {
   return (
     <>
-      {messages.map((m) => {
-        const isMe = m.senderId === humanAgentId;
-        const senderRole = getAgentRole(m.senderId, agentRoleById, isMe);
-        const avClass = getAvatarClass(senderRole);
-        const avLabel = getAvatarLabel(senderRole);
-        const roleName = getRoleName(senderRole);
-        const isSystem = m.contentType === "system" || senderRole === "system";
-
-        return (
-          <div
-            key={m.id}
-            className={cx(
-              "msg",
-              isMe ? "user" : "agent",
-              isSystem && "system-msg"
-            )}
-          >
-            <div className="msg-sender">
-              {!isMe ? (
-                <span className={cx("avatar", avClass)}>{avLabel}</span>
-              ) : null}
-              {!isMe ? <span>{roleName}</span> : null}
-              <span className="msg-time">{fmtTime(m.sendTime)}</span>
-              {isMe ? (
-                <span className={cx("avatar", avClass)}>{avLabel}</span>
-              ) : null}
-            </div>
-            <div className="msg-bubble">
-              {renderContent(m.content, m.contentType)}
-            </div>
-          </div>
-        );
-      })}
+      {messages.map((m) => (
+        <MessageItem
+          key={m.id}
+          m={m}
+          humanAgentId={humanAgentId}
+          agentRoleById={agentRoleById}
+          fmtTime={fmtTime}
+          renderContent={renderContent}
+          cx={cx}
+        />
+      ))}
     </>
   );
-}
+});

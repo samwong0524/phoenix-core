@@ -1,20 +1,19 @@
 export const runtime = "nodejs";
 
-import { getUpstashRealtime } from "@/runtime/upstash-realtime";
 import { getWorkspaceUIBus } from "@/runtime/ui-bus";
 
 function sse(data: unknown) {
-  return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`);
+  return new TextEncoder().encode("data: " + JSON.stringify(data) + "\n\n");
 }
 
 function sseWithId(id: string | number | null | undefined, data: unknown) {
   const prefix =
     typeof id === "string"
-      ? `id: ${id}\n`
+      ? "id: " + id + "\n"
       : typeof id === "number"
-        ? `id: ${id}\n`
+        ? "id: " + id + "\n"
         : "";
-  return new TextEncoder().encode(`${prefix}data: ${JSON.stringify(data)}\n\n`);
+  return new TextEncoder().encode(prefix + "data: " + JSON.stringify(data) + "\n\n");
 }
 
 export async function GET(req: Request) {
@@ -26,33 +25,7 @@ export async function GET(req: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const sendKeepalive = () => controller.enqueue(new TextEncoder().encode(`: ping\n\n`));
-
-      let upstashUnsubscribe: (() => void) | null = null;
-      let inMemoryUnsubscribe: (() => void) | null = null;
-
-      const channel = getUpstashRealtime().channel(`ui:${workspaceId}`);
-      upstashUnsubscribe = await channel.subscribe({
-        events: [
-          "ui.agent.created",
-          "ui.group.created",
-          "ui.message.created",
-          "ui.agent.llm.start",
-          "ui.agent.llm.done",
-          "ui.agent.history.persisted",
-          "ui.agent.tool_call.start",
-          "ui.agent.tool_call.done",
-          "ui.db.write",
-        ],
-        history: { start: "-" as any, end: "+" as any },
-        onData: (evt) => {
-          const payload = {
-            event: evt.event,
-            data: (evt.data as any)?.data ?? evt.data,
-          };
-          controller.enqueue(sseWithId((evt as any).id, payload));
-        },
-      });
+      const sendKeepalive = () => controller.enqueue(new TextEncoder().encode(": ping\n\n"));
 
       const uiBus = getWorkspaceUIBus();
       const allHistory = uiBus.getSince(workspaceId, 0);
@@ -60,7 +33,7 @@ export async function GET(req: Request) {
       for (const evt of recentHistory) {
         controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
       }
-      inMemoryUnsubscribe = uiBus.subscribe(workspaceId, (evt) => {
+      const unsub = uiBus.subscribe(workspaceId, (evt) => {
         controller.enqueue(sseWithId(evt.id, { event: evt.event, data: evt.data }));
       });
 
@@ -71,8 +44,7 @@ export async function GET(req: Request) {
         if (closed) return;
         closed = true;
         clearInterval(keepalive);
-        upstashUnsubscribe?.();
-        inMemoryUnsubscribe?.();
+        unsub();
         try {
           controller.close();
         } catch {

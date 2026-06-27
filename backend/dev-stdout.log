@@ -1,0 +1,230 @@
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3100
+- Network:       http://169.254.83.107:3100
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 951ms
+ GET / 200 in 1610ms (compile: 1293ms, render: 316ms)
+ GET /models 200 in 69ms (compile: 23ms, render: 46ms)
+ GET /api/settings/provider 200 in 325ms (compile: 312ms, render: 12ms)
+ POST /api/settings/test-connection 200 in 1403ms (compile: 80ms, render: 1323ms)
+○ Compiling /im ...
+ GET /im?workspaceId=test 200 in 5.8s (compile: 5.5s, render: 271ms)
+ GET / 200 in 64ms (compile: 4ms, render: 60ms)
+ GET /models 200 in 57ms (compile: 11ms, render: 47ms)
+ GET /im?workspaceId=test 200 in 68ms (compile: 20ms, render: 48ms)
+ GET /api/settings/provider 200 in 6ms (compile: 2ms, render: 4ms)
+ POST /api/settings/test-connection 200 in 860ms (compile: 2ms, render: 857ms)
+ GET /im?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 58ms (compile: 10ms, render: 49ms)
+ GET /api/models 200 in 108ms (compile: 99ms, render: 9ms)
+ GET /api/workspace-init?overrideWorkspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 694ms (compile: 597ms, render: 97ms)
+[redis:cleanup] starting cleanup for stream ui:eaa37135-a9ce-45da-a4b7-a660d90562d7 every 60s
+ GET /api/agents/dadecc81-57b4-41bf-b405-e60a22f5c51e 200 in 1061ms (compile: 1048ms, render: 13ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 222ms (compile: 202ms, render: 20ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 626ms (compile: 606ms, render: 20ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?markRead=true&readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 1712ms (compile: 1668ms, render: 44ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 17ms (compile: 2ms, render: 15ms)
+[AgentRunner:wakeup] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e reason=context_stream
+[redis:cleanup] starting cleanup for stream agent:dadecc81-57b4-41bf-b405-e60a22f5c51e every 60s
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=1 batches=0
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 14ms (compile: 8ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 28ms (compile: 3ms, render: 26ms)
+[wakeAgentsForGroup] group=4820d967-773f-4a1e-bc41-7d031fea7400, members=dadecc81-57b4-41bf-b405-e60a22f5c51e,889d842b-d62f-4abd-93d9-44a762ff63bc, sender=889d842b-d62f-4abd-93d9-44a762ff63bc
+[AgentRunner:wakeup] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e reason=group_message
+ POST /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages 201 in 55ms (compile: 10ms, render: 45ms)
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=1 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[mcp] loading with timeout 2000ms
+[mcp] loading config from F:\swarm-ide\backend\mcp.json
+[mcp] connecting computer-use...
+[mcp] connecting tavily...
+[mcp] connecting chrome-devtools...
+[mcp] connecting PrimeMatrixData-http...
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 88ms (compile: 7ms, render: 81ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 112ms (compile: 6ms, render: 106ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 20ms (compile: 2ms, render: 18ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 9ms (compile: 3ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 28ms (compile: 3ms, render: 25ms)
+[mcp] PrimeMatrixData-http tools: 11
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=2 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 16ms (compile: 9ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 33ms (compile: 3ms, render: 30ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=3 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 9 messages
+✓ Compiled in 338ms
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 18ms (compile: 12ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 32ms (compile: 2ms, render: 29ms)
+[mcp] chrome-devtools tools: 29
+[mcp] total tools loaded: 40
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 14ms (compile: 8ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 30ms (compile: 3ms, render: 27ms)
+ POST /api/agents/interrupt-all 200 in 307ms (compile: 297ms, render: 10ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 16ms (compile: 9ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 33ms (compile: 2ms, render: 30ms)
+ GET /api/agents/dadecc81-57b4-41bf-b405-e60a22f5c51e/context-stream?groupId=4820d967-773f-4a1e-bc41-7d031fea7400 200 in 30.8s (compile: 1795ms, render: 29.1s)
+ GET /api/ui-stream?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 30.9s (compile: 476ms, render: 30.4s)
+ GET / 200 in 95ms (compile: 3ms, render: 92ms)
+ GET /models 200 in 27ms (compile: 12ms, render: 16ms)
+ GET /api/settings/provider 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/settings/provider 200 in 5ms (compile: 1655µs, render: 3ms)
+ GET / 200 in 35ms (compile: 3ms, render: 32ms)
+ GET /im?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 23ms (compile: 8ms, render: 15ms)
+ GET /api/models 200 in 6ms (compile: 3ms, render: 3ms)
+ GET /api/models 200 in 5ms (compile: 1904µs, render: 4ms)
+ GET /api/workspace-init?overrideWorkspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 35ms (compile: 2ms, render: 33ms)
+ GET /api/agents/dadecc81-57b4-41bf-b405-e60a22f5c51e 200 in 37ms (compile: 12ms, render: 26ms)
+ GET /api/workspace-init?overrideWorkspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 86ms (compile: 2ms, render: 84ms)
+[AgentRunner:wakeup] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e reason=context_stream
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=1 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?markRead=true&readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 77ms (compile: 22ms, render: 55ms)
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 12 messages
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?markRead=true&readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 18ms (compile: 2ms, render: 16ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 31ms (compile: 2ms, render: 28ms)
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=2 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/ui-stream?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7 200 in 216ms (compile: 26ms, render: 190ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 20ms (compile: 1742µs, render: 18ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 32ms (compile: 3ms, render: 30ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=3 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 26ms (compile: 14ms, render: 12ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 67ms (compile: 6ms, render: 61ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 15ms (compile: 9ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 38ms (compile: 3ms, render: 36ms)
+ POST /api/agents/interrupt-all 200 in 11ms (compile: 3ms, render: 9ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 21ms (compile: 15ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 44ms (compile: 4ms, render: 39ms)
+ POST /api/agents/interrupt-all 200 in 14ms (compile: 2ms, render: 11ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 19ms (compile: 12ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 43ms (compile: 3ms, render: 39ms)
+ POST /api/agents/interrupt-all 200 in 13ms (compile: 4ms, render: 9ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 15ms (compile: 9ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 36ms (compile: 6ms, render: 30ms)
+ POST /api/agents/interrupt-all 200 in 14ms (compile: 4ms, render: 10ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 15ms (compile: 8ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 33ms (compile: 2ms, render: 30ms)
+ POST /api/agents/interrupt-all 200 in 9ms (compile: 2ms, render: 7ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 15ms (compile: 9ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 37ms (compile: 3ms, render: 34ms)
+ POST /api/agents/interrupt-all 200 in 9ms (compile: 2ms, render: 7ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 15ms (compile: 9ms, render: 6ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 32ms (compile: 3ms, render: 29ms)
+ GET /api/settings/provider 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/agents 400 in 348ms (compile: 343ms, render: 5ms)
+ GET /api/agents 400 in 9ms (compile: 4ms, render: 6ms)
+ POST /api/settings/test-connection 200 in 914ms (compile: 3ms, render: 911ms)
+[AgentRunner:loop] wakeup timeout 600000ms, stopping runner
+[AgentRunner:loop] wakeup timeout 600000ms, stopping runner
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=1 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=2 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 24ms (compile: 3ms, render: 21ms)
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 812ms (compile: 749ms, render: 63ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=3 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 10ms (compile: 3ms, render: 7ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 32ms (compile: 3ms, render: 29ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 23ms (compile: 9ms, render: 14ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 41ms (compile: 3ms, render: 38ms)
+[AgentRunner:loop] wakeup timeout 600000ms, stopping runner
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=1 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=2 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 20ms (compile: 12ms, render: 8ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 42ms (compile: 5ms, render: 37ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+[processUntilIdle] agent=dadecc81-57b4-41bf-b405-e60a22f5c51e iterations=3 batches=1
+[processUntilIdle] Processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400 messages=1
+[processGroupUnread] group=4820d967-773f-4a1e-bc41-7d031fea7400 msgs=1
+[processGroupUnread] workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7
+[processGroupUnread] agent role=assistant
+[processGroupUnread] db connected, checking workflow
+[processGroupUnread] activeWf=none, isCoordinator=false, freeMode=true
+[processGroupUnread] compressed history: 10 messages
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 20ms (compile: 11ms, render: 9ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 44ms (compile: 3ms, render: 40ms)
+[processUntilIdle] Done processing batch group=4820d967-773f-4a1e-bc41-7d031fea7400
+ GET /api/groups/4820d967-773f-4a1e-bc41-7d031fea7400/messages?readerId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 24ms (compile: 14ms, render: 9ms)
+ GET /api/groups?workspaceId=eaa37135-a9ce-45da-a4b7-a660d90562d7&agentId=889d842b-d62f-4abd-93d9-44a762ff63bc 200 in 43ms (compile: 3ms, render: 40ms)
+ POST /api/settings/test-connection 200 in 867ms (compile: 3ms, render: 864ms)
+ POST /api/settings/test-connection 200 in 739ms (compile: 2ms, render: 737ms)
+ POST /api/settings/test-connection 200 in 910ms (compile: 3ms, render: 907ms)

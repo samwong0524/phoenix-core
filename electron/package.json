@@ -1,0 +1,35 @@
+﻿{
+  "name": "phoenix-core-desktop",
+  "version": "0.2.0",
+  "description": "Phoenix-Core Desktop Application",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "electron . --dev",
+    "build": "tsc && electron-builder",
+    "package": "electron-builder --dir"
+  },
+  "dependencies": {
+    "electron-updater": "^6.7.3",
+    "electron-log": "^5.4.3"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.6.0"
+  },
+  "build": {
+    "appId": "com.phoenix-core.desktop",
+    "productName": "Phoenix-Core",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    }
+  }
+}

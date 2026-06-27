@@ -2,10 +2,10 @@
 echo Stopping SWARM IDE dev server...
 echo.
 
-REM Kill SWARM IDE process on port 3017
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3017 " ^| findstr "LISTENING"') do (
+REM Kill SWARM IDE process on port 3100
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3100 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a 2>nul
-    echo Killed SWARM IDE process %%a on port 3017
+    echo Killed SWARM IDE process %%a on port 3100
 )
 
 REM Stop FreeLLMAPI if running

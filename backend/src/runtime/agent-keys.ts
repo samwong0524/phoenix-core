@@ -1,3 +1,5 @@
+import { getSetting } from "@/lib/settings";
+
 export interface KeyEntry {
   key: string;
   cooldownUntil: number; // timestamp (ms) when this key becomes available again
@@ -87,7 +89,16 @@ export function getAnthropicKeyPool(): KeyPool {
 
 export function getFreellmapiKeyPool(): KeyPool {
   if (_freellmapiKeyPool) return _freellmapiKeyPool;
-  _freellmapiKeyPool = parseKeyPool("FREELLMAPI_API_KEYS", process.env.FREELLMAPI_API_KEY ?? "");
+  // Fall back to persistent settings (set via /models UI) when env vars are empty
+  const fallbackKey = process.env.FREELLMAPI_API_KEY ?? "";
+  _freellmapiKeyPool = parseKeyPool("FREELLMAPI_API_KEYS", fallbackKey);
+  // If pool is empty and there's a key in persistent settings, use it directly
+  if (!_freellmapiKeyPool.hasKeys()) {
+    const settingKey = getSetting("llm_api_key") ?? "";
+    if (settingKey) {
+      _freellmapiKeyPool = new KeyPool([settingKey]);
+    }
+  }
   return _freellmapiKeyPool;
 }
 

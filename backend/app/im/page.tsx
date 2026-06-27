@@ -798,16 +798,29 @@ function IMPageInner() {
       if (opts?.markRead ?? true) q.set("markRead", "true");
       q.set("readerId", s.humanAgentId);
       const suffix = q.size ? `?${q.toString()}` : "";
-      const { messages } = await api<{ messages: Message[] }>(
-        `/api/groups/${groupId}/messages${suffix}`
-      );
-      const prevCount = messagesRef.current.length;
+    const { messages } = await api<{ messages: Message[] }>(
+      `/api/groups/${groupId}/messages${suffix}`
+    );
+    const prev = messagesRef.current;
+    // Only update state if messages actually changed — calling setMessages
+    // with a new array reference triggers a full re-render of IMPageInner,
+    // which causes the white flash.
+    if (messages.length !== prev.length) {
+      messagesRef.current = messages;
       setMessages(messages);
-      if (!opts?.silent) setStatus("idle");
+    } else if (messages.length > 0) {
+      const lastPrev = prev[prev.length - 1];
+      const lastNew = messages[messages.length - 1];
+      if (lastPrev.id !== lastNew.id) {
+        messagesRef.current = messages;
+        setMessages(messages);
+      }
+    }
+    if (!opts?.silent) setStatus("idle");
       if (!opts?.skipGroupRefresh) {
         void refreshGroups(s, { silent: opts?.silent });
       }
-      if (opts?.scrollToBottom ?? messages.length > prevCount) {
+      if (opts?.scrollToBottom ?? messages.length > prev.length) {
         queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
       }
     },
@@ -1132,13 +1145,13 @@ function IMPageInner() {
       const content = JSON.stringify({ url: data.url, name: data.name, size: data.size });
       const contentType = data.isImage ? "image" : "file";
 
-      const optimistic: Message = {
-        id: `optimistic-${Date.now()}`,
-        senderId: session.humanAgentId,
-        content,
-        contentType,
-        sendTime: new Date().toISOString(),
-      };
+     const optimistic: Message = {
+       id: `optimistic-${Date.now()}`,
+       senderId: session.humanAgentId,
+       content,
+       contentType,
+      sendTime: new Date().toISOString(),
+    };
       setMessages((m) => [...m, optimistic]);
 
       try {
@@ -1263,6 +1276,23 @@ function IMPageInner() {
           }
           if (agentId) {
             setAgentStatusById((prev) => ({ ...prev, [agentId]: "IDLE" }));
+          }
+          // Optimistic update: append new agent to list without API refresh (avoids flash)
+          if (agentId) {
+            setAgents((prev) => {
+              if (prev.some((a) => a.id === agentId)) return prev; // dedup
+              return [...prev, { id: agentId, role, parentId: parentId ?? null, createdAt: new Date().toISOString() }];
+            });
+          }
+        } else if (payload.event === "ui.agent.deleted") {
+          const agentId = payload.data?.agentId as UUID | undefined;
+          if (agentId) {
+            setAgents((prev) => prev.filter((a) => a.id !== agentId));
+            setAgentStatusById((prev) => {
+              const next: Record<string, AgentStatus> = { ...prev };
+              delete next[agentId];
+              return next;
+            });
           }
         } else if (payload.event === "ui.message.created") {
           const senderId = payload.data?.message?.senderId as UUID | undefined;
@@ -1416,6 +1446,26 @@ function IMPageInner() {
     if (status === "WAKING") return "var(--yellow)";
     return "var(--green)";
   };
+
+const renderContent = useCallback((content: string, contentType: string) => {
+    if (contentType === 'image') {
+      try {
+        const img = JSON.parse(content) as { url?: string; name?: string };
+        if (img?.url) {
+          return <img src={img.url} alt={img.name || ''} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, cursor: 'pointer' }} onClick={() => window.open(img.url!, '_blank')} />;
+        }
+      } catch { /* fallthrough */ }
+    }
+    if (contentType === 'file') {
+      try {
+        const file = JSON.parse(content) as { url?: string; name?: string; size?: number };
+        if (file?.url && file?.name) {
+          return <FileCard url={file.url} name={file.name} size={file.size} />;
+        }
+      } catch { /* fallthrough */ }
+    }
+    return <MarkdownContent content={content} />;
+  }, []);
 
   const midChatHeight = useMemo(() => {
     if (!midStackHeight) return 0;
@@ -1887,25 +1937,7 @@ function IMPageInner() {
               humanAgentId={session?.humanAgentId ?? null}
               agentRoleById={agentRoleById}
               fmtTime={fmtTime}
-              renderContent={(content, contentType) => {
-                if (contentType === "image") {
-                  try {
-                    const img = JSON.parse(content) as { url?: string; name?: string };
-                    if (img?.url) {
-                      return <img src={img.url} alt={img.name || ""} style={{ maxWidth: "100%", maxHeight: 300, borderRadius: 8, cursor: "pointer" }} onClick={() => window.open(img.url!, "_blank")} />;
-                    }
-                  } catch { /* fallthrough */ }
-                }
-                if (contentType === "file") {
-                  try {
-                    const file = JSON.parse(content) as { url?: string; name?: string; size?: number };
-                    if (file?.url && file?.name) {
-                      return <FileCard url={file.url} name={file.name} size={file.size} />;
-                    }
-                  } catch { /* fallthrough */ }
-                }
-                return <MarkdownContent content={content} />;
-              }}
+              renderContent={renderContent}
               cx={cx}
             />
             <div ref={bottomRef} />

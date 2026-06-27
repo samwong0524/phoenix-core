@@ -39,6 +39,42 @@ type AgentEvent =
       at: number;
       event: "agent.error";
       data: { message: string };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.start";
+      data: { pipelineId: string; workflowId: string; groupId: string; stageCount: number };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_start";
+      data: { pipelineId: string; stageName: string; role: string };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_complete";
+      data: { pipelineId: string; stageName: string; status: string; output: string };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.stage_done";
+      data: { agentId: string; groupId: string; stageName: string; output: string };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.complete";
+      data: { pipelineId: string; overallStatus: string };
+    }
+    | {
+      id: number;
+      at: number;
+      event: "pipeline.review";
+      data: { pipelineId: string; stageName: string; output: string };
     };
 
 type Listener = (evt: AgentEvent) => void;
@@ -54,6 +90,8 @@ const DEFAULT_MAX_BUFFER = 2000;
 
 export class AgentEventBus {
   private readonly channels = new Map<string, ChannelState>();
+  private _crossInstanceInitialized = false;
+  private _remoteSub: { unsubscribe: () => void } | null = null;
   constructor(private readonly maxBuffer = DEFAULT_MAX_BUFFER) {}
 
   private getChannel(agentId: string): ChannelState {
@@ -85,6 +123,10 @@ export class AgentEventBus {
       .catch(() => undefined)
       .then(() => persistAgentEvent(agentId, evt));
 
+    // Cross-instance propagation: publish to Redis pub/sub so other instances
+    // running the same agent receive this event in real time.
+    this.publishCrossInstance(agentId, { event: evt.event, data: evt.data });
+
     for (const listener of channel.listeners) {
       listener(evt);
     }
@@ -110,19 +152,88 @@ export class AgentEventBus {
 
   /**
    * Initialize cross-instance event bus pub/sub.
-   * No-op if Redis is not configured.
+   * Subscribes to the agent:all Redis pub/sub channel and routes
+   * remote events into the local listener set for each agent channel.
    */
   async initCrossInstance(): Promise<void> {
+    if (this._crossInstanceInitialized) return;
+    this._crossInstanceInitialized = true;
+    if (this._remoteSub) return;
     try {
-      const { getRedisClient } = await import("./upstash-realtime");
-      await getRedisClient();
+      const { getRedisClient, isUpstashRealtimeConfigured } = await import('./upstash-realtime');
+      if (!isUpstashRealtimeConfigured()) return;
+      const redisClient = await getRedisClient();
+      const subscriber = this._createSubscriber(redisClient);
+      this._remoteSub = subscriber;
     } catch {
       // Redis not available
+    }
+  }
+
+  /**
+   * Publish an event to the cross-instance pub/sub channel so that
+   * other instances running the same agent can receive it.
+   */
+  private async publishCrossInstance(agentId: string, payload: RemoteEventPayload): Promise<void> {
+    try {
+      const { getRedisClient, isUpstashRealtimeConfigured } = await import('./upstash-realtime');
+      if (!isUpstashRealtimeConfigured()) return;
+      const client = await getRedisClient();
+      await client.publish('agent:all', JSON.stringify({ agentId, ...payload }));
+    } catch {
+      // publish is best-effort
+    }
+  }
+
+  /**
+   * Create and wire up a Redis subscriber for the agent:all channel.
+   */
+  private _createSubscriber(redisClient: unknown): { unsubscribe: () => void } {
+   const client = redisClient as { on: (ev: string, fn: (...args: unknown[]) => void) => void; subscribe?: (ch: string) => Promise<void> };
+   let unsubscribed = false;
+    const handler = (...args: unknown[]) => {
+      if (unsubscribed) return;
+      try {
+        const message = args.length >= 2 && typeof args[1] === 'string' ? args[1] : '';
+        if (!message) return;
+        const parsed: RemoteEventPayload & { agentId: string } = JSON.parse(message);
+        this.mergeRemoteEvent(parsed.agentId, {
+         event: parsed.event as AgentEvent['event'],
+          data: parsed.data as AgentEvent['data'],
+        });
+      } catch {
+        // ignore parse errors
+      }
+    };
+    client.on('message', handler);
+    client.subscribe?.('agent:all').catch(() => undefined);
+    return { unsubscribe: () => { unsubscribed = true; } };
+  }
+
+  /**
+   * Merge a remotely-published event into the local channel buffer
+   * and dispatch it to all local listeners.
+   */
+  mergeRemoteEvent(agentId: string, evt: Omit<AgentEvent, 'id' | 'at'>): void {
+    const channel = this.getChannel(agentId);
+    const remoteEvt = { ...evt, id: channel.nextId++, at: Date.now() } as AgentEvent;
+    channel.buffer.push(remoteEvt);
+    if (channel.buffer.length > this.maxBuffer) {
+      channel.buffer.splice(0, channel.buffer.length - this.maxBuffer);
+    }
+    for (const listener of channel.listeners) {
+      listener(remoteEvt);
     }
   }
 }
 
 
+
+
+type RemoteEventPayload = {
+  event: string;
+  data: unknown;
+};
 
 export type { AgentEvent };
 

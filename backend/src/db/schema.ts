@@ -202,3 +202,25 @@ export const skillUsage = pgTable("skill_usage", {
   usedAt: timestamp("used_at", { withTimezone: true }).notNull(),
   status: text("status").notNull().default("active"), // active|conflict|archived
 });
+
+// Pipeline 执行记录表（Phase 1 新增）
+export const pipelineExecutions = pgTable("pipeline_executions", {
+  id: uuid("id").primaryKey(),
+  pipelineId: uuid("pipeline_id").notNull(),
+  workflowId: uuid("workflow_id")
+    .notNull()
+    .references(() => workflows.id),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groups.id),
+  stageName: text("stage_name").notNull(),
+  status: text("status").notNull().default("pending"), // pending|running|done|failed|review_requested
+  output: text("output"),
+  agentId: uuid("agent_id").references(() => agents.id),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  error: text("error"),
+}, (t) => ({
+  pipelineIdx: index("pipeline_exec_pipeline_idx").on(t.pipelineId),
+  workflowIdx: index("pipeline_exec_workflow_idx").on(t.workflowId),
+}));

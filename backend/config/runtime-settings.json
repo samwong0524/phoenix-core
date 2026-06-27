@@ -1,0 +1,6 @@
+{
+  "llm_provider": "freellmapi",
+  "llm_base_url": "https://api.deepseek.com/v1",
+  "llm_api_key": "sk-e86f12a3b8b54ddb9069698769eb4dee",
+  "llm_model": "deepseek-v4-flash"
+}

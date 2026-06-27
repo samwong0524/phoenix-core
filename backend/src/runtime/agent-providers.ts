@@ -1,5 +1,6 @@
 ﻿import { getGlmKeyPool, getFreellmapiKeyPool, getOpenrouterKeyPool, getAnthropicKeyPool } from "./agent-keys";
 import { getRuntimeSetting } from "./agent-helpers";
+import { getSetting } from "@/lib/settings";
 import type { AgentRunner } from "./agent-runtime";
 import type { HistoryMessage, ToolCall, UUID } from "./agent-types";
 
@@ -48,9 +49,10 @@ export function ensureUserMessage(messages: any[]): any[] {
 export function getFreellmapiConfig() {
   const pool = getFreellmapiKeyPool();
   const apiKey = pool.getNext() ?? "";
-  const baseUrl = (process.env.FREELLMAPI_URL ?? "http://127.0.0.1:3001/v1").replace(/\/+$/, "");
-  // Runtime model switching: check runtime setting first, then env var, then "auto".
- const model = getRuntimeSetting("freellmapi_model") ?? process.env.FREELLMAPI_MODEL ?? "auto";
+  // Read from env first, then persistent settings (set via /models UI), then default
+  const baseUrl = (process.env.FREELLMAPI_URL ?? getSetting("llm_base_url") ?? "http://127.0.0.1:3001/v1").replace(/\/+$/, "");
+  // Runtime model switching: check runtime setting first, then env, then persistent, then "auto".
+  const model = getRuntimeSetting("freellmapi_model") ?? process.env.FREELLMAPI_MODEL ?? getSetting("llm_model") ?? "auto";
   // Allow empty API key for local llama.cpp / local servers
   const isLocal = baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost");
   if (!apiKey && !isLocal) {
@@ -62,7 +64,7 @@ export function getFreellmapiConfig() {
 export type LlmProvider = "glm" | "openrouter" | "ollama" | "anthropic" | "freellmapi";
 
 export function getLlmProvider(): LlmProvider {
-  const raw = (process.env.LLM_PROVIDER ?? "glm").toLowerCase();
+  const raw = (process.env.LLM_PROVIDER ?? getSetting("llm_provider") ?? "glm").toLowerCase();
   if (raw === "openrouter" || raw === "open-router" || raw === "or") return "openrouter";
   if (raw === "anthropic" || raw === "anthropic-compatible") return "anthropic";
   if (raw === "ollama" || raw === "o" || raw === "local") return "ollama";
@@ -78,9 +80,10 @@ export function isProviderConfigured(provider: LlmProvider): boolean {
     case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.GLM_API_KEYS);
     case "ollama": return true; // local, always available
     case "freellmapi": {
-      const url = process.env.FREELLMAPI_URL ?? "";
+      const url = process.env.FREELLMAPI_URL ?? getSetting("llm_base_url") ?? "";
       const isLocal = url.includes("127.0.0.1") || url.includes("localhost");
-      return isLocal || !!(process.env.FREELLMAPI_API_KEY || process.env.FREELLMAPI_API_KEYS);
+      const hasKey = !!(process.env.FREELLMAPI_API_KEY || process.env.FREELLMAPI_API_KEYS || getSetting("llm_api_key"));
+      return isLocal || hasKey;
     }
   }
 }
