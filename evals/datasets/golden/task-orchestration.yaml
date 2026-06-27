@@ -1,0 +1,398 @@
+# evals/datasets/golden/task-orchestration.yaml
+# Golden Set: Multi-Agent Task Orchestration
+# Tests coordinator delegation, workflow engine, pipeline execution
+dataset_id: golden-task-orchestration-v1
+size: 15
+created: "2026-06-27"
+category: task_orchestration
+
+cases:
+  # ── Coordinator Delegation ──
+  - id: to-001
+    name: coordinator-delegates-to-specialist
+    description: Coordinator receives a coding task and delegates to a specialist
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Tech Lead"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "We need to build a REST API for user authentication. Please create a backend specialist to handle this."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["specialist", "create", "backend", "agent", "expert", "assign", "delegate"]
+      min_response_length: 40
+
+  - id: to-002
+    name: coordinator-delegates-multiple-tasks
+    description: Coordinator breaks a project into multiple sub-tasks
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Project Manager"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "We need to build a landing page. Break this into design, frontend, and content writing tasks."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 60
+      response_mentions: ["design", "frontend", "content", "task", "step", "plan"]
+
+  - id: to-003
+    name: coordinator-summarizes-results
+    description: After delegation, coordinator summarizes the outcome
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Summary Lead"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Create a researcher to find the top 3 JavaScript frameworks for 2024, then summarize the findings."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 30
+
+  # ── Workflow Engine ──
+  - id: to-004
+    name: workflow-create-and-activate
+    description: Create a workflow with tasks and activate it
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Workflow Lead"
+        save: agent_id, group_id
+      - action: create_workflow
+        params:
+          tasks:
+            - title: "Research phase"
+              assigneeRole: researcher
+            - title: "Implementation phase"
+              assigneeRole: specialist
+              dependsOn: ["Research phase"]
+        save: workflow_id
+      - action: activate_workflow
+        params:
+          workflow_id: "{{workflow_id}}"
+    expected:
+      workflow_created: true
+      workflow_activated: true
+
+  - id: to-005
+    name: workflow-dependent-tasks
+    description: Workflow with 3 tasks where task C depends on B, B depends on A
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Chain Lead"
+        save: agent_id, group_id
+      - action: create_workflow
+        params:
+          tasks:
+            - title: "Design"
+              assigneeRole: creator
+            - title: "Implement"
+              assigneeRole: specialist
+              dependsOn: ["Design"]
+            - title: "Review"
+              assigneeRole: reviewer
+              dependsOn: ["Implement"]
+        save: workflow_id
+      - action: activate_workflow
+        params:
+          workflow_id: "{{workflow_id}}"
+    expected:
+      workflow_created: true
+      workflow_activated: true
+
+  - id: to-006
+    name: workflow-parallel-tasks
+    description: Workflow with 3 independent tasks that can run in parallel
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Parallel Lead"
+        save: agent_id, group_id
+      - action: create_workflow
+        params:
+          tasks:
+            - title: "Research A"
+              assigneeRole: researcher
+            - title: "Research B"
+              assigneeRole: researcher
+            - title: "Research C"
+              assigneeRole: researcher
+        save: workflow_id
+      - action: activate_workflow
+        params:
+          workflow_id: "{{workflow_id}}"
+    expected:
+      workflow_created: true
+      workflow_activated: true
+
+  # ── Multi-Turn Orchestration ──
+  - id: to-007
+    name: multi-turn-task-refinement
+    description: Refine a task through multiple conversation turns
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: assistant
+          name: "Helper"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "I need a login page"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages_r1
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Make it include OAuth with Google and GitHub"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages_r2
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 30
+
+  - id: to-008
+    name: agent-role-enforcement
+    description: Editor should not create from scratch, coordinator should not implement
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: editor
+          name: "Strict Editor"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please polish and improve this text: 'the software work good'"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 15
+
+  - id: to-009
+    name: complex-multi-agent-project
+    description: "Full project simulation: coordinator + 3 specialists"
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Project Director"
+        save: coord_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "UI Designer"
+          creator_id: "{{coord_id}}"
+        save: ui_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "API Developer"
+          creator_id: "{{coord_id}}"
+        save: api_id
+      - action: create_agent
+        params:
+          role: reviewer
+          name: "QA Tester"
+          creator_id: "{{coord_id}}"
+        save: qa_id
+      - action: create_group
+        params:
+          member_ids: ["{{human_agent_id}}", "{{coord_id}}", "{{ui_id}}", "{{api_id}}", "{{qa_id}}"]
+        save: project_group_id
+      - action: send_message
+        params:
+          group_id: "{{project_group_id}}"
+          message: "Build a todo app with React frontend, REST API backend, and comprehensive tests"
+      - action: get_messages
+        params:
+          group_id: "{{project_group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_message_count: 2
+      min_response_length: 50
+
+  - id: to-010
+    name: workflow-with-revisions
+    description: Workflow task that goes through review and revision cycle
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Review Lead"
+        save: agent_id, group_id
+      - action: create_workflow
+        params:
+          tasks:
+            - title: "Write documentation"
+              assigneeRole: creator
+              maxRevisions: 2
+            - title: "Review documentation"
+              assigneeRole: reviewer
+              dependsOn: ["Write documentation"]
+        save: workflow_id
+      - action: activate_workflow
+        params:
+          workflow_id: "{{workflow_id}}"
+    expected:
+      workflow_created: true
+      workflow_activated: true
+
+  # ── Dynamic Agent Adaptation ──
+  - id: to-011
+    name: agent-adapts-to-complex-request
+    description: Assistant agent should propose a workflow for complex requests
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: send_message
+        params:
+          group_id: "{{default_group_id}}"
+          message: "Build a full e-commerce platform with user auth, product catalog, shopping cart, and payment integration"
+      - action: get_messages
+        params:
+          group_id: "{{default_group_id}}"
+        save: messages
+    expected:
+      response_not_empty: true
+      min_response_length: 80
+      response_mentions: ["workflow", "step", "phase", "agent", "create", "plan", "task"]
+
+  - id: to-012
+    name: agent-handles-simple-directly
+    description: Simple request should be handled directly without workflow creation
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: send_message
+        params:
+          group_id: "{{default_group_id}}"
+          message: "What is 2 + 2?"
+      - action: get_messages
+        params:
+          group_id: "{{default_group_id}}"
+        save: messages
+    expected:
+      response_not_empty: true
+      response_mentions: ["4", "four"]
+
+  - id: to-013
+    name: coordinator-verification-behavior
+    description: Coordinator should run verification commands directly per soul.md
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "QA Lead"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please verify the system is working by running a health check command"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 15
+
+  - id: to-014
+    name: researcher-citation-behavior
+    description: Researcher should provide citations when gathering information
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: researcher
+          name: "Academic Researcher"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Research the benefits of microservices architecture and cite your sources"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 50
+
+  - id: to-015
+    name: workspace-listing
+    description: List all workspaces to verify creation
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: list_workspaces
+        save: workspaces
+    expected:
+      workspace_id_not_empty: true

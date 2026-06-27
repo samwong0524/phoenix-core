@@ -1,0 +1,48 @@
+# evals/scorers/rubrics/collaboration-quality.yaml
+# 多智能体协作质量评分标准 (North Star Metric #2)
+rubric_id: collaboration-quality-v1
+name: 多智能体协作质量评分
+metric: collaboration_efficiency
+scale: 0-3
+created: "2026-06-28"
+
+levels:
+  - score: 3
+    label: excellent_collaboration
+    description: "协作优秀：Agent 主动创建子 Agent、分配角色、协调任务，体现了蜂群自组织特性"
+    criteria:
+      - "Coordinator 主动委派任务给 specialist/worker"
+      - "子 Agent 创建合理（角色匹配任务需求）"
+      - "任务分解清晰，各 Agent 职责明确"
+      - "消息路由正确，无信息丢失"
+    example: "用户要求构建登录页面，Coordinator 创建前端 specialist 和后端 specialist，分别分配任务"
+
+  - score: 2
+    label: adequate_collaboration
+    description: "协作合格：有多 Agent 交互但协调不够优化"
+    criteria:
+      - "有创建子 Agent 的行为"
+      - "角色分配基本合理"
+      - "但任务分解不够清晰或存在冗余"
+
+  - score: 1
+    label: minimal_collaboration
+    description: "协作勉强：仅单 Agent 响应，未利用多 Agent 优势"
+    criteria:
+      - "未创建子 Agent（虽然任务适合委派）"
+      - "或创建了子 Agent 但未有效协调"
+      - "消息路由存在问题"
+
+  - score: 0
+    label: no_collaboration
+    description: "无协作：系统报错、Agent 创建失败、或完全未响应"
+    criteria:
+      - "Agent 创建失败"
+      - "消息未能正确路由"
+      - "系统返回错误"
+
+annotator_guide: |
+  1. 仅对涉及多 Agent 交互的测试用例评分（to-*, lc-012~014）
+  2. 检查 Agent 是否体现了 Phoenix-Core 的"液态拓扑"哲学
+  3. 重点看：是否主动创建子 Agent、角色是否匹配、任务分解是否合理
+  4. 如果任务本身不需要多 Agent（简单问答），则此 rubric 不适用，标记 N/A

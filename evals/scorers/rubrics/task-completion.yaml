@@ -1,0 +1,50 @@
+# evals/scorers/rubrics/task-completion.yaml
+# 任务完成率评分标准 (North Star Metric #1)
+rubric_id: task-completion-v1
+name: 任务完成率评分
+metric: task_completion_rate
+scale: 0-3
+created: "2026-06-28"
+
+levels:
+  - score: 3
+    label: fully_completed
+    description: "任务完全完成：Agent 准确理解了任务意图，输出包含所有关键要素，无需人工修正"
+    criteria:
+      - "输出直接回应了用户请求的核心需求"
+      - "关键信息无遗漏"
+      - "未编造原文不存在的內容"
+    example: "用户要求创建 specialist agent，Agent 成功创建并返回了专业领域相关的响应"
+
+  - score: 2
+    label: partially_completed
+    description: "任务部分完成：核心需求已满足，但存在次要信息遗漏或格式瑕疵"
+    criteria:
+      - "主要功能/请求已实现"
+      - "有个别次要细节遗漏"
+      - "输出可用但不完美"
+    example: "Agent 创建成功，但响应未充分体现场景专业性"
+
+  - score: 1
+    label: minimally_completed
+    description: "任务勉强完成：有基本输出但存在明显缺陷，需要人工修正才能使用"
+    criteria:
+      - "有输出但不完整"
+      - "存在明显错误或遗漏"
+      - "需要人工介入修正"
+
+  - score: 0
+    label: failed
+    description: "任务失败：无输出、输出完全偏离、或系统报错"
+    criteria:
+      - "无响应或空响应"
+      - "响应与请求完全无关"
+      - "系统返回错误"
+
+annotator_guide: |
+  1. 阅读测试用例的 message（用户请求）和 expected（预期行为）
+  2. 查看 Agent 实际输出
+  3. 对照 criteria 逐条检查
+  4. 如果 expected 中有 response_mentions 关键词，检查覆盖率 >= 60% 即为 score 3
+  5. 覆盖率 30-60% 为 score 2，< 30% 为 score 1
+  6. 无输出或报错为 score 0

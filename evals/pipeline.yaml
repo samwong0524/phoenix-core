@@ -1,0 +1,101 @@
+# evals/pipeline.yaml
+# ASSERT 评测流水线配置
+# Align → Specify → Source → Formulate → Execute → Report → Track
+
+version: "1.0"
+created: "2026-06-28"
+
+pipeline:
+  name: "Phoenix-Core ASSERT 评测流水线"
+  description: "多智能体蜂群系统全链路评测"
+
+  # ── Stage 1: 数据采集 ──────────────────────────────────
+  stages:
+    - name: data_collection
+      title: "数据采集 — 批量推理"
+      action: batch_infer
+      config:
+        base_url: "${PHOENIX_BASE_URL:-http://localhost:3100}"
+        datasets:
+          - path: evals/datasets/golden/agent-lifecycle.yaml
+            weight: 1.0
+          - path: evals/datasets/golden/task-orchestration.yaml
+            weight: 1.0
+          - path: evals/datasets/golden/tool-usage.yaml
+            weight: 1.0
+          - path: evals/datasets/edge/edge-cases.yaml
+            weight: 0.8
+          - path: evals/datasets/adversarial/security.yaml
+            weight: 1.2
+        concurrency: 3
+        retry: 2
+        timeout_ms: 60000
+        output: evals/results/{run_id}/outputs.jsonl
+
+    # ── Stage 2: 自动评分 ─────────────────────────────────
+    - name: auto_scoring
+      title: "自动评分 — 程序化指标"
+      action: auto_score
+      config:
+        scorers:
+          - evals/scorers/auto_scorers.py
+        input: evals/results/{run_id}/outputs.jsonl
+        output: evals/results/{run_id}/auto_scores.jsonl
+        metrics:
+          - response_not_empty
+          - min_response_length
+          - keyword_coverage_rate
+          - agent_creation_success
+          - group_creation_success
+          - system_prompt_leak_detected
+          - soul_leak_detected
+          - server_error_free
+          - latency_ms
+
+    # ── Stage 3: 人工评分（可选）──────────────────────────
+    - name: human_review
+      title: "人工评分 — 深度质量评估"
+      action: human_review
+      config:
+        rubrics:
+          - evals/scorers/rubrics/task-completion.yaml
+          - evals/scorers/rubrics/collaboration-quality.yaml
+          - evals/scorers/rubrics/decision-accuracy.yaml
+          - evals/scorers/rubrics/safety-resilience.yaml
+        input: evals/results/{run_id}/outputs.jsonl
+        output: evals/results/{run_id}/human_scores.jsonl
+        sampling:
+          strategy: stratified   # 分层抽样
+          rate: 0.3              # 30% 抽样率
+          min_per_category: 5
+        required: false          # 可跳过，仅自动评分也能出报告
+
+    # ── Stage 4: 生成报告 ─────────────────────────────────
+    - name: report_generation
+      title: "报告生成 — 汇总分析"
+      action: report
+      config:
+        input:
+          auto_scores: evals/results/{run_id}/auto_scores.jsonl
+          human_scores: evals/results/{run_id}/human_scores.jsonl
+        template: evals/templates/report-template.md
+        output: evals/results/{run_id}/report.md
+        sections:
+          - executive_summary
+          - north_star_metrics
+          - driver_metrics
+          - health_metrics
+          - dataset_breakdown
+          - key_findings
+          - action_items
+          - baseline_comparison
+
+    # ── Stage 5: 更新追踪 ─────────────────────────────────
+    - name: tracking_update
+      title: "持续追踪 — 历史趋势"
+      action: track
+      config:
+        input: evals/results/{run_id}/report.md
+        history: evals/tracking/history.jsonl
+        dashboard: evals/tracking/dashboard.md
+        append: true

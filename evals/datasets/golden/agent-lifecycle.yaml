@@ -1,0 +1,460 @@
+# evals/datasets/golden/agent-lifecycle.yaml
+# Golden Set: Agent Lifecycle Management
+# 50 cases covering agent creation, role resolution, grouping, messaging, deletion
+dataset_id: golden-agent-lifecycle-v1
+size: 20
+created: "2026-06-27"
+category: agent_lifecycle
+
+cases:
+  # ── Agent Creation ──
+  - id: lc-001
+    name: basic-coordinator-creation
+    description: Create a coordinator agent and verify it responds with management behavior
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Project Lead"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "The team needs to build a login page. Please plan the task breakdown."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["task", "assign", "step", "plan", "work", "agent"]
+      min_response_length: 50
+
+  - id: lc-002
+    name: specialist-creation
+    description: Create a specialist agent and verify domain expertise in response
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "Database Expert"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "How should we design the user table schema for an e-commerce platform?"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["table", "schema", "column", "field", "index", "key", "user", "order"]
+      min_response_length: 80
+
+  - id: lc-003
+    name: worker-creation
+    description: Create a generic worker agent
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Task Runner"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please execute: echo hello world"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 5
+
+  - id: lc-004
+    name: reviewer-creation
+    description: Create a reviewer agent and verify code review behavior
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: reviewer
+          name: "Code Reviewer"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Review this code: function add(a, b) { return a + b }"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["review", "code", "function", "correct", "suggest", "improve", "check"]
+      min_response_length: 30
+
+  - id: lc-005
+    name: creator-creation
+    description: Create a creator agent and verify content generation
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: creator
+          name: "Content Writer"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Write a short tagline for a productivity app"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 10
+
+  - id: lc-006
+    name: editor-creation
+    description: Create an editor agent and verify refinement behavior
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: editor
+          name: "Content Editor"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please polish this text: 'the app is good and fast and nice'"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 20
+
+  - id: lc-007
+    name: researcher-creation
+    description: Create a researcher agent
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: researcher
+          name: "Market Analyst"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "What are the current trends in multi-agent AI systems?"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 50
+
+  - id: lc-008
+    name: assistant-creation
+    description: Create an assistant agent (default on workspace)
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: send_message
+        params:
+          group_id: "{{default_group_id}}"
+          message: "What can you help me with?"
+      - action: get_messages
+        params:
+          group_id: "{{default_group_id}}"
+        save: messages
+    expected:
+      response_not_empty: true
+      min_response_length: 20
+
+  # ── Role Name Resolution ──
+  - id: lc-009
+    name: chinese-role-pm
+    description: Chinese role name '产品经理' should resolve to coordinator
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: "产品经理"
+          name: "PM Agent"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please outline the project plan"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  - id: lc-010
+    name: chinese-role-developer
+    description: Chinese role name '前端开发' should resolve to specialist
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: "前端开发"
+          name: "FE Dev"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Build a responsive navbar component"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  - id: lc-011
+    name: unknown-role-fallback
+    description: Unknown role should fallback to worker template
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: "quantum_computing_expert"
+          name: "Quantum Agent"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Hello"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  # ── Group Management ──
+  - id: lc-012
+    name: multi-agent-group
+    description: Create a group with multiple agents and verify message delivery
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Lead"
+        save: agent_a_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Worker 1"
+        save: agent_b_id
+      - action: create_group
+        params:
+          member_ids: ["{{human_agent_id}}", "{{agent_a_id}}", "{{agent_b_id}}"]
+        save: group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Both of you, please introduce yourselves"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_message_count: 2
+
+  - id: lc-013
+    name: p2p-auto-group
+    description: Creating agent auto-generates a P2P group
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "Solo Expert"
+        save: agent_id, group_id
+    expected:
+      agent_created: true
+      group_created: true
+
+  # ── Agent Chaining ──
+  - id: lc-014
+    name: sub-agent-creation-chain
+    description: Coordinator creates a sub-agent via delegation
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Master Coordinator"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please create a specialist agent for database design and ask them to design a user table schema"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 30
+
+  - id: lc-015
+    name: workspace-defaults
+    description: Workspace creation returns all required default entities
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+    expected:
+      workspace_id_not_empty: true
+      human_agent_id_not_empty: true
+      assistant_agent_id_not_empty: true
+      default_group_id_not_empty: true
+
+  - id: lc-016
+    name: multiple-agent-creation
+    description: Create 3 different agents in the same workspace
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Lead"
+        save: agent_a_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Worker"
+        save: agent_b_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "Expert"
+        save: agent_c_id
+    expected:
+      agent_created: true
+      all_agents_unique: true
+
+  - id: lc-017
+    name: agent-with-creator-chain
+    description: Sub-agent created by another agent (not human)
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Coordinator"
+        save: coordinator_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Delegated Worker"
+          creator_id: "{{coordinator_id}}"
+        save: worker_id
+    expected:
+      agent_created: true
+
+  - id: lc-018
+    name: group-message-ordering
+    description: Messages in a group maintain chronological order
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Sequential Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "First task: count from 1 to 5"
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Second task: list 3 colors"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      response_not_empty: true
+      min_message_count: 3
+
+  - id: lc-019
+    name: cross-workspace-isolation
+    description: Agents from different workspaces should be isolated
+    steps:
+      - action: create_workspace
+        save: workspace_a_id, human_agent_a_id
+      - action: create_workspace
+        save: workspace_b_id, human_agent_b_id
+    expected:
+      workspaces_different: true
+
+  - id: lc-020
+    name: long-agent-name
+    description: Agent with a very long name should be handled gracefully
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Agent With An Extremely Long Name That Exceeds Normal Naming Conventions And Should Still Work Properly In The System"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Hello"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true

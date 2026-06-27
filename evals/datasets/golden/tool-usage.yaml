@@ -1,0 +1,381 @@
+# evals/datasets/golden/tool-usage.yaml
+# Golden Set: Agent Tool Usage
+# Tests that agents select and use the correct tools for tasks
+dataset_id: golden-tool-usage-v1
+size: 15
+created: "2026-06-27"
+category: tool_usage
+
+cases:
+  # ── Bash Tool ──
+  - id: tu-001
+    name: bash-echo-command
+    description: Agent uses bash tool for echo command
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Shell Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Run this command: echo 'hello world'"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["hello world"]
+      tool_called: true
+
+  - id: tu-002
+    name: bash-list-files
+    description: Agent uses bash to list files
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "File Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "List the files in the current directory"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      tool_called: true
+
+  - id: tu-003
+    name: bash-date-command
+    description: Agent uses bash to get current date
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Time Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "What is the current date and time? Run the date command."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      tool_called: true
+
+  # ── Create Tool ──
+  - id: tu-004
+    name: create-sub-agent-tool
+    description: Coordinator uses create tool to spawn a sub-agent
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Delegator"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Create a new researcher agent to investigate Python best practices"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["create", "researcher", "agent", "specialist"]
+      min_response_length: 20
+
+  - id: tu-005
+    name: create-group-tool
+    description: Agent uses create_group to organize multiple agents
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Org Manager"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Create two specialist agents and put them in a new group for a collaboration task"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 20
+
+  # ── Send Tool ──
+  - id: tu-006
+    name: send-direct-message
+    description: Agent sends a direct message to another agent
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Message Sender"
+        save: coord_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Message Receiver"
+          creator_id: "{{coord_id}}"
+        save: worker_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Send a direct message to the worker asking them to run 'echo test'"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  # ── Memory Tool ──
+  - id: tu-007
+    name: memory-add-and-search
+    description: Agent uses memory tools for persistence
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: assistant
+          name: "Memory Agent"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Remember that our project uses React 18 with TypeScript and Tailwind CSS"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 10
+
+  # ── Skill Tool ──
+  - id: tu-008
+    name: skill-loading
+    description: Specialist agent loads a relevant skill
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: specialist
+          name: "Skilled Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Load any available skill that might help with code review"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  # ── Self Tool ──
+  - id: tu-009
+    name: self-identity-check
+    description: Agent can identify itself using the self tool
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Identity Worker"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Who are you? Check your identity."
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 5
+
+  # ── List Agents Tool ──
+  - id: tu-010
+    name: list-agents-tool
+    description: Agent lists all agents in the workspace
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Roster Manager"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "List all agents in this workspace"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+
+  # ── Workflow Tools ──
+  - id: tu-011
+    name: create-workflow-tool
+    description: Coordinator creates a workflow with task definitions
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: coordinator
+          name: "Planner"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Create a workflow with two tasks: 'Research' assigned to researcher role, and 'Implement' assigned to specialist role that depends on Research"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 20
+
+  # ── Tool Chaining ──
+  - id: tu-012
+    name: bash-then-report
+    description: Agent runs a command then reports the result
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Reporter"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Run 'uname -a' and explain the system information"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      min_response_length: 20
+
+  - id: tu-013
+    name: tool-selection-accuracy
+    description: Agent correctly selects bash over other tools for a shell command
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: worker
+          name: "Shell Expert"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Check disk usage with df -h"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      tool_called: true
+
+  - id: tu-014
+    name: no-tool-for-simple-question
+    description: Simple factual question should NOT trigger tool usage
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: assistant
+          name: "Direct Answerer"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "What is the capital of France?"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true
+      response_mentions: ["paris", "Paris"]
+
+  - id: tu-015
+    name: backup-tool-usage
+    description: Agent uses backup tools for workspace snapshot
+    steps:
+      - action: create_workspace
+        save: workspace_id, human_agent_id, assistant_agent_id, default_group_id
+      - action: create_agent
+        params:
+          role: assistant
+          name: "Backup Manager"
+        save: agent_id, group_id
+      - action: send_message
+        params:
+          group_id: "{{group_id}}"
+          message: "Please create a backup of this workspace"
+      - action: get_messages
+        params:
+          group_id: "{{group_id}}"
+        save: messages
+    expected:
+      agent_created: true
+      response_not_empty: true

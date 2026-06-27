@@ -1,0 +1,47 @@
+# evals/scorers/rubrics/decision-accuracy.yaml
+# 决策正确率评分标准 (North Star Metric #3)
+rubric_id: decision-accuracy-v1
+name: 决策正确率评分
+metric: decision_accuracy
+scale: 0-3
+created: "2026-06-28"
+
+levels:
+  - score: 3
+    label: correct_decision
+    description: "决策正确：Agent 选择了正确的工具/角色/动作，完全符合任务需求"
+    criteria:
+      - "工具选择正确（如需要搜索时调用 search，需要计算时调用 bash）"
+      - "角色委派正确（coordinator 委派给合适角色的 specialist）"
+      - "动作序列合理（无多余步骤）"
+    example: "用户要求运行 shell 命令，Agent 正确使用了 bash 工具"
+
+  - score: 2
+    label: mostly_correct
+    description: "决策基本正确：主要选择正确，但有次要决策失误"
+    criteria:
+      - "核心工具/角色选择正确"
+      - "但存在不必要的额外步骤"
+      - "或工具参数不够精确但最终结果可接受"
+
+  - score: 1
+    label: partially_correct
+    description: "决策部分正确：有正确的决策但也有明显失误"
+    criteria:
+      - "选择了错误的工具或角色"
+      - "但最终通过重试或其他方式弥补"
+      - "输出质量受到影响"
+
+  - score: 0
+    label: incorrect_decision
+    description: "决策错误：工具/角色/动作选择完全错误"
+    criteria:
+      - "选择了完全不适用的工具"
+      - "委派给了错误角色的 Agent"
+      - "陷入了死循环或完全偏离任务"
+
+annotator_guide: |
+  1. 重点关注 Agent 的"选择点"：用什么工具？创建什么角色？如何分解任务？
+  2. 对照 golden set 中的 expected 字段判断正确性
+  3. 如果 Agent 有 tool_calls，检查 tool name 和 arguments 是否合理
+  4. 对于 coordinator 角色，重点看委派决策；对于 worker，重点看工具使用
