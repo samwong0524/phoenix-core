@@ -8,7 +8,8 @@ export type ToolGroup =
   | "execution"   // Shell execution: bash
   | "workflow"    // Workflow orchestration: create, update, get, assign
   | "memory"      // Long-term memory: add, search, replace, remove, session_search
-  | "backup";     // Workspace backup: create, list, restore
+  | "backup"     // Workspace backup: create, list, restore
+  | "interaction"; // User interaction: ask_user (structured questions)
 
 // ---------------------------------------------------------------------------
 // Agent Management
@@ -627,6 +628,43 @@ export const AGENT_TOOLS_BACKUP = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Interaction (User-facing structured questions)
+// ---------------------------------------------------------------------------
+export const AGENT_TOOLS_INTERACTION = [
+  {
+    type: "function" as const,
+    function: {
+      name: "ask_user",
+      description:
+        "[Interaction] Ask the user a structured question with selectable options. The agent will pause and wait for the user's response before continuing. Use when you need the user to make a choice or provide direction before proceeding.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          question: {
+            type: "string",
+            description: "The question to ask the user",
+          },
+          options: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "Short label displayed on the option button" },
+                description: { type: "string", description: "Optional longer explanation shown below the label" },
+              },
+              required: ["label"],
+            },
+            description: "2-4 options for the user to choose from",
+          },
+        },
+        required: ["question", "options"],
+      },
+    },
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
 // Combined tool list — the flat array the LLM sees (grouped for readability).
 // ---------------------------------------------------------------------------
 export const AGENT_TOOLS: readonly { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }[] = [
@@ -638,6 +676,7 @@ export const AGENT_TOOLS: readonly { type: "function"; function: { name: string;
   ...AGENT_TOOLS_WORKFLOW,
   ...AGENT_TOOLS_MEMORY,
   ...AGENT_TOOLS_BACKUP,
+  ...AGENT_TOOLS_INTERACTION,
 ];
 
 export const BUILTIN_TOOL_NAMES = new Set(AGENT_TOOLS.map((tool) => tool.function.name));

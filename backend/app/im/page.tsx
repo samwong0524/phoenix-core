@@ -14,6 +14,7 @@ import { IMHistoryList } from "./IMHistoryList";
 import { TopoAnimCanvas } from "./TopoAnimCanvas";
 import { TaskMonitor } from "./TaskMonitor";
 import { useI18n } from "@/lib/i18n/context";
+import { detectAtTrigger } from "@/lib/skill-utils";
 
 // Create code plugin with dark theme
 const code = createCodePlugin({
@@ -176,6 +177,50 @@ function FileCard({ url, name, size }: { url: string; name: string; size?: numbe
   );
 }
 
+function QuestionCard({
+  questionId,
+  question,
+  options,
+  answered,
+  onAnswer,
+}: {
+  questionId: string;
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+  answered: boolean;
+  onAnswer: (label: string) => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(answered ? "__answered__" : null);
+
+  const handleClick = (label: string) => {
+    if (selected) return;
+    setSelected(label);
+    onAnswer(label);
+  };
+
+  return (
+    <div className="question-card">
+      <div className="question-card-text">{question}</div>
+      <div className="question-card-options">
+        {options.map((opt) => (
+          <button
+            key={opt.label}
+            className={`question-option-btn${selected === opt.label ? " selected" : ""}`}
+            disabled={!!selected}
+            onClick={() => handleClick(opt.label)}
+          >
+            <span className="question-option-label">{opt.label}</span>
+            {opt.description ? <span className="question-option-desc">{opt.description}</span> : null}
+          </button>
+        ))}
+      </div>
+      {selected === "__answered__" && (
+        <div className="question-card-answered">已回复</div>
+      )}
+    </div>
+  );
+}
+
 type AgentStreamEvent =
   | {
       id: number;
@@ -287,6 +332,14 @@ function IMPageInner() {
   const [vizScale, setVizScale] = useState(0.9);
   const [vizOffset, setVizOffset] = useState({ x: 0, y: 0 });
   const [vizIsPanning, setVizIsPanning] = useState(false);
+
+  // Skill autocomplete state
+  const [skillList, setSkillList] = useState<Array<{ name: string; description: string }>>([]);
+  const [skillPopupOpen, setSkillPopupOpen] = useState(false);
+  const [skillFilter, setSkillFilter] = useState("");
+  const [skillSelectedIndex, setSkillSelectedIndex] = useState(0);
+  const [atTriggerPos, setAtTriggerPos] = useState(-1);
+  const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set()); // position of @ in draft
   const [agentStatusById, setAgentStatusById] = useState<Record<string, AgentStatus>>({});
   const [vizDebug, setVizDebug] = useState<VizDebugEntry[]>([]);
   const [vizEventsCollapsed, setVizEventsCollapsed] = useState(false);
@@ -780,6 +833,11 @@ function IMPageInner() {
     api<{ models: Array<{ id: string; displayName: string; platform: string }> }>("/api/models")
       .then((r) => setAvailableModels(r.models))
       .catch(() => {});
+    // Fetch skills for @skill autocomplete
+    fetch("/api/skills")
+      .then((r) => r.json())
+      .then((data) => setSkillList(data.skills ?? data ?? []))
+      .catch(() => {});
   }, []);
 
   const refreshGroups = useCallback(async (s: WorkspaceDefaults, opts?: { silent?: boolean }) => {
@@ -1055,6 +1113,66 @@ function IMPageInner() {
       setStoppingAgents(false);
     }
   }, [agents, session, stoppingAgents]);
+
+  // --- Skill autocomplete helpers ---
+  const filteredSkills = useMemo(() => {
+    if (!skillPopupOpen || !skillFilter) return skillList.slice(0, 8);
+    const q = skillFilter.toLowerCase();
+    return skillList
+      .filter((s) => s.name.toLowerCase().includes(q) || s.description?.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [skillPopupOpen, skillFilter, skillList]);
+
+  const handleDraftChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setDraft(val);
+      const cursor = e.target.selectionStart ?? val.length;
+      const trigger = detectAtTrigger(val, cursor);
+      if (trigger && skillList.length > 0) {
+        setSkillPopupOpen(true);
+        setSkillFilter(trigger.filter);
+        setSkillSelectedIndex(0);
+        setAtTriggerPos(trigger.atIndex);
+      } else {
+        setSkillPopupOpen(false);
+      }
+    },
+    [skillList.length],
+  );
+
+  const selectSkill = useCallback(
+    (skillName: string) => {
+      if (atTriggerPos < 0) return;
+      const before = draft.slice(0, atTriggerPos);
+      const after = draft.slice(atTriggerPos + 1 + skillFilter.length);
+      setDraft(before + "@" + skillName + " " + after);
+      setSkillPopupOpen(false);
+      setSkillFilter("");
+      setAtTriggerPos(-1);
+    },
+    [draft, atTriggerPos, skillFilter],
+  );
+
+  const handleSkillKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!skillPopupOpen || filteredSkills.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSkillSelectedIndex((i) => (i + 1) % filteredSkills.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSkillSelectedIndex((i) => (i - 1 + filteredSkills.length) % filteredSkills.length);
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        selectSkill(filteredSkills[skillSelectedIndex].name);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setSkillPopupOpen(false);
+      }
+    },
+    [skillPopupOpen, filteredSkills, skillSelectedIndex, selectSkill],
+  );
 
   const onSend = useCallback(async () => {
     if (!session || !activeGroupId) return;
@@ -1451,7 +1569,7 @@ function IMPageInner() {
     return "var(--green)";
   };
 
-const renderContent = useCallback((content: string, contentType: string) => {
+const renderContent = useCallback((content: string, contentType: string, message?: { id: string; senderId: string }) => {
     if (contentType === 'image') {
       try {
         const img = JSON.parse(content) as { url?: string; name?: string };
@@ -1468,8 +1586,44 @@ const renderContent = useCallback((content: string, contentType: string) => {
         }
       } catch { /* fallthrough */ }
     }
+    if (contentType === 'question') {
+      try {
+        const payload = JSON.parse(content) as { question?: string; options?: Array<{ label: string; description?: string }> };
+        if (payload?.question && payload?.options) {
+          return (
+            <QuestionCard
+              questionId={message?.id ?? ""}
+              question={payload.question}
+              options={payload.options}
+              answered={answeredQuestions.has(message?.id ?? "")}
+              onAnswer={(label) => {
+                if (message?.id) {
+                  setAnsweredQuestions((prev) => new Set(prev).add(message.id));
+                }
+                // Send the answer as a regular message directly
+                if (session && activeGroupId) {
+                  const optimistic: Message = {
+                    id: `optimistic-${Date.now()}`,
+                    senderId: session.humanAgentId,
+                    content: label,
+                    contentType: "text",
+                    sendTime: new Date().toISOString(),
+                  };
+                  setMessages((m) => [...m, optimistic]);
+                  queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+                  void api(`/api/groups/${activeGroupId}/messages`, {
+                    method: "POST",
+                    body: JSON.stringify({ senderId: session.humanAgentId, content: label, contentType: "text" }),
+                  });
+                }
+              }}
+            />
+          );
+        }
+      } catch { /* fallthrough */ }
+    }
     return <MarkdownContent content={content} />;
-  }, []);
+  }, [answeredQuestions]);
 
   const midChatHeight = useMemo(() => {
     if (!midStackHeight) return 0;
@@ -2277,15 +2431,54 @@ const renderContent = useCallback((content: string, contentType: string) => {
             className="chat-input-field"
             type="text"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={handleDraftChange}
             placeholder={t("im.input_placeholder")}
             onKeyDown={(e) => {
+              // Skill popup takes priority for navigation keys
+              if (skillPopupOpen && filteredSkills.length > 0) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab") {
+                  e.preventDefault();
+                  handleSkillKeyDown(e);
+                  return;
+                }
+                if (e.key === "Enter" && !(e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSkillKeyDown(e);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSkillPopupOpen(false);
+                  return;
+                }
+              }
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 void onSend();
               }
             }}
           />
+          {/* Skill autocomplete popup */}
+          {skillPopupOpen && filteredSkills.length > 0 && (
+            <div className="skill-autocomplete">
+              {filteredSkills.map((skill, i) => (
+                <div
+                  key={skill.name}
+                  className={"skill-autocomplete-item" + (i === skillSelectedIndex ? " active" : "")}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectSkill(skill.name);
+                  }}
+                  onMouseEnter={() => setSkillSelectedIndex(i)}
+                >
+                  <span className="skill-autocomplete-name">@{skill.name}</span>
+                  {skill.description && (
+                    <span className="skill-autocomplete-desc">{skill.description}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <select
             className="chat-model"
             value={selectedModel}

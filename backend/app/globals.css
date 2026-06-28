@@ -1436,6 +1436,7 @@ textarea {
   display: flex;
   gap: 8px;
   align-items: center;
+  position: relative;
 }
 .chat-input-field {
   flex: 1;
@@ -1456,6 +1457,110 @@ textarea {
   border-color: var(--cyan-dim);
   box-shadow: 0 0 18px rgba(0, 240, 255, 0.07);
 }
+
+/* Skill autocomplete popup */
+.skill-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 44px; /* after the + button */
+  right: 120px; /* before model selector */
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  z-index: var(--z-dropdown, 50);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  margin-bottom: 4px;
+}
+.skill-autocomplete-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-hairline);
+  transition: background 0.12s;
+}
+.skill-autocomplete-item:last-child {
+  border-bottom: none;
+}
+.skill-autocomplete-item:hover,
+.skill-autocomplete-item.active {
+  background: rgba(0, 240, 255, 0.06);
+}
+.skill-autocomplete-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cyan);
+}
+.skill-autocomplete-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Question card (AskUserQuestion) */
+.question-card {
+  padding: 4px 0;
+}
+.question-card-text {
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.question-card-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.question-option-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+.question-option-btn:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgba(0, 240, 255, 0.08);
+}
+.question-option-btn.selected {
+  border-color: var(--cyan);
+  background: rgba(0, 240, 255, 0.15);
+}
+.question-option-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.question-option-label {
+  display: block;
+  font-weight: 600;
+}
+.question-option-desc {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.question-card-answered {
+  font-size: 11px;
+  color: var(--green);
+  margin-top: 8px;
+  font-family: var(--font-mono);
+}
+
 .send-btn {
   padding: 9px 18px;
   border-radius: var(--radius-sm);

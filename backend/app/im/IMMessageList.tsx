@@ -16,7 +16,7 @@ type IMMessageListProps = {
   humanAgentId?: string | null;
   agentRoleById: Map<string, string>;
   fmtTime: (iso: string) => string;
-  renderContent: (content: string, contentType: string) => ReactNode;
+  renderContent: (content: string, contentType: string, message?: Message) => ReactNode;
   cx: (...classes: Array<string | false | undefined | null>) => string;
 };
 
@@ -64,7 +64,7 @@ const MessageItem = memo(function MessageItem({
   humanAgentId?: string | null;
   agentRoleById: Map<string, string>;
   fmtTime: (iso: string) => string;
-  renderContent: (content: string, contentType: string) => ReactNode;
+  renderContent: (content: string, contentType: string, message?: Message) => ReactNode;
   cx: (...classes: Array<string | false | undefined | null>) => string;
 }) {
   const isMe = m.senderId === humanAgentId;
@@ -98,7 +98,7 @@ const MessageItem = memo(function MessageItem({
         ) : null}
       </div>
       <div className='msg-bubble'>
-        {renderContent(m.content, m.contentType)}
+        {renderContent(m.content, m.contentType, m)}
       </div>
     </motion.div>
   );

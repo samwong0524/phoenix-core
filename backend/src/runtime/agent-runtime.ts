@@ -9,6 +9,7 @@ import { getWorkspaceUIBus } from "./ui-bus";
 import { getMcpRegistry } from "./mcp";
 import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStreamEvent } from "./agent-logger";
 import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache, FRONTMATTER_RE, parseFrontmatter } from "./skill-loader";
+import { parseSkillReferences } from "@/lib/skill-utils";
 
 type StreamAssembledState = OpenAIAssembledState | GLMAssembledState;
 
@@ -1756,6 +1757,8 @@ export class AgentRunner {
   private blockedTools = new Set<string>();
   // Agent paused due to total failures >= 8
   private agentPaused = false;
+  // Agent is waiting for user response to a structured question (ask_user)
+  private pendingUserQuestion = false;
   // Free mode memory search cache: query -> results (design doc 搂6.5)
   private memoryCache = new Map<string, Array<Record<string, unknown>>>();
   // Track last activity time for cleanup
@@ -2281,6 +2284,31 @@ export class AgentRunner {
       history.push({ role: "user", content: userContent });
     }
 
+    // === @skill hint injection: detect @skill-name references and guide agent ===
+    const allUserText = unreadMessages
+      .filter((m) => m.contentType === "text" || !m.contentType)
+      .map((m) => m.content)
+      .join(" ");
+    const rawRefs = parseSkillReferences(allUserText);
+    if (rawRefs.length > 0) {
+      try {
+        const loader = await getSkillLoader();
+        const availableSkills = await loader.listSkills();
+        const validRefs = rawRefs.filter((ref) =>
+          availableSkills.some((s: string) => s.toLowerCase() === ref)
+        );
+        if (validRefs.length > 0) {
+          const skillList = validRefs.map((s) => `"${s}"`).join(", ");
+          history.push({
+            role: "system",
+            content: `[Skill Hint] 用户引用了 skill: ${skillList}。请调用 get_skill(${validRefs.map((s) => `"${s}"`).join(" / ")}) 加载并遵循其指导。`,
+          });
+        }
+      } catch (err) {
+        console.warn("[processGroupUnread] skill hint injection failed:", err);
+      }
+    }
+
     const lastId = unreadMessages[unreadMessages.length - 1]?.id;
 
     // === Cascade prevention: per-group agent turn counter ===
@@ -2508,6 +2536,7 @@ export class AgentRunner {
     this.sameToolFailureCount.clear();
     this.memoryCache.clear();
     this._searchCountThisTurn = 0;
+    this.pendingUserQuestion = false;
   }
 
   private async runWithTools(input: {
@@ -2660,6 +2689,16 @@ export class AgentRunner {
           try { compressHistory(input.history); } catch { /* best-effort */ }
           void this.autoCreateSkillFromWorkflow(input.groupId);
         }
+      }
+
+      // ask_user pause check: if agent sent a structured question, stop the loop
+      if (this.pendingUserQuestion) {
+        this.pendingUserQuestion = false;
+        input.history.push({
+          role: "system",
+          content: "[System] 你向用户提了一个问题，正在等待回复。停止生成，用户回复后会继续。",
+        });
+        return { assistantText, assistantThinking, didSend };
       }
 
       // Inject failure alert when a tool keeps failing 鈥?triggers agent self-learning
@@ -4952,6 +4991,48 @@ export class AgentRunner {
         status: pipelineResult.overallStatus,
         stages: pipelineResult.stages.map(s => ({ name: s.stageName, status: s.status, output: s.output.slice(0, 500) })),
       };
+    }
+
+    if (name === "ask_user") {
+      const args = safeJsonParse<{
+        question?: string;
+        options?: Array<{ label?: string; description?: string }>;
+      }>(input.call.argumentsText, {});
+      const question = (args.question ?? "").trim();
+      const options = (args.options ?? []).filter((o) => o?.label?.trim());
+      if (!question || options.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing required fields: question and options (with at least one option containing a label)" };
+      }
+
+      // Send the question as a structured message to the group
+      const questionPayload = JSON.stringify({ question, options: options.map((o) => ({ label: o.label!.trim(), description: o.description?.trim() })) });
+      try {
+        const result = await store.sendMessage({
+          groupId: input.groupId,
+          senderId: this.agentId,
+          content: questionPayload,
+          contentType: "question",
+        });
+        const memberIds = await store.listGroupMemberIds({ groupId: input.groupId });
+        getWorkspaceUIBus().emit(workspaceId, {
+          event: "ui.message.created",
+          data: {
+            workspaceId,
+            groupId: input.groupId,
+            memberIds,
+            message: { id: result.id, senderId: this.agentId, sendTime: result.sendTime },
+          },
+        });
+      } catch (err) {
+        emitToolDone(false);
+        return { ok: false, error: `Failed to send question: ${err instanceof Error ? err.message : String(err)}` };
+      }
+
+      // Set flag to pause the agent loop after this round
+      this.pendingUserQuestion = true;
+      emitToolDone(true);
+      return { ok: true, status: "waiting_for_user", message: "Question sent to user. Waiting for response." };
     }
 
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);
