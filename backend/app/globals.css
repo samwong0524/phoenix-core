@@ -2371,6 +2371,209 @@ select:focus-visible,
 
 /* Reduced motion fallback: remove spatial movement, keep opacity only */
 /* Aligned with motion-plan.reduced_motion_fallback.strategy */
+/* ── Trace Tree ── */
+.trace-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 11px;
+}
+.trace-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 11px;
+}
+.trace-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.trace-header-title {
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.trace-header-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.1);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+}
+.trace-header-agent {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-left: auto;
+}
+
+.trace-rounds {
+  display: flex;
+  flex-direction: column;
+}
+.trace-round {
+  border-left: 2px solid var(--cyan);
+  margin-left: 4px;
+  margin-bottom: 2px;
+}
+.trace-round-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.08s;
+  font-size: 11px;
+}
+.trace-round-header:hover {
+  background: rgba(0, 255, 255, 0.04);
+}
+.trace-round-arrow {
+  font-size: 9px;
+  color: var(--cyan);
+  width: 10px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.trace-round-label {
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.trace-round-tools-badge {
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(255, 0, 255, 0.1);
+  color: var(--magenta);
+  font-family: var(--font-mono);
+}
+.trace-round-content-preview {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.trace-round-body {
+  padding-left: 14px;
+  padding-bottom: 4px;
+}
+
+.trace-node {
+  margin-bottom: 2px;
+}
+.trace-node-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+  font-weight: 500;
+}
+.trace-node-content {
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.trace-reasoning-text {
+  color: var(--text-dim);
+  font-style: italic;
+  border-left: 2px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.trace-content-text {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.trace-tool {
+  border-left: 2px solid var(--magenta);
+  margin-left: 2px;
+  margin-bottom: 2px;
+}
+.trace-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: background 0.08s;
+  font-size: 11px;
+}
+.trace-tool-header:hover {
+  background: rgba(255, 0, 255, 0.04);
+}
+.trace-tool-arrow {
+  font-size: 9px;
+  color: var(--magenta);
+  width: 10px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.trace-tool-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.trace-tool-name {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text);
+  font-size: 10px;
+}
+.trace-tool-status {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: auto;
+}
+.trace-tool-status.ok {
+  color: var(--green);
+}
+.trace-tool-status.err {
+  color: var(--red);
+}
+
+.trace-tool-body {
+  padding-left: 18px;
+  padding-bottom: 4px;
+}
+.trace-tool-section {
+  margin-bottom: 4px;
+}
+.trace-tool-section-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+.trace-tool-pre {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-void);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 6px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow: auto;
+}
+
 /* ── QuickPick (CMD+K Command Palette) ── */
 .qp-overlay {
   position: fixed;

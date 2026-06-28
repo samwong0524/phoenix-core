@@ -8,6 +8,7 @@
 
 import { memo, useState, useMemo } from "react";
 import { translateEvent, statusText, statusColor } from "./eventTranslator";
+import { TraceTree } from "./TraceTree";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ type TaskMonitorProps = {
   locale?: "zh" | "en";
 };
 
-type TabId = "agents" | "activity" | "metrics" | "dev";
+type TabId = "agents" | "activity" | "metrics" | "trace" | "dev";
 
 // ─── Component ───────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
     <div style={monitorStyle}>
       {/* Tab bar */}
       <div style={tabBarStyle}>
-        {(["agents", "activity", "metrics", "dev"] as TabId[]).map((tab) => (
+        {(["agents", "activity", "metrics", "trace", "dev"] as TabId[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -121,6 +122,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
             {tab === "agents" && "Agents"}
             {tab === "activity" && (isZh ? "活动" : "Activity")}
             {tab === "metrics" && (isZh ? "度量" : "Metrics")}
+            {tab === "trace" && "Trace"}
             {tab === "dev" && "DEV"}
           </button>
         ))}
@@ -152,6 +154,9 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
             statusCounts={statusCounts}
             locale={locale}
           />
+        )}
+        {activeTab === "trace" && (
+          <TraceTree llmHistory={llmHistory ?? ""} streamAgentId={streamAgentId} />
         )}
         {activeTab === "dev" && (
           <DevTab
