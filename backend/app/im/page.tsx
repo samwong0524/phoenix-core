@@ -343,7 +343,10 @@ function IMPageInner() {
     try { return localStorage.getItem("workingDir") ?? ""; } catch { return ""; }
   });
   const [showDirInput, setShowDirInput] = useState(false);
-  const [dirInputValue, setDirInputValue] = useState("");
+  const [dirBrowsePath, setDirBrowsePath] = useState("");
+  const [dirBrowseEntries, setDirBrowseEntries] = useState<Array<{ name: string; fullPath: string }>>([]);
+  const [dirBrowseParent, setDirBrowseParent] = useState<string | null>(null);
+  const [dirBrowseLoading, setDirBrowseLoading] = useState(false);
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set()); // position of @ in draft
   const [agentStatusById, setAgentStatusById] = useState<Record<string, AgentStatus>>({});
   const [vizDebug, setVizDebug] = useState<VizDebugEntry[]>([]);
@@ -1568,6 +1571,41 @@ function IMPageInner() {
     return "var(--yellow)";
   };
 
+  // ── Directory browser helpers ──
+  const fetchDirEntries = useCallback(async (browsePath: string) => {
+    setDirBrowseLoading(true);
+    try {
+      const qs = browsePath ? `?path=${encodeURIComponent(browsePath)}` : "";
+      const res = await fetch(`/api/browse-dir${qs}`);
+      const data = await res.json();
+      if (data.error) {
+        console.warn("[browse-dir]", data.error);
+        return;
+      }
+      setDirBrowsePath(data.path ?? "");
+      setDirBrowseEntries(data.entries ?? []);
+      setDirBrowseParent(data.parent ?? null);
+    } catch (err) {
+      console.warn("[browse-dir] fetch failed:", err);
+    } finally {
+      setDirBrowseLoading(false);
+    }
+  }, []);
+
+  const openDirBrowser = useCallback(() => {
+    setShowDirInput(true);
+    // Start at current workingDir, or roots if empty
+    fetchDirEntries(workingDir || "");
+  }, [workingDir, fetchDirEntries]);
+
+  const confirmDirSelection = useCallback(() => {
+    if (dirBrowsePath) {
+      localStorage.setItem("workingDir", dirBrowsePath);
+      setWorkingDir(dirBrowsePath);
+    }
+    setShowDirInput(false);
+  }, [dirBrowsePath]);
+
   const statusColor = (status?: AgentStatus) => {
     if (status === "BUSY") return "var(--red)";
     if (status === "WAKING") return "var(--yellow)";
@@ -2026,25 +2064,43 @@ const renderContent = useCallback((content: string, contentType: string, message
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
             <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 4 }}>工作目录</div>
             {showDirInput ? (
-              <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
-                <input
-                  value={dirInputValue}
-                  onChange={(e) => setDirInputValue(e.target.value)}
-                  placeholder="e.g. F:/swarm-ide"
-                  style={{ width: "100%", padding: "4px 6px", fontSize: 11, background: "var(--bg-panel)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") { const val = dirInputValue.trim(); if (val) { localStorage.setItem("workingDir", val); setWorkingDir(val); } setShowDirInput(false); }
-                    if (e.key === "Escape") setShowDirInput(false);
-                  }}
-                  autoFocus
-                />
-                <div style={{ display: "flex", gap: 4 }}>
-                  <button onClick={() => { const val = dirInputValue.trim(); if (val) { localStorage.setItem("workingDir", val); setWorkingDir(val); } setShowDirInput(false); }} style={{ fontSize: 10, padding: "2px 8px", cursor: "pointer", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 3 }}>确定</button>
-                  <button onClick={() => setShowDirInput(false)} style={{ fontSize: 10, padding: "2px 8px", cursor: "pointer", background: "var(--bg-surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 3 }}>取消</button>
+              <div className="dir-browser">
+                {/* Path bar */}
+                <div className="dir-browser-path">
+                  {dirBrowseParent !== null && (
+                    <button className="dir-browser-up" onClick={() => fetchDirEntries(dirBrowseParent)} title="上级目录">↑</button>
+                  )}
+                  <span className="dir-browser-path-text" title={dirBrowsePath}>{dirBrowsePath || "选择目录…"}</span>
+                </div>
+                {/* Entry list */}
+                <div className="dir-browser-list">
+                  {dirBrowseLoading ? (
+                    <div className="dir-browser-empty">加载中…</div>
+                  ) : dirBrowseEntries.length === 0 ? (
+                    <div className="dir-browser-empty">空目录</div>
+                  ) : (
+                    dirBrowseEntries.map((entry) => (
+                      <div
+                        key={entry.fullPath}
+                        className="dir-browser-item"
+                        onDoubleClick={() => fetchDirEntries(entry.fullPath)}
+                        onClick={() => { setDirBrowsePath(entry.fullPath); }}
+                        style={{ background: dirBrowsePath === entry.fullPath ? "rgba(0,255,255,0.08)" : undefined }}
+                      >
+                        <span style={{ fontSize: 11, flexShrink: 0 }}>📁</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Actions */}
+                <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                  <button onClick={confirmDirSelection} className="dir-browser-btn dir-browser-btn-primary">选择此目录</button>
+                  <button onClick={() => setShowDirInput(false)} className="dir-browser-btn">取消</button>
                 </div>
               </div>
             ) : (
-              <div onClick={() => { setDirInputValue(workingDir); setShowDirInput(true); }} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击修改工作目录">
+              <div onClick={openDirBrowser} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击选择工作目录">
                 <span style={{ fontSize: 11 }}>📁</span>
                 <span>{workingDir || "未设置（点击添加）"}</span>
               </div>

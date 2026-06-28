@@ -1,6 +1,7 @@
 ﻿import "./globals.css";
 import { RegisterSW } from "./register-sw";
 import { I18nProvider } from "@/lib/i18n/context";
+import { QuickPickHost } from "./_components/quickpick-host";
 
 export const metadata = {
   title: "SWARM IDE",
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <I18nProvider>
           {children}
           <RegisterSW />
+          <QuickPickHost />
         </I18nProvider>
       </body>
     </html>

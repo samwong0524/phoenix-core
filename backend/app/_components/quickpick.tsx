@@ -1,15 +1,16 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import Link from 'next/link';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
+// ── Types ──
 interface QuickPickItem {
   id: string;
   label: string;
   description?: string;
+  icon?: string;
   shortcut?: string;
-  action: () => void;
   category: string;
+  action: () => void;
 }
 
 interface QuickPickProps {
@@ -17,164 +18,280 @@ interface QuickPickProps {
   onClose: () => void;
 }
 
+// ── Session helper ──
+const SESSION_KEY = 'agent-wechat.session.v1';
+function getSession(): { workspaceId: string; humanAgentId: string } | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+// ── Component ──
 export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [dynamicItems, setDynamicItems] = useState<QuickPickItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [createMode, setCreateMode] = useState(false);
+  const [createRole, setCreateRole] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const createInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultItems: QuickPickItem[] = [
-    { id: 'new-chat', label: '\u65B0\u5EFA\u5BF9\u8BDD', description: '\u5F00\u59CB\u65B0\u7684 Agent \u5BF9\u8BDD', shortcut: '\u2318N', action: () => window.location.href = '/im', category: '\u5BF9\u8BDD' },
-    { id: 'pipeline', label: '\u7BA1\u7EBF\u6267\u884C', description: '\u67E5\u770B\u6D41\u6C34\u7EBF\u6267\u884C\u8FDB\u5EA6', shortcut: '\u2318P', action: () => window.location.href = '/pipeline', category: '\u5DE5\u4F5C\u6D41' },
-    { id: 'skills', label: '\u6280\u80FD\u5E02\u573A', description: '\u6D4F\u89C8\u548C\u5B89\u88C5\u6280\u80FD', shortcut: '\u2318S', action: () => window.location.href = '/skills', category: '\u63D2\u4EF6' },
-    { id: 'models', label: '\u6A21\u578B\u7BA1\u7406', description: '\u914D\u7F6E LLM \u6A21\u578B', action: () => window.location.href = '/models', category: '\u8BBE\u7F6E' },
-    { id: 'settings', label: '\u7CFB\u7EDF\u8BBE\u7F6E', description: '\u5168\u5C40\u914D\u7F6E\u9879', shortcut: '\u2318,', action: () => window.location.href = '/settings', category: '\u8BBE\u7F6E' },
-    { id: 'dispatch-pipeline', label: '\u5206\u6D3E\u7BA1\u7EBF', description: '\u521B\u5EFA\u591A\u9636\u6BB5\u4EFB\u52A1\u7BA1\u7EBF', action: () => {}, category: '\u5DE5\u4F5C\u6D41' },
-    { id: 'compact-context', label: '\u538B\u7F29\u4E0A\u4E0B\u6587', description: '\u6E05\u7406\u5F53\u524D\u4F1A\u8BDD\u5197\u4F59\u5386\u53F2', action: () => {}, category: '\u5DE5\u5177' },
-    { id: 'reload-soul', label: '\u91CD\u8F7D\u7075\u9B42', description: '\u91CD\u65B0\u52A0\u8F7D soul.md \u548C\u89D2\u8272\u6A21\u677F', action: () => {}, category: '\u5DE5\u5177' },
-  ];
+  // Static navigation + action commands
+  const staticItems: QuickPickItem[] = useMemo(() => [
+    { id: 'nav-im', label: 'Agent 对话', description: '进入 IM 聊天界面', icon: '💬', category: '导航', action: () => { window.location.href = '/im'; } },
+    { id: 'nav-graph', label: '通信拓扑图', description: '查看 Agent 通信关系', icon: '🔗', category: '导航', action: () => { window.location.href = '/graph'; } },
+    { id: 'nav-skills', label: '技能市场', description: '浏览和管理技能', icon: '⚡', category: '导航', action: () => { window.location.href = '/skills'; } },
+    { id: 'nav-models', label: '模型配置', description: '配置 LLM 模型和 API Key', icon: '🤖', category: '导航', action: () => { window.location.href = '/models'; } },
+    { id: 'nav-pipeline', label: '流水线监控', description: '查看工作流执行进度', icon: '🔄', category: '导航', action: () => { window.location.href = '/pipeline'; } },
+    { id: 'nav-observability', label: '可观测性面板', description: '系统指标和成本监控', icon: '📊', category: '导航', action: () => { window.location.href = '/observability'; } },
+    { id: 'nav-home', label: '返回首页', description: '工作区列表和总览', icon: '🏠', category: '导航', action: () => { window.location.href = '/'; } },
+    { id: 'action-create', label: '创建 Agent', description: '输入角色名创建新 Agent', icon: '➕', category: '操作', action: () => { setCreateMode(true); } },
+  ], []);
 
-  const filteredItems = query
-    ? defaultItems.filter((item) =>
-        item.label.toLowerCase().includes(query.toLowerCase()) ||
-        item.description?.toLowerCase().includes(query.toLowerCase())
-      )
-    : defaultItems;
-
+  // Fetch dynamic data when opened
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (!isOpen) {
+      setQuery('');
+      setSelectedIndex(0);
+      setDynamicItems([]);
+      setCreateMode(false);
+      setCreateRole('');
+      return;
     }
-    setSelectedIndex(0);
-  }, [isOpen, query]);
+    // Focus input after render
+    requestAnimationFrame(() => inputRef.current?.focus());
+    // Fetch groups, agents, skills in parallel
+    const session = getSession();
+    if (!session) return;
+    setLoading(true);
+    const { workspaceId, humanAgentId } = session;
 
-  // Keyboard shortcut to open
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        onClose();
+    const fetchAll = async () => {
+      const items: QuickPickItem[] = [];
+      try {
+        const [groupsRes, agentsRes, skillsRes] = await Promise.allSettled([
+          fetch(`/api/groups?workspaceId=${encodeURIComponent(workspaceId)}&agentId=${encodeURIComponent(humanAgentId)}`).then(r => r.json()),
+          fetch(`/api/agents?workspaceId=${encodeURIComponent(workspaceId)}&meta=true`).then(r => r.json()),
+          fetch(`/api/skills`).then(r => r.json()),
+        ]);
+
+        // Groups
+        if (groupsRes.status === 'fulfilled') {
+          const groups = (groupsRes.value as any)?.groups ?? [];
+          for (const g of groups) {
+            items.push({
+              id: `group-${g.id}`,
+              label: g.name || `群 ${g.id.slice(0, 8)}`,
+              description: `${g.memberCount ?? '?'} 成员`,
+              icon: '👥',
+              category: '群组',
+              action: () => { window.location.href = `/im?group=${g.id}`; },
+            });
+          }
+        }
+
+        // Agents
+        if (agentsRes.status === 'fulfilled') {
+          const agents = (agentsRes.value as any)?.agents ?? [];
+          for (const a of agents) {
+            if (a.role === 'human') continue;
+            items.push({
+              id: `agent-${a.id}`,
+              label: a.role || `Agent ${a.id.slice(0, 8)}`,
+              description: a.status ? `状态: ${a.status}` : undefined,
+              icon: '🤖',
+              category: 'Agent',
+              action: () => { window.location.href = `/im?agent=${a.id}`; },
+            });
+          }
+        }
+
+        // Skills
+        if (skillsRes.status === 'fulfilled') {
+          const skills = (skillsRes.value as any)?.skills ?? (skillsRes.value as any) ?? [];
+          for (const s of skills) {
+            items.push({
+              id: `skill-${s.name}`,
+              label: s.name,
+              description: s.description,
+              icon: '⚡',
+              category: '技能',
+              action: () => { window.location.href = `/skills?highlight=${s.name}`; },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[QuickPick] fetch error:', err);
       }
+      setDynamicItems(items);
+      setLoading(false);
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+    void fetchAll();
+  }, [isOpen]);
 
+  // All items combined
+  const allItems = useMemo(() => [...staticItems, ...dynamicItems], [staticItems, dynamicItems]);
+
+  // Filter by query
+  const filteredItems = useMemo(() => {
+    if (!query.trim()) return allItems;
+    const q = query.toLowerCase();
+    return allItems.filter((item) =>
+      item.label.toLowerCase().includes(q) ||
+      item.description?.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q)
+    );
+  }, [allItems, query]);
+
+  // Reset selection when filter changes
+  useEffect(() => { setSelectedIndex(0); }, [query]);
+
+  // Handle create agent flow
+  const handleCreateAgent = useCallback(async () => {
+    const role = createRole.trim();
+    if (!role) return;
+    const session = getSession();
+    if (!session) return;
+    try {
+      const res = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: session.workspaceId,
+          creatorId: session.humanAgentId,
+          role,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onClose();
+        window.location.href = `/im?group=${data.groupId}`;
+      }
+    } catch (err) {
+      console.warn('[QuickPick] create agent failed:', err);
+    }
+  }, [createRole, onClose]);
+
+  // Keyboard handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (createMode) {
+      if (e.key === 'Enter') { e.preventDefault(); void handleCreateAgent(); }
+      if (e.key === 'Escape') { e.preventDefault(); setCreateMode(false); setCreateRole(''); inputRef.current?.focus(); }
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((prev) => Math.min(prev + 1, filteredItems.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && filteredItems[selectedIndex]) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
-      filteredItems[selectedIndex].action();
-      onClose();
+      const item = filteredItems[selectedIndex];
+      if (item) { item.action(); if (!createMode) onClose(); }
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       onClose();
     }
-  }, [filteredItems, selectedIndex, onClose]);
+  }, [createMode, filteredItems, selectedIndex, handleCreateAgent, onClose]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    const el = document.querySelector(`[data-qp-idx="${selectedIndex}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
 
   if (!isOpen) return null;
 
   // Group by category
   const grouped = new Map<string, QuickPickItem[]>();
   for (const item of filteredItems) {
-    const items = grouped.get(item.category) || [];
-    items.push(item);
-    grouped.set(item.category, items);
+    const arr = grouped.get(item.category) || [];
+    arr.push(item);
+    grouped.set(item.category, arr);
   }
 
+  let flatIdx = 0;
+
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start',
-      justifyContent: 'center', paddingTop: '15vh', zIndex: 'var(--z-modal)',
-    }} onClick={onClose}>
-      <div style={{
-        width: '560px', maxHeight: '60vh', background: '#1a1a1a',
-        borderRadius: '12px', border: '1px solid #333', overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-      }} onClick={(e) => e.stopPropagation()}>
+    <div className="qp-overlay" onClick={onClose}>
+      <div className="qp-panel" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         {/* Search input */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #333' }}>
+        <div className="qp-input-area">
+          <span className="qp-input-icon">⌘</span>
           <input
             ref={inputRef}
-            type='text'
-            placeholder='\u641C\u7D22\u547D\u4EE4...'
+            type="text"
+            className="qp-input"
+            placeholder="输入命令、搜索群组 / Agent / 技能…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%', background: 'transparent', border: 'none',
-              outline: 'none', color: '#e0e0e0', fontSize: '15px',
-              padding: '4px 0',
-            }}
+            disabled={createMode}
           />
+          {loading && <span className="qp-loading">…</span>}
         </div>
 
-        {/* Results */}
-        <div style={{ overflowY: 'auto', maxHeight: '50vh', padding: '8px' }}>
-          {filteredItems.length === 0 ? (
-            <div style={{ padding: '16px', textAlign: 'center', color: '#888' }}>
-              \u672A\u627E\u5230\u5339\u914D\u7684\u547D\u4EE4
+        {/* Create agent sub-flow */}
+        {createMode ? (
+          <div className="qp-create-area">
+            <div className="qp-create-label">输入 Agent 角色名：</div>
+            <input
+              ref={createInputRef}
+              type="text"
+              className="qp-create-input"
+              placeholder="e.g. coder, reviewer, researcher"
+              value={createRole}
+              onChange={(e) => setCreateRole(e.target.value)}
+              autoFocus
+            />
+            <div className="qp-create-hint">Enter 创建 · Esc 返回</div>
+          </div>
+        ) : (
+          <>
+            {/* Results */}
+            <div className="qp-results">
+              {filteredItems.length === 0 ? (
+                <div className="qp-empty">未找到匹配的命令</div>
+              ) : (
+                Array.from(grouped.entries()).map(([category, items]) => (
+                  <div key={category} className="qp-category">
+                    <div className="qp-category-title">{category}</div>
+                    {items.map((item) => {
+                      const idx = flatIdx++;
+                      const isSelected = idx === selectedIndex;
+                      return (
+                        <div
+                          key={item.id}
+                          data-qp-idx={idx}
+                          className={`qp-item${isSelected ? ' selected' : ''}`}
+                          onClick={() => { item.action(); onClose(); }}
+                          onMouseEnter={() => setSelectedIndex(idx)}
+                        >
+                          {item.icon && <span className="qp-item-icon">{item.icon}</span>}
+                          <div className="qp-item-text">
+                            <div className="qp-item-label">{item.label}</div>
+                            {item.description && <div className="qp-item-desc">{item.description}</div>}
+                          </div>
+                          {item.shortcut && <kbd className="qp-shortcut">{item.shortcut}</kbd>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
             </div>
-          ) : (
-            Array.from(grouped.entries()).map(([category, items]) => (
-              <div key={category}>
-                <div style={{
-                  padding: '4px 12px', fontSize: '11px', color: '#666',
-                  textTransform: 'uppercase', letterSpacing: '0.5px',
-                }}>
-                  {category}
-                </div>
-                {items.map((item, idx) => {
-                  const globalIdx = filteredItems.indexOf(item);
-                  const isSelected = globalIdx === selectedIndex;
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => { item.action(); onClose(); }}
-                      onMouseEnter={() => setSelectedIndex(globalIdx)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '8px 12px', borderRadius: '6px',
-                        background: isSelected ? '#2a2a2a' : 'transparent',
-                        cursor: 'pointer', marginBottom: '2px',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '14px', color: '#e0e0e0' }}>{item.label}</div>
-                        {item.description && (
-                          <div style={{ fontSize: '12px', color: '#888' }}>{item.description}</div>
-                        )}
-                      </div>
-                      {item.shortcut && (
-                        <kbd style={{
-                          padding: '2px 6px', borderRadius: '4px',
-                          background: '#333', color: '#aaa', fontSize: '11px',
-                          fontFamily: 'monospace',
-                        }}>
-                          {item.shortcut}
-                        </kbd>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </div>
 
-        {/* Footer hint */}
-        <div style={{
-          padding: '8px 16px', borderTop: '1px solid #333',
-          display: 'flex', gap: '16px', fontSize: '11px', color: '#666',
-        }}>
-          <span>\u2191\u2193 \u9009\u62E9</span>
-          <span>\u23CE \u6267\u884C</span>
-          <span>ESC \u5173\u95ED</span>
-        </div>
+            {/* Footer */}
+            <div className="qp-footer">
+              <span>↑↓ 选择</span>
+              <span>↵ 执行</span>
+              <span>Esc 关闭</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
