@@ -62,7 +62,6 @@ body {
   background: var(--bg-void);
   color: var(--text-primary);
   font-family: var(--font-body);
-  overflow: hidden;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -160,6 +159,28 @@ textarea {
   position: relative;
   z-index: 1;
   background: var(--bg-void);
+  overflow: hidden;
+}
+
+/* Tablet: sidebar narrows */
+@media (max-width: 1024px) {
+  .app {
+    grid-template-columns: 200px 1fr auto;
+  }
+}
+
+/* Mobile: single column, sidebar hidden */
+@media (max-width: 768px) {
+  .app {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .panel-left {
+    display: none;
+  }
+  .right-section {
+    display: none;
+  }
 }
 
 .panel {
@@ -1770,6 +1791,47 @@ textarea {
 }
 
 /* Glitch override for logo uses existing @keyframes glitch */
+
+/* ===== ACCESSIBILITY — FOCUS VISIBLE ===== */
+/* Global focus-visible ring for keyboard navigation (WCAG 2.4.7) */
+*:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* Inputs: replace outline:none with visible focus ring */
+.input:focus-visible,
+.chat-input-field:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -1px;
+  border-color: var(--cyan);
+}
+
+/* Buttons already have border transitions — add ring on top */
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-action:focus-visible,
+.send-btn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--cyan-glow);
+}
+
+/* Links and clickable elements */
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Select elements */
+select:focus-visible,
+.chat-model:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+}
 
 /* ===== PHOENIX CORE — CORPORATE MOTION SYSTEM ===== */
 /* Source: motion-plan.json (Corporate personality, DASHBOARD scene) */

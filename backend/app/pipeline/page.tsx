@@ -304,21 +304,21 @@ export default function PipelinePage() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0a0a0f', color: '#e0e0e0', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-void)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>
       {/* Left sidebar: stages + agents */}
-      <div style={{ width: '300px', borderRight: '1px solid #2a2a3a', padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ width: '300px', borderRight: '1px solid var(--border)', padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Connection status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: isConnected ? '#4ade80' : '#f87171', display: 'inline-block' }} />
-          <span style={{ color: '#888' }}>{isConnected ? '已连接' : '断开'}</span>
-          {overallStatus === 'running' && <span style={{ marginLeft: 'auto', color: '#aaa', fontSize: '12px' }}>{formatElapsed(elapsed)}</span>}
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: isConnected ? 'var(--green)' : 'var(--red)', display: 'inline-block' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>{isConnected ? '已连接' : '断开'}</span>
+          {overallStatus === 'running' && <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '12px' }}>{formatElapsed(elapsed)}</span>}
         </div>
 
         {/* 429 rate limit alert */}
         {rateLimitAlert && (
           <div style={{
             padding: '10px 12px', borderRadius: '8px', background: '#2a1a0a',
-            border: '1px solid #f59e0b', fontSize: '13px', color: '#fbbf24',
+            border: '1px solid var(--yellow)', fontSize: '13px', color: 'var(--yellow)',
             display: 'flex', alignItems: 'center', gap: '8px',
           }}>
             <span>⚠️</span>
@@ -328,9 +328,9 @@ export default function PipelinePage() {
 
         {/* Pipeline stages */}
         <div>
-          <h2 style={{ margin: '0 0 12px', fontSize: '15px', color: '#fff', fontWeight: 600 }}>流水线阶段</h2>
+          <h2 style={{ margin: '0 0 12px', fontSize: '15px', color: 'var(--text-primary)', fontWeight: 600 }}>流水线阶段</h2>
           {stages.length === 0 ? (
-            <p style={{ color: '#555', fontSize: '13px', margin: 0 }}>暂无流水线运行</p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: 0 }}>暂无流水线运行</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {stages.map((stage, i) => (
@@ -341,29 +341,29 @@ export default function PipelinePage() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '14px' }}>{statusIcon[stage.status]}</span>
-                    <span style={{ fontWeight: 500, fontSize: '13px', color: '#fff' }}>{stage.name}</span>
+                    <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>{stage.name}</span>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
                     {stage.role && <span>{stage.role} · </span>}
                     {statusText[stage.status]}
                   </div>
                   {stage.error && (
-                    <div style={{ fontSize: '11px', color: '#f87171', marginTop: '4px' }}>{stage.error}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '4px' }}>{stage.error}</div>
                   )}
                   {stage.status === 'review_requested' && (
                     <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
                       <button onClick={() => handleReview(stage.name, 'approve')} style={{
-                        padding: '4px 10px', borderRadius: '4px', background: '#065f46', color: '#6ee7b7',
+                        padding: '4px 10px', borderRadius: '4px', background: 'var(--green)', color: 'var(--bg-void)',
                         border: 'none', cursor: 'pointer', fontSize: '12px',
                       }}>通过</button>
                       <button onClick={() => handleReview(stage.name, 'reject')} style={{
-                        padding: '4px 10px', borderRadius: '4px', background: '#7f1d1d', color: '#fca5a5',
+                        padding: '4px 10px', borderRadius: '4px', background: 'var(--red)', color: 'var(--text-primary)',
                         border: 'none', cursor: 'pointer', fontSize: '12px',
                       }}>驳回</button>
                     </div>
                   )}
                   {i < stages.length - 1 && (
-                    <div style={{ fontSize: '10px', color: '#333', marginTop: '6px', textAlign: 'center' }}>↓</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '6px', textAlign: 'center' }}>↓</div>
                   )}
                 </div>
               ))}
@@ -374,7 +374,7 @@ export default function PipelinePage() {
         {/* Agent status cards */}
         {agents.length > 0 && (
           <div>
-            <h2 style={{ margin: '0 0 12px', fontSize: '15px', color: '#fff', fontWeight: 600 }}>Agent 状态</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: '15px', color: 'var(--text-primary)', fontWeight: 600 }}>Agent 状态</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {agents.map(a => (
                 <div key={a.id} style={{
@@ -384,10 +384,10 @@ export default function PipelinePage() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>{agentStatusIcon[a.status]}</span>
-                    <span style={{ fontWeight: 500, fontSize: '13px', color: '#fff' }}>{a.role || a.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#888' }}>{agentStatusText[a.status]}</span>
+                    <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>{a.role || a.name}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-secondary)' }}>{agentStatusText[a.status]}</span>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#555', marginTop: '4px', display: 'flex', gap: '12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '12px' }}>
                     {a.currentStage && <span>阶段: {a.currentStage}</span>}
                     {a.elapsed != null && <span>用时: {formatElapsed(a.elapsed)}</span>}
                     {a.toolCalls != null && <span>工具: {a.toolCalls}次</span>}
@@ -400,7 +400,7 @@ export default function PipelinePage() {
 
         <Link href="/im" style={{
           display: 'block', marginTop: 'auto', padding: '8px 12px',
-          borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: '#888',
+          borderRadius: '6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)',
           textDecoration: 'none', fontSize: '13px', textAlign: 'center',
           border: '1px solid rgba(255,255,255,0.08)',
         }}>
@@ -409,14 +409,14 @@ export default function PipelinePage() {
       </div>
 
       {/* Center: event stream */}
-      <div style={{ flex: 1, borderRight: '1px solid #2a2a3a', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a3a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <h2 style={{ margin: 0, fontSize: '15px', color: '#fff', fontWeight: 600 }}>实时执行流</h2>
-          <span style={{ fontSize: '11px', color: '#555' }}>({events.length} events)</span>
+      <div style={{ flex: 1, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{ margin: 0, fontSize: '15px', color: 'var(--text-primary)', fontWeight: 600 }}>实时执行流</h2>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>({events.length} events)</span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
           {events.length === 0 ? (
-            <p style={{ color: '#555', fontSize: '13px' }}>等待事件...</p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '13px' }}>等待事件...</p>
           ) : (
             events.map((evt, i) => {
               const isError = evt.event.includes('error');
@@ -426,12 +426,12 @@ export default function PipelinePage() {
                 <div key={i} style={{
                   padding: '6px 10px', marginBottom: '3px', borderRadius: '6px',
                   background: isError ? 'rgba(239,68,68,0.1)' : isDone ? 'rgba(59,130,246,0.06)' : 'transparent',
-                  borderLeft: isError ? '2px solid #ef4444' : isPipeline ? '2px solid #6366f1' : '2px solid transparent',
+                  borderLeft: isError ? '2px solid var(--red)' : isPipeline ? '2px solid var(--purple)' : '2px solid transparent',
                   fontSize: '12px', fontFamily: 'JetBrains Mono, monospace',
                 }}>
-                  <span style={{ color: '#6366f1', fontWeight: 500 }}>{evt.event}</span>
+                  <span style={{ color: 'var(--purple)', fontWeight: 500 }}>{evt.event}</span>
                   {!!evt.data && (
-                    <span style={{ color: '#888', marginLeft: '8px' }}>
+                    <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>
                       {String(JSON.stringify(evt.data as Record<string, unknown>)).slice(0, 180)}
                     </span>
                   )}
@@ -445,21 +445,21 @@ export default function PipelinePage() {
 
       {/* Right: output preview */}
       <div style={{ width: '420px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a3a' }}>
-          <h2 style={{ margin: 0, fontSize: '15px', color: '#fff', fontWeight: 600 }}>产物预览</h2>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <h2 style={{ margin: 0, fontSize: '15px', color: 'var(--text-primary)', fontWeight: 600 }}>产物预览</h2>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
           {stages.filter((s) => s.output).map((stage) => (
             <div key={stage.name} style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                 <span>{statusIcon[stage.status]}</span>
-                <h3 style={{ margin: 0, fontSize: '13px', color: '#aaa', fontWeight: 500 }}>{stage.name}</h3>
-                {stage.role && <span style={{ fontSize: '11px', color: '#555' }}>({stage.role})</span>}
+                <h3 style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>{stage.name}</h3>
+                {stage.role && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>({stage.role})</span>}
               </div>
               <pre style={{
                 margin: 0, padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)',
                 fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                color: '#ccc', maxHeight: '250px', overflowY: 'auto',
+                color: 'var(--text-primary)', maxHeight: '250px', overflowY: 'auto',
                 border: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.5,
               }}>
                 {stage.output.slice(0, 3000)}
@@ -467,7 +467,7 @@ export default function PipelinePage() {
             </div>
           ))}
           {stages.filter((s) => s.output).length === 0 && (
-            <p style={{ color: '#555', fontSize: '13px' }}>暂无产物输出</p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '13px' }}>暂无产物输出</p>
           )}
         </div>
       </div>

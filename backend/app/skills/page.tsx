@@ -158,7 +158,7 @@ export default function SkillsPage() {
 
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorFallback message={error} />;
-  if (!data) return <div style={{ padding: "3rem", color: "#64748b" }}>无数据</div>;
+  if (!data) return <div style={{ padding: "3rem", color: "var(--text-secondary)" }}>无数据</div>;
 
   const tabs: { key: TabKey; label: string; icon: string; badge?: string }[] = [
     { key: "installed", label: "已安装", icon: "󰏓", badge: String(skills.length) },
@@ -167,7 +167,7 @@ export default function SkillsPage() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0F172A", color: "#F8FAFC" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-void)", color: "var(--text-primary)" }}>
       {/* Toast */}
       {toast && (
         <div style={{
@@ -192,19 +192,19 @@ export default function SkillsPage() {
           <Link href="/" style={{
             marginTop: 4,
             padding: "6px 12px", borderRadius: 6,
-            background: "rgba(255,255,255,0.05)", color: "#94a3b8",
+            background: "rgba(255,255,255,0.05)", color: "var(--text-dim)",
             textDecoration: "none", fontSize: 12,
             border: "1px solid rgba(255,255,255,0.08)",
             transition: "background 0.15s, color 0.15s",
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLAnchorElement).style.color = "#F8FAFC"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8"; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-dim)"; }}
           >← 返回首页</Link>
           <div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>
               技能管理
             </h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)" }}>
               管理 Agent 技能库 · 安装远程技能 · 查看使用统计
             </p>
           </div>
@@ -225,8 +225,8 @@ export default function SkillsPage() {
             style={{
               padding: "12px 20px",
               background: "none", border: "none",
-              borderBottom: activeTab === tab.key ? "2px solid #22C55E" : "2px solid transparent",
-              color: activeTab === tab.key ? "#F8FAFC" : "#64748b",
+              borderBottom: activeTab === tab.key ? "2px solid var(--green)" : "2px solid transparent",
+              color: activeTab === tab.key ? "var(--text-primary)" : "var(--text-secondary)",
               fontSize: 13, fontWeight: activeTab === tab.key ? 600 : 400,
               cursor: "pointer",
               display: "flex", alignItems: "center", gap: 6,
@@ -237,7 +237,7 @@ export default function SkillsPage() {
             {tab.badge && (
               <span style={{
                 fontSize: 11, padding: "1px 6px", borderRadius: 9999,
-                background: "rgba(255,255,255,0.08)", color: "#94a3b8",
+                background: "rgba(255,255,255,0.08)", color: "var(--text-dim)",
               }}>{tab.badge}</span>
             )}
           </button>
@@ -278,7 +278,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
       <div style={{ textAlign: "center", padding: "4rem 0", color: "#475569" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>󰏓</div>
         <div style={{ fontSize: 14 }}>还没有安装任何技能</div>
-        <div style={{ fontSize: 12, marginTop: 4, color: "#334155" }}>切换到"技能市场"搜索并安装</div>
+        <div style={{ fontSize: 12, marginTop: 4, color: "var(--border)" }}>切换到"技能市场"搜索并安装</div>
       </div>
     );
   }
@@ -287,7 +287,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header row with count and scroll hint */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, color: "#64748b" }}>共 {skills.length} 个技能</span>
+        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>共 {skills.length} 个技能</span>
       </div>
       {/* Scrollable grid */}
       <div style={{
@@ -317,7 +317,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
         }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#F8FAFC", flex: 1 }}>{s.name}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{s.name}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {s.autoLoad && (
                 <span style={{
@@ -341,7 +341,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
               >删除</button>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 8 }}>
             {s.description}
           </div>
           {s.roles.length > 0 && (
@@ -349,7 +349,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
               {s.roles.map(r => (
                 <span key={r} style={{
                   fontSize: 10, padding: "2px 8px", borderRadius: 9999,
-                  background: "rgba(148,163,184,0.08)", color: "#94a3b8",
+                  background: "rgba(148,163,184,0.08)", color: "var(--text-dim)",
                   border: "1px solid rgba(148,163,184,0.12)",
                 }}>{r}</span>
               ))}
@@ -371,8 +371,8 @@ function StatsTab({ data }: { data: SkillStatsData }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-        <StatCard label="累计调用" value={data.totalInvocations.allTime} accent="#3b82f6" />
-        <StatCard label="近 7 天" value={data.totalInvocations.last7Days} accent="#22C55E" />
+        <StatCard label="累计调用" value={data.totalInvocations.allTime} accent="var(--cyan)" />
+        <StatCard label="近 7 天" value={data.totalInvocations.last7Days} accent="var(--green)" />
         <StatCard label="近 24 小时" value={data.totalInvocations.last24Hours} accent="#a855f7" />
       </div>
 
@@ -388,7 +388,7 @@ function StatsTab({ data }: { data: SkillStatsData }) {
                 border: "1px solid rgba(59,130,246,0.15)",
                 fontSize: 13, color: "#93c5fd",
               }}>
-                {s.skillName} <span style={{ color: "#64748b" }}>({s.totalCalls})</span>
+                {s.skillName} <span style={{ color: "var(--text-secondary)" }}>({s.totalCalls})</span>
               </span>
             ))}
           </div>
@@ -407,7 +407,7 @@ function StatsTab({ data }: { data: SkillStatsData }) {
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.03)" }}>
                 {["技能", "调用次数", "成功率", "Agent 数", "最后使用"].map(h => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "#64748b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -417,8 +417,8 @@ function StatsTab({ data }: { data: SkillStatsData }) {
                   background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
                   borderBottom: "1px solid rgba(255,255,255,0.04)",
                 }}>
-                  <td style={{ padding: "10px 14px", fontWeight: 500, color: "#F8FAFC" }}>{s.skillName}</td>
-                  <td style={{ padding: "10px 14px", color: "#94a3b8" }}>{s.totalCalls}</td>
+                  <td style={{ padding: "10px 14px", fontWeight: 500, color: "var(--text-primary)" }}>{s.skillName}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--text-dim)" }}>{s.totalCalls}</td>
                   <td style={{ padding: "10px 14px" }}>
                     <span style={{
                       padding: "2px 8px", borderRadius: 4, fontSize: 12,
@@ -426,8 +426,8 @@ function StatsTab({ data }: { data: SkillStatsData }) {
                       background: s.successRate >= 80 ? "rgba(34,197,94,0.1)" : s.successRate >= 50 ? "rgba(250,204,21,0.1)" : "rgba(239,68,68,0.1)",
                     }}>{s.successRate}%</span>
                   </td>
-                  <td style={{ padding: "10px 14px", color: "#94a3b8" }}>{s.agentCount}</td>
-                  <td style={{ padding: "10px 14px", color: "#64748b" }}>
+                  <td style={{ padding: "10px 14px", color: "var(--text-dim)" }}>{s.agentCount}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--text-secondary)" }}>
                     {s.lastUsed ? timeAgo(s.lastUsed) : "—"}
                   </td>
                 </tr>
@@ -466,7 +466,7 @@ function MarketplaceTab({
             flex: 1, padding: "10px 14px",
             background: "rgba(255,255,255,0.04)",
             border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, color: "#F8FAFC", fontSize: 13,
+            borderRadius: 8, color: "var(--text-primary)", fontSize: 13,
             outline: "none",
             transition: "border-color 0.2s",
           }}
@@ -496,11 +496,11 @@ function MarketplaceTab({
       {results.length === 0 && !searching && (
         <div style={{ textAlign: "center", padding: "3rem 0", color: "#475569" }}>
           <div style={{ fontSize: 14 }}>输入关键词搜索远程技能</div>
-          <div style={{ fontSize: 12, marginTop: 4, color: "#334155" }}>支持 GitHub、LobeHub、ClawHub 等源</div>
+          <div style={{ fontSize: 12, marginTop: 4, color: "var(--border)" }}>支持 GitHub、LobeHub、ClawHub 等源</div>
         </div>
       )}
       {searching && (
-        <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>搜索中...</div>
+        <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-secondary)" }}>搜索中...</div>
       )}
       {results.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
@@ -519,10 +519,10 @@ function MarketplaceTab({
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#c084fc", flex: 1 }}>{r.name}</div>
                 <span style={{
                   fontSize: 10, padding: "2px 6px", borderRadius: 4,
-                  background: "rgba(255,255,255,0.05)", color: "#64748b",
+                  background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)",
                 }}>{r.source}</span>
               </div>
-              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 12 }}>
                 {r.description}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -540,7 +540,7 @@ function MarketplaceTab({
                     padding: "4px 12px", borderRadius: 6,
                     background: installing === r.name ? "rgba(34,197,94,0.05)" : "rgba(34,197,94,0.1)",
                     border: "1px solid rgba(34,197,94,0.25)",
-                    color: installing === r.name ? "#64748b" : "#4ade80",
+                    color: installing === r.name ? "var(--text-secondary)" : "#4ade80",
                     cursor: installing === r.name ? "wait" : "pointer",
                     fontSize: 12, fontWeight: 500,
                     transition: "background 0.15s",
@@ -570,7 +570,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
       border: "1px solid rgba(255,255,255,0.06)",
       borderLeft: `3px solid ${accent}`,
     }}>
-      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{value.toLocaleString()}</div>
     </div>
   );
@@ -582,7 +582,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 
 function LoadingSkeleton() {
   return (
-    <div style={{ minHeight: "100vh", background: "#0F172A", padding: "2rem 32px", display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-void)", padding: "2rem 32px", display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ height: 28, width: 120, background: "rgba(255,255,255,0.06)", borderRadius: 6 }} />
       <div style={{ display: "flex", gap: 8 }}>
         {[1,2,3].map(i => (
@@ -600,10 +600,10 @@ function LoadingSkeleton() {
 
 function ErrorFallback({ message }: { message: string }) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0F172A", padding: "3rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-void)", padding: "3rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 24, color: "#f87171", marginBottom: 8 }}>✗</div>
-        <div style={{ fontSize: 14, color: "#94a3b8" }}>{message}</div>
+        <div style={{ fontSize: 14, color: "var(--text-dim)" }}>{message}</div>
       </div>
     </div>
   );
