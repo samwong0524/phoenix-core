@@ -2215,10 +2215,16 @@ export class AgentRunner {
         workflowContext +
         (skillsBlock ? `\n\n${skillsBlock}` : "");
 
+      // Inject working directory context if configured
+      const workDir = process.env.AGENT_WORKDIR || process.env.WORKING_DIR || "";
+      const workDirBlock = workDir
+        ? `\n\n## Working Directory\nYour working directory is \`${workDir}\`. This is the project root. Use this path for reading/writing files and running bash commands. Always resolve relative paths against this directory.`
+        : "";
+
       // Inject role template before the system prompt if available
       const finalSystemContent = roleContent
-        ? `${roleContent}\n\n---\n\n${systemContent}`
-        : systemContent;
+        ? `${roleContent}\n\n---\n\n${systemContent}${workDirBlock}`
+        : `${systemContent}${workDirBlock}`;
 
       history.push({
         role: "system",

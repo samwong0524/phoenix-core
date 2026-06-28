@@ -339,6 +339,11 @@ function IMPageInner() {
   const [skillFilter, setSkillFilter] = useState("");
   const [skillSelectedIndex, setSkillSelectedIndex] = useState(0);
   const [atTriggerPos, setAtTriggerPos] = useState(-1);
+  const [workingDir, setWorkingDir] = useState<string>(() => {
+    try { return localStorage.getItem("workingDir") ?? ""; } catch { return ""; }
+  });
+  const [showDirInput, setShowDirInput] = useState(false);
+  const [dirInputValue, setDirInputValue] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set()); // position of @ in draft
   const [agentStatusById, setAgentStatusById] = useState<Record<string, AgentStatus>>({});
   const [vizDebug, setVizDebug] = useState<VizDebugEntry[]>([]);
@@ -741,7 +746,7 @@ function IMPageInner() {
         config: { tokenLimit: number };
         agents: AgentMeta[];
         groups: Group[];
-      }>(`/api/workspace-init?overrideWorkspaceId=${encodeURIComponent(overrideWorkspaceId)}`);
+      }>(`/api/workspace-init?overrideWorkspaceId=${encodeURIComponent(overrideWorkspaceId)}${workingDir ? `&workingDir=${encodeURIComponent(workingDir)}` : ""}`);
       setTokenLimit(init.config.tokenLimit);
       saveSession(init.session);
       setSession(init.session);
@@ -760,7 +765,7 @@ function IMPageInner() {
           config: { tokenLimit: number };
           agents: AgentMeta[];
           groups: Group[];
-        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(existing.workspaceId)}`);
+        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(existing.workspaceId)}${workingDir ? `&workingDir=${encodeURIComponent(workingDir)}` : ""}`);
         setTokenLimit(init.config.tokenLimit);
         saveSession(init.session);
         setSession(init.session);
@@ -785,7 +790,7 @@ function IMPageInner() {
           config: { tokenLimit: number };
           agents: AgentMeta[];
           groups: Group[];
-        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(targetId)}`);
+        }>(`/api/workspace-init?workspaceId=${encodeURIComponent(targetId)}${workingDir ? `&workingDir=${encodeURIComponent(workingDir)}` : ""}`);
         setTokenLimit(init.config.tokenLimit);
         saveSession(init.session);
         setSession(init.session);
@@ -2018,6 +2023,36 @@ const renderContent = useCallback((content: string, contentType: string, message
         <div className="ws-info">
           <div className="ws-title">{t("im.workspace")}</div>
           <div className="ws-id">{session?.workspaceId ?? "-"}</div>
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 4 }}>工作目录</div>
+            {showDirInput ? (
+              <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
+                <input
+                  value={dirInputValue}
+                  onChange={(e) => setDirInputValue(e.target.value)}
+                  placeholder="e.g. F:/swarm-ide"
+                  style={{ width: "100%", padding: "4px 6px", fontSize: 11, background: "var(--bg-panel)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { const val = dirInputValue.trim(); if (val) { localStorage.setItem("workingDir", val); setWorkingDir(val); } setShowDirInput(false); }
+                    if (e.key === "Escape") setShowDirInput(false);
+                  }}
+                  autoFocus
+                />
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => { const val = dirInputValue.trim(); if (val) { localStorage.setItem("workingDir", val); setWorkingDir(val); } setShowDirInput(false); }} style={{ fontSize: 10, padding: "2px 8px", cursor: "pointer", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 3 }}>确定</button>
+                  <button onClick={() => setShowDirInput(false)} style={{ fontSize: 10, padding: "2px 8px", cursor: "pointer", background: "var(--bg-surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 3 }}>取消</button>
+                </div>
+              </div>
+            ) : (
+              <div onClick={() => { setDirInputValue(workingDir); setShowDirInput(true); }} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击修改工作目录">
+                <span style={{ fontSize: 11 }}>📁</span>
+                <span>{workingDir || "未设置（点击添加）"}</span>
+              </div>
+            )}
+            {workingDir && !showDirInput && (
+              <div style={{ fontSize: 8, color: "var(--text-dim)", marginTop: 3, fontStyle: "italic" }}>修改后需刷新页面生效</div>
+            )}
+          </div>
           <div style={{ marginTop: 4, fontSize: 9 }}>
             {t("im.human_label")} {(session?.humanAgentId ?? "-").slice(0, 22)}…
           </div>
