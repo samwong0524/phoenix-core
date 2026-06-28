@@ -80,7 +80,7 @@ function ParticlesCanvas() {
     <canvas
       ref={ref}
       id="particles"
-      style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}
+      style={{ position: "fixed", inset: 0, zIndex: "var(--z-bg)", pointerEvents: "none" }}
     />
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n/context";
-import { Card } from "@/components/ui";
+import { Card, Loading, EmptyState, PageHeader, Alert } from "@/components/ui";
 
 type UUID = string;
 
@@ -40,10 +40,14 @@ export default function GraphPage() {
   const [session] = useState<WorkspaceDefaults | null>(() => loadSession());
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session) {
+      setLoading(false);
+      return;
+    }
     void (async () => {
       try {
         const q = new URLSearchParams({ workspaceId: session.workspaceId, limitMessages: "2000" });
@@ -52,6 +56,8 @@ export default function GraphPage() {
         setEdges(res.edges);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
       }
     })();
   }, [session]);
@@ -71,30 +77,41 @@ export default function GraphPage() {
   if (!session) {
     return (
       <div style={{ padding: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>{t("graph.title")}</h1>
-        <p className="muted">{t("graph.no_session")}</p>
-        <Link className="btn btn-primary" href="/im">
-          {t("graph.open_im")}
-        </Link>
+        <EmptyState
+          icon=""
+          message={t("graph.no_session")}
+          hint={t("graph.no_session_hint")}
+          action={
+            <Link className="btn btn-primary" href="/im">
+              {t("graph.open_im")}
+            </Link>
+          }
+        />
       </div>
     );
   }
 
+  if (loading) {
+    return <Loading variant="skeleton" lines={4} fullPage />;
+  }
+
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>{t("graph.title")}</h1>
-          <p className="muted" style={{ marginTop: 8 }}>
-            {t("graph.subtitle")}
-          </p>
-        </div>
-        <Link className="btn" href="/im">
-          {t("graph.back_im")}
-        </Link>
-      </div>
+      <PageHeader
+        title={t("graph.title")}
+        subtitle={t("graph.subtitle")}
+        actions={
+          <Link className="btn" href="/im">
+            {t("graph.back_im")}
+          </Link>
+        }
+      />
 
-      {error ? <div className="toast">{error}</div> : null}
+      {error && (
+        <Alert variant="error" style={{ marginTop: 12 }}>
+          {error}
+        </Alert>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 320px))", gap: 12, marginTop: 16 }}>
         <Card title={t("graph.edges")} padding={12}>

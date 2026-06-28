@@ -1990,7 +1990,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
                   position: "absolute",
                   left: 12,
                   top: 12,
-                  zIndex: 2,
+                  zIndex: "var(--z-raised)",
                   display: "flex",
                   gap: 8,
                   alignItems: "center",
@@ -2123,12 +2123,12 @@ const renderContent = useCallback((content: string, contentType: string) => {
                                 style={{
                                   fontSize: 11,
                                   fontWeight: 700,
-                                  color: beam.kind === "create" ? "#bfdbfe" : "#e4e4e7",
-                                  border: `1px solid ${beam.kind === "create" ? "rgba(59,130,246,0.5)" : "rgba(82,82,91,0.5)"}`,
+                                  color: beam.kind === "create" ? "var(--beam-create-text)" : "var(--beam-msg-text)",
+                                  border: `1px solid ${beam.kind === "create" ? "var(--beam-create-border)" : "var(--beam-msg-border)"}`,
                                   background:
                                     beam.kind === "create"
-                                      ? "rgba(30,58,138,0.6)"
-                                      : "rgba(9,9,11,0.7)",
+                                      ? "var(--beam-create-bg)"
+                                      : "var(--beam-msg-bg)",
                                   borderRadius: 999,
                                   padding: "4px 8px",
                                   textAlign: "center",

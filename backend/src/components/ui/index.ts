@@ -4,3 +4,4 @@ export { Input } from "./input";
 export { EmptyState } from "./empty-state";
 export { Loading } from "./loading";
 export { PageHeader } from "./page-header";
+export { Alert } from "./alert";

@@ -32,7 +32,7 @@ export function PageHeader({
         borderBottom: sticky ? "1px solid var(--border)" : undefined,
         position: sticky ? "sticky" : undefined,
         top: sticky ? 0 : undefined,
-        zIndex: sticky ? 10 : undefined,
+        zIndex: sticky ? "var(--z-sticky)" : undefined,
         background: sticky ? "var(--bg-void)" : undefined,
       }}
     >

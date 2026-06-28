@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/context";
-import { EmptyState, Loading, Card } from "@/components/ui";
+import { EmptyState, Loading, Card, PageHeader, Alert } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,46 +173,28 @@ export default function SkillsPage() {
     <div style={{ minHeight: "100vh", background: "var(--bg-void)", color: "var(--text-primary)" }}>
       {/* Toast */}
       {toast && (
-        <div style={{
-          position: "fixed", top: 20, right: 20, zIndex: 50,
-          padding: "10px 16px", borderRadius: "var(--radius-md)",
-          background: toast.type === "ok" ? "var(--green-soft)" : "var(--red-soft)",
-          border: `1px solid ${toast.type === "ok" ? "var(--green-mid)" : "var(--red)"}`,
-          color: toast.type === "ok" ? "var(--green-text)" : "var(--red-text)",
-          fontSize: 13, fontWeight: 500,
-          animation: "slideIn 0.2s ease-out",
-        }}>
+        <Alert
+          variant={toast.type === "ok" ? "success" : "error"}
+          style={{
+            position: "fixed", top: 20, right: 20, zIndex: "var(--z-overlay)",
+            fontWeight: 500, animation: "slideIn 0.2s ease-out",
+          }}
+        >
           {toast.type === "ok" ? "✓" : "✗"} {toast.msg}
-        </div>
+        </Alert>
       )}
 
       {/* Header */}
-      <header style={{
-        padding: "24px 32px 0",
-        borderBottom: "1px solid var(--border-subtle)",
-      }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "start", gap: 16 }}>
-          <Link href="/" style={{
-            marginTop: 4,
-            padding: "6px 12px", borderRadius: "var(--radius-sm)",
-            background: "var(--surface-15)", color: "var(--text-dim)",
-            textDecoration: "none", fontSize: 12,
-            border: "1px solid var(--border-light)",
-            transition: "background 0.15s, color 0.15s",
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "var(--surface-3)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "var(--surface-15)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-dim)"; }}
-          >{t("common.back_home")}</Link>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "var(--font-display)", color: "var(--cyan)" }}>
-              {t("skills.title")}
-            </h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)" }}>
-              {t("skills.subtitle")}
-            </p>
-          </div>
+      <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <PageHeader
+            title={t("skills.title")}
+            subtitle={t("skills.subtitle")}
+            backHref="/"
+            backLabel={t("common.back_home")}
+          />
         </div>
-      </header>
+      </div>
 
       {/* Tabs */}
       <nav style={{

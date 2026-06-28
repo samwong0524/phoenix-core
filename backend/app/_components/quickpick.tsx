@@ -89,7 +89,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start',
-      justifyContent: 'center', paddingTop: '15vh', zIndex: 9999,
+      justifyContent: 'center', paddingTop: '15vh', zIndex: 'var(--z-modal)',
     }} onClick={onClose}>
       <div style={{
         width: '560px', maxHeight: '60vh', background: '#1a1a1a',

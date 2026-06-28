@@ -3,33 +3,35 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
 import { useI18n, LanguageSwitcher } from "@/lib/i18n/context";
-import { Card } from "@/components/ui";
+import { Card, PageHeader, Alert } from "@/components/ui";
 import WorkspacesList from "./workspaces-list";
 import CreateWorkspace from "./create-workspace";
 
 type HomePageContentProps = {
   workspaces: Array<{ id: string; name: string; createdAt: string }>;
+  dbError?: boolean;
   children?: ReactNode;
 };
 
-export default function HomePageContent({ workspaces, children }: HomePageContentProps) {
+export default function HomePageContent({ workspaces, dbError, children }: HomePageContentProps) {
   const { t } = useI18n();
 
   return (
     <div style={{ height: "100vh", overflowY: "auto", padding: "24px 24px 48px" }}>
       <div style={{ maxWidth: 960, margin: "0 auto" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <h1 style={{ margin: 0, fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>
-            {t("home.title")}
-          </h1>
-          <span className="muted mono" style={{ fontSize: 11 }}>
-            {t("home.subtitle")}
-          </span>
-          <div style={{ marginLeft: "auto" }}>
-            <LanguageSwitcher />
-          </div>
-        </div>
+        <PageHeader
+          title={t("home.title")}
+          subtitle={t("home.subtitle")}
+          actions={<LanguageSwitcher />}
+        />
+
+        {/* DB Error Notice */}
+        {dbError && (
+          <Alert variant="error" style={{ marginBottom: 16 }}>
+            {t("home.db_error")}
+          </Alert>
+        )}
 
         {/* System Status */}
         {children}

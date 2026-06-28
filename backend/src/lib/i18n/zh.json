@@ -30,7 +30,8 @@
     "models_desc": "FreeLLMAPI — 配置 API Key，管理模型",
     "workspaces": "工作区",
     "workspaces_hint": "点击工作区打开 IM 对话，或使用右侧删除键删除。",
-    "new_workspace": "新建工作区"
+    "new_workspace": "新建工作区",
+    "db_error": "数据库连接失败，部分功能可能不可用。"
   },
   "im": {
     "workspace": "工作区",
@@ -97,6 +98,7 @@
     "delete_tooltip": "删除工作区 \"{name}\"",
     "delete_failed": "删除失败: {error}",
     "empty": "暂无工作区。打开 IM 创建一个。",
+    "empty_hint": "点击下方「新建工作区」开始使用",
     "recent": "Recent"
   },
   "status": {
@@ -109,6 +111,7 @@
   "graph": {
     "title": "Agent 图谱",
     "no_session": "暂无会话。请先打开 IM。",
+    "no_session_hint": "图谱需要活跃的 IM 会话才能展示数据",
     "open_im": "打开 IM",
     "subtitle": "聚合消息流（发送者 → 群组其他成员）。",
     "back_im": "← 返回 IM",

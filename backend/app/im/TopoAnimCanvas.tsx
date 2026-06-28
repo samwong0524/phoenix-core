@@ -112,7 +112,7 @@ export function TopoAnimCanvas({
         width,
         height,
         pointerEvents: "none",
-        zIndex: 0,
+        zIndex: "var(--z-bg)",
       }}
     />
   );

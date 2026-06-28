@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/context";
-import { Button } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 
 type Workspace = { id: string; name: string; createdAt: string };
 
@@ -31,7 +31,7 @@ export default function WorkspacesList({ workspaces }: { workspaces: Workspace[]
   }
 
   if (workspaces.length === 0) {
-    return <div className="muted">{t("workspace.empty")}</div>;
+    return <EmptyState icon="" message={t("workspace.empty")} hint={t("workspace.empty_hint")} />;
   }
 
   return (
