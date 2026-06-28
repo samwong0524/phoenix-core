@@ -12,6 +12,8 @@ import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { IMHistoryList } from "./IMHistoryList";
 import { TopoAnimCanvas } from "./TopoAnimCanvas";
+import { TaskMonitor } from "./TaskMonitor";
+import { useI18n } from "@/lib/i18n/context";
 
 // Create code plugin with dark theme
 const code = createCodePlugin({
@@ -138,7 +140,7 @@ function FileCard({ url, name, size }: { url: string; name: string; size?: numbe
         padding: "8px 12px",
         background: "rgba(255,255,255,0.04)",
         border: "1px solid var(--border)",
-        borderRadius: 6,
+        borderRadius: "var(--radius-sm)",
         textDecoration: "none",
         color: "var(--text-primary)",
         cursor: "pointer",
@@ -149,7 +151,7 @@ function FileCard({ url, name, size }: { url: string; name: string; size?: numbe
         style={{
           width: 36,
           height: 36,
-          borderRadius: 6,
+          borderRadius: "var(--radius-sm)",
           background: "var(--cyan)",
           display: "flex",
           alignItems: "center",
@@ -248,7 +250,7 @@ function cx(...classes: Array<string | false | undefined | null>) {
 
 export default function IMPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>Loading...</div>}>
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading…</div>}>
       <IMPageInner />
     </Suspense>
   );
@@ -256,6 +258,7 @@ export default function IMPage() {
 
 function IMPageInner() {
   const searchParams = useSearchParams();
+  const { t, locale } = useI18n();
   const workspaceOverrideId = searchParams.get("workspaceId");
   const [session, setSession] = useState<WorkspaceDefaults | null>(() => null);
   const [tokenLimit, setTokenLimit] = useState<number>(100000);
@@ -516,20 +519,20 @@ function IMPageInner() {
 
   const getGroupLabel = useCallback(
     (g: Group | null | undefined) => {
-      if (!g) return "Group";
+      if (!g) return t("im.group");
       if (g.name) return g.name;
-      if (g.id === session?.defaultGroupId) return "P2P 人类↔助手";
+      if (g.id === session?.defaultGroupId) return t("im.p2p_human");
 
       const memberRoles = g.memberIds
         .filter((id) => id !== session?.humanAgentId)
         .map((id) => agentRoleById.get(id) ?? id.slice(0, 8));
 
-      if (memberRoles.length === 1) return `P2P 人类↔${memberRoles[0]}`;
-      if (memberRoles.length === 2) return `${memberRoles[0]} ↔ ${memberRoles[1]}`;
-      if (memberRoles.length > 2) return `Group (${memberRoles.length})`;
-      return "Group";
+      if (memberRoles.length === 1) return t("im.p2p_with_role", { role: memberRoles[0] });
+      if (memberRoles.length === 2) return t("im.p2p_two_roles", { role1: memberRoles[0], role2: memberRoles[1] });
+      if (memberRoles.length > 2) return t("im.group_count", { count: memberRoles.length });
+      return t("im.group");
     },
-    [agentRoleById, session?.defaultGroupId, session?.humanAgentId]
+    [agentRoleById, session?.defaultGroupId, session?.humanAgentId, t]
   );
 
   const groupByAgentId = useMemo(() => {
@@ -745,7 +748,7 @@ function IMPageInner() {
 
     const created = await api<WorkspaceDefaults>(`/api/workspaces`, {
       method: "POST",
-      body: JSON.stringify({ name: "Default Workspace" }),
+      body: JSON.stringify({ name: t("im.default_workspace") }),
     });
     saveSession(created);
     setSession(created);
@@ -760,7 +763,7 @@ function IMPageInner() {
     setStatus("boot");
     const created = await api<WorkspaceDefaults>(`/api/workspaces`, {
       method: "POST",
-      body: JSON.stringify({ name: name?.trim() || "New Workspace" }),
+      body: JSON.stringify({ name: name?.trim() || t("im.new_workspace") }),
     });
     saveSession(created);
     setSession(created);
@@ -986,14 +989,14 @@ function IMPageInner() {
         }
       };
 
-      es.onerror = () => setAgentError("SSE disconnected");
+      es.onerror = () => setAgentError(t("im.sse_disconnected"));
     },
     [refreshGroups, refreshMessages]
   );
 
   const hireSubAgent = useCallback(async () => {
     if (!session) return;
-    const role = (window.prompt("Sub-agent role", "assistant") ?? "").trim();
+    const role = (window.prompt(t("im.sub_agent_role_prompt"), t("im.sub_agent_role_default")) ?? "").trim();
     if (!role) return;
 
     setError(null);
@@ -1061,7 +1064,7 @@ function IMPageInner() {
     if (text.startsWith("/create") || text.startsWith("/hire")) {
       const role = text.replace(/^\/(create|hire)\s*/i, "").trim();
       if (!role) {
-        setError("Usage: /create <role>");
+        setError(t("im.usage_create"));
         return;
       }
 
@@ -1140,7 +1143,7 @@ function IMPageInner() {
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
-      if (!res.ok) { alert(`上传失败: ${data.error}`); return; }
+      if (!res.ok) { alert(t("im.upload_failed", { error: data.error })); return; }
 
       const content = JSON.stringify({ url: data.url, name: data.name, size: data.size });
       const contentType = data.isImage ? "image" : "file";
@@ -1269,7 +1272,7 @@ function IMPageInner() {
           const role = payload.data?.agent?.role ?? "agent";
           const agentId = payload.data?.agent?.id as UUID | undefined;
           const parentId = payload.data?.agent?.parentId as UUID | null | undefined;
-          pushVizEvent(payload, `创建 ${role}`, "agent");
+          pushVizEvent(payload, t("im.create_agent", { role }), "agent");
           if (agentId) {
             const fromId = parentId || session.humanAgentId;
             pushBeam({ fromId, toId: agentId, kind: "create", label: role });
@@ -1300,7 +1303,7 @@ function IMPageInner() {
           const senderRole = senderId
             ? agentRoleByIdRef.current.get(senderId) ?? senderId.slice(0, 6)
             : "unknown";
-          pushVizEvent(payload, `消息: ${senderRole}`, "message");
+          pushVizEvent(payload, t("im.message_from", { sender: senderRole }), "message");
           logVizDebug({
             type: "message_event",
             data: {
@@ -1338,7 +1341,9 @@ function IMPageInner() {
           const role = agentId
             ? agentRoleByIdRef.current.get(agentId) ?? agentId.slice(0, 6)
             : "agent";
-          const label = payload.event === "ui.agent.llm.start" ? `LLM 开始: ${role}` : `LLM 结束: ${role}`;
+          const label = payload.event === "ui.agent.llm.start"
+            ? t("im.llm_start", { role })
+            : t("im.llm_done", { role });
           pushVizEvent(payload, label, "llm");
           if (agentId) {
             setAgentStatusById((prev) => ({
@@ -1355,10 +1360,9 @@ function IMPageInner() {
           const role = agentId
             ? agentRoleByIdRef.current.get(agentId) ?? agentId.slice(0, 6)
             : "agent";
-          const label =
-            payload.event === "ui.agent.tool_call.start"
-              ? `工具开始: ${role} · ${toolName}`
-              : `工具结束: ${role} · ${toolName}`;
+          const label = payload.event === "ui.agent.tool_call.start"
+            ? t("im.tool_start", { role, name: toolName })
+            : t("im.tool_done", { role, name: toolName });
           pushVizEvent(payload, label, "tool");
           if (agentId) {
             setAgentStatusById((prev) => ({
@@ -1367,7 +1371,7 @@ function IMPageInner() {
             }));
           }
         } else if (payload.event === "ui.agent.interrupt_all") {
-          pushVizEvent(payload, "停止全部 Agent", "agent");
+          pushVizEvent(payload, t("im.stop_all_event"), "agent");
           const ids = Array.isArray(payload.data?.agentIds)
             ? (payload.data.agentIds as UUID[])
             : [];
@@ -1452,7 +1456,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
       try {
         const img = JSON.parse(content) as { url?: string; name?: string };
         if (img?.url) {
-          return <img src={img.url} alt={img.name || ''} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, cursor: 'pointer' }} onClick={() => window.open(img.url!, '_blank')} />;
+          return <img src={img.url} alt={img.name || ''} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: "var(--radius-sm)", cursor: 'pointer' }} onClick={() => window.open(img.url!, '_blank')} />;
         }
       } catch { /* fallthrough */ }
     }
@@ -1807,7 +1811,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
               ) : null}
               {g.contextTokens > 0 ? (
                 <div className="ctx-bar">
-                  <span className="ctx-bar-label">Context</span>
+                  <span className="ctx-bar-label">{t("im.context_label")}</span>
                   <div className="ctx-bar-track">
                     <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
                   </div>
@@ -1836,7 +1840,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
             ) : null}
             {g.contextTokens > 0 ? (
               <div className="ctx-bar">
-                <span className="ctx-bar-label">Context</span>
+                <span className="ctx-bar-label">{t("im.context_label")}</span>
                 <div className="ctx-bar-track">
                   <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
                 </div>
@@ -1858,25 +1862,25 @@ const renderContent = useCallback((content: string, contentType: string) => {
           <div className="logo-text">PHOENIX CORE</div>
         </div>
         <div className="ws-info">
-          <div className="ws-title">WORKSPACE</div>
+          <div className="ws-title">{t("im.workspace")}</div>
           <div className="ws-id">{session?.workspaceId ?? "-"}</div>
           <div style={{ marginTop: 4, fontSize: 9 }}>
-            human: {(session?.humanAgentId ?? "-").slice(0, 22)}…
+            {t("im.human_label")} {(session?.humanAgentId ?? "-").slice(0, 22)}…
           </div>
           <div style={{ fontSize: 9 }}>
-            assistant: {(session?.assistantAgentId ?? "-").slice(0, 22)}…
+            {t("im.assistant_label")} {(session?.assistantAgentId ?? "-").slice(0, 22)}…
           </div>
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
             <a href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
-              ← 返回首页
+              {t("common.back_home")}
             </a>
           </div>
         </div>
         <div className="agent-scroll">
-          <div className="section-label">AGENTS</div>
+          <div className="section-label">{t("im.agents")}</div>
           {agentTreeRows.length === 0 && extraGroups.length === 0 ? (
             <div style={{ padding: 16 }} className="muted">
-              No groups yet.
+              {t("im.no_groups")}
             </div>
           ) : (
             <>
@@ -1916,9 +1920,9 @@ const renderContent = useCallback((content: string, contentType: string) => {
               className={cx("btn-action", "danger")}
               onClick={() => void onInterruptAllAgents()}
               disabled={!session || stoppingAgents}
-              title="停止所有 agent 当前循环"
+              title={t("im.stop_all_tooltip")}
             >
-              ■ {stoppingAgents ? "Stopping..." : "Stop All Agents"}
+              ■ {stoppingAgents ? t("im.stopping") : t("im.stop_all")}
             </button>
             {status !== "idle" ? (
               <span className="muted" style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>{status}...</span>
@@ -1998,7 +2002,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
                   color: "var(--text-primary)",
                 }}
               >
-                <span className="mono">缩放 {Math.round(vizScale * 100)}%</span>
+                <span className="mono">{t("im.zoom", { value: Math.round(vizScale * 100) })}</span>
                 <button
                   className="btn"
                   style={{ padding: "2px 8px", fontSize: 12 }}
@@ -2028,9 +2032,9 @@ const renderContent = useCallback((content: string, contentType: string) => {
                     setVizOffset({ x: 0, y: 0 });
                   }}
                 >
-                  Reset
+                  {t("common.reset")}
                 </button>
-                <span className="muted mono">Ctrl/⌘ + 滚轮缩放</span>
+                <span className="muted mono">{t("im.zoom_hint")}</span>
               </div>
 
               <div
@@ -2262,19 +2266,19 @@ const renderContent = useCallback((content: string, contentType: string) => {
           />
           <button
             className="chat-attach"
-            title="上传文件"
+            title={t("im.upload_file")}
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
             style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? "wait" : "pointer" }}
           >
-            {uploading ? "..." : "+"}
+            {uploading ? t("im.uploading") : "+"}
           </button>
           <input
             className="chat-input-field"
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Type a message… (Ctrl/Cmd+Enter to send)"
+            placeholder={t("im.input_placeholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
@@ -2296,7 +2300,7 @@ const renderContent = useCallback((content: string, contentType: string) => {
               }).catch(() => {});
             }}
           >
-            <option value="auto">Auto (router picks)</option>
+            <option value="auto">{t("im.model_auto")}</option>
             {availableModels.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.displayName} ({m.platform})
@@ -2304,159 +2308,25 @@ const renderContent = useCallback((content: string, contentType: string) => {
             ))}
           </select>
           <button className="send-btn" onClick={() => void onSend()} disabled={!draft.trim() || status === "send"}>
-            SEND
+            {t("im.send")}
           </button>
         </div>
         </main>
       }
       right={
-        <div className="right-section">
-          {/* EVENTS PANEL */}
-          <div className={cx("events-panel", vizEventsCollapsed && "collapsed")}>
-            <div className="events-header" onClick={() => setVizEventsCollapsed((v) => !v)}>
-              <span className="events-title"><span className="ev-chevron">▶</span> 事件流</span>
-              <span className="events-count">{vizEvents.length} ▸</span>
-            </div>
-            <div className="events-list" style={{ display: vizEventsCollapsed ? "none" : undefined }}>
-              {vizEvents.length === 0 ? (
-                <div className="event-item"><span className="event-name muted">暂无事件</span></div>
-              ) : (
-                vizEvents.slice(-50).reverse().map((evt) => (
-                  <div key={evt.id} className="event-item">
-                    <span className={cx("event-dot", evt.kind)} />
-                    <span className="event-name">{evt.label}</span>
-                    <div className="event-time">{new Date(evt.at).toLocaleTimeString([], { timeZone: "Asia/Shanghai" })}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* DETAILS PANEL */}
-          <aside className="details-panel">
-            <div className="details-header">
-              <div className="details-title">Agent Details</div>
-              <div className="details-sub">Streaming from: {streamAgentId ?? "-"}</div>
-            </div>
-            <div className="details-scroll">
-              {/* LLM History */}
-              <div className="panel-section">
-                <div className="panel-header">
-                  <span className="panel-title"><span className="hud-dot" /> LLM history</span>
-                  {contentStream || reasoningStream || toolStream ? (
-                    <span className="panel-badge streaming">● streaming</span>
-                  ) : null}
-                </div>
-                {Array.isArray(llmHistoryParsed) ? (
-                  <IMHistoryList
-                    entries={llmHistoryParsed}
-                    historyRole={historyRole}
-                    historyAccent={historyAccent}
-                    summarizeHistoryEntry={summarizeHistoryEntry}
-                  />
-                ) : (
-                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 10, color: "var(--text-secondary)" }}>
-                    {llmHistoryFormatted || "—"}
-                  </pre>
-                )}
-              </div>
-              {/* Realtime content */}
-              <div className="panel-section">
-                <div className="panel-header">
-                  <span className="panel-title"><span className="hud-dot" /> Realtime content</span>
-                  {contentStream ? <span className="panel-badge streaming">●</span> : null}
-                </div>
-                <div className="rt-block">
-                  {contentStream || <span className="muted">—</span>}
-                </div>
-              </div>
-              {/* Realtime reasoning */}
-              <div className="panel-section">
-                <div className="panel-header">
-                  <span className="panel-title"><span className="hud-dot" /> Realtime reasoning</span>
-                  {reasoningStream ? <span className="panel-badge streaming">●</span> : null}
-                </div>
-                <div className="reason-block">
-                  {reasoningStream || <span className="muted">—</span>}
-                </div>
-              </div>
-              {/* Realtime tools */}
-              <div className="panel-section">
-                <div className="panel-header">
-                  <span className="panel-title"><span className="hud-dot" /> Realtime tools</span>
-                  {toolStream ? <span className="panel-badge streaming">●</span> : null}
-                </div>
-                <div className="tool-block">
-                  {toolStream || <span className="muted">—</span>}
-                </div>
-              </div>
-              {agentError ? (
-                <div className="panel-section">
-                  <div className="rt-block" style={{ color: "var(--red)", border: "1px solid rgba(255,59,59,0.2)" }}>
-                    {agentError}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            {/* Stats bar */}
-            <div className="stats-bar">
-              <div className="stat-item">
-                <div className="stat-label">Tokens</div>
-                <div className="stat-value cyan">
-                  {activeGroup?.contextTokens
-                    ? `${(activeGroup.contextTokens / 1000).toFixed(1)}k`
-                    : "-"}
-                </div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Latency</div>
-                <div className="stat-value green">-</div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Tools</div>
-                <div className="stat-value magenta">
-                  {toolStream ? "●" : "-"}
-                </div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Agents</div>
-                <div className="stat-value yellow">{agents.length}</div>
-              </div>
-            </div>
-            {/* Agent status bar */}
-            <div className="agent-status-bar">
-              <div className="agent-status-item">
-                <span className="as-dot green" />
-                <span className="as-label">Online</span>
-                <span className="as-count">
-                  {agents.filter((a) => a.role !== "human" && (agentStatusById[a.id] ?? "IDLE") === "IDLE").length}
-                </span>
-              </div>
-              <div className="agent-status-item">
-                <span className="as-dot magenta" />
-                <span className="as-label">Busy</span>
-                <span className="as-count">
-                  {agents.filter((a) => {
-                    const s = agentStatusById[a.id];
-                    return s === "BUSY" || s === "WAKING";
-                  }).length}
-                </span>
-              </div>
-              <div className="agent-status-item">
-                <span className="as-dot idle" />
-                <span className="as-label">Idle</span>
-                <span className="as-count">
-                  {agents.filter((a) => a.role !== "human" && !agentStatusById[a.id]).length}
-                </span>
-              </div>
-              <div className="agent-status-item">
-                <span className="as-dot red" />
-                <span className="as-label">Error</span>
-                <span className="as-count">0</span>
-              </div>
-            </div>
-          </aside>
-        </div>
+        <TaskMonitor
+          agents={agents}
+          agentStatusById={agentStatusById}
+          groups={groups}
+          activeGroupId={activeGroupId}
+          vizEvents={vizEvents}
+          streamAgentId={streamAgentId}
+          contentStream={contentStream}
+          toolStream={toolStream}
+          agentError={agentError}
+          llmHistory={llmHistory}
+          locale={locale}
+        />
       }
     />
   );

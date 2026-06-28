@@ -1,5 +1,6 @@
 ﻿import "./globals.css";
 import { RegisterSW } from "./register-sw";
+import { I18nProvider } from "@/lib/i18n/context";
 
 export const metadata = {
   title: "SWARM IDE",
@@ -19,7 +20,7 @@ export function generateViewport() {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -34,8 +35,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-title" content="SWARM" />
       </head>
       <body>
-        {children}
-        <RegisterSW />
+        <I18nProvider>
+          {children}
+          <RegisterSW />
+        </I18nProvider>
       </body>
     </html>
   );

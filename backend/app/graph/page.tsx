@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n/context";
+import { Card } from "@/components/ui";
 
 type UUID = string;
 
@@ -34,6 +36,7 @@ async function api<T>(path: string): Promise<T> {
 }
 
 export default function GraphPage() {
+  const { t } = useI18n();
   const [session] = useState<WorkspaceDefaults | null>(() => loadSession());
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
@@ -68,10 +71,10 @@ export default function GraphPage() {
   if (!session) {
     return (
       <div style={{ padding: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Agent Graph</h1>
-        <p className="muted">No session yet. Open IM first.</p>
+        <h1 style={{ margin: 0, fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>{t("graph.title")}</h1>
+        <p className="muted">{t("graph.no_session")}</p>
         <Link className="btn btn-primary" href="/im">
-          Open IM
+          {t("graph.open_im")}
         </Link>
       </div>
     );
@@ -81,38 +84,35 @@ export default function GraphPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 20 }}>Agent Graph</h1>
+          <h1 style={{ margin: 0, fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>{t("graph.title")}</h1>
           <p className="muted" style={{ marginTop: 8 }}>
-            Aggregated message flow (sender → all other group members).
+            {t("graph.subtitle")}
           </p>
         </div>
         <Link className="btn" href="/im">
-          Back to IM
+          {t("graph.back_im")}
         </Link>
       </div>
 
       {error ? <div className="toast">{error}</div> : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 320px))", gap: 12, marginTop: 16 }}>
-        <div className="card">
-          <div className="card-title">Edges</div>
-          <div className="card-body" style={{ fontSize: 28, fontWeight: 700 }}>
+        <Card title={t("graph.edges")} padding={12}>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>
             {stats.totalEdges}
           </div>
-        </div>
-        <div className="card">
-          <div className="card-title">Messages (aggregated)</div>
-          <div className="card-body" style={{ fontSize: 28, fontWeight: 700 }}>
+        </Card>
+        <Card title={t("graph.messages")} padding={12}>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>
             {stats.totalMessages}
           </div>
-        </div>
+        </Card>
       </div>
 
-      <div className="card" style={{ marginTop: 16, maxWidth: 980 }}>
-        <div className="card-title">Recent Flows</div>
-        <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <Card title={t("graph.recent_flows")} padding={16} style={{ marginTop: 16, maxWidth: 980 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {edges.length === 0 ? (
-            <div className="muted">No edges yet. Send some messages in IM.</div>
+            <div className="muted">{t("graph.no_edges")}</div>
           ) : (
             edges.slice(0, 80).map((e) => {
               const fromLabel = roleById.get(e.from) ?? e.from.slice(0, 8);
@@ -128,14 +128,14 @@ export default function GraphPage() {
                     </div>
                   </div>
                   <div className="muted mono" style={{ fontSize: 12, marginTop: 6 }}>
-                    last: {new Date(e.lastSendTime).toLocaleString()} • {e.from.slice(0, 8)} → {e.to.slice(0, 8)}
+                    {t("graph.last")}{new Date(e.lastSendTime).toLocaleString()} • {e.from.slice(0, 8)} → {e.to.slice(0, 8)}
                   </div>
                 </div>
               );
             })
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

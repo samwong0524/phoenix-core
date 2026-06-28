@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n/context";
+import { EmptyState, Loading, Card } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,15 +43,15 @@ type TabKey = "installed" | "stats" | "marketplace";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function timeAgo(date: string): string {
+function timeAgo(date: string, t: (key: string, params?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins} 分钟前`;
+  if (mins < 1) return t("skills.just_now");
+  if (mins < 60) return t("skills.minutes_ago", { n: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} 小时前`;
+  if (hrs < 24) return t("skills.hours_ago", { n: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days} 天前`;
+  return t("skills.days_ago", { n: days });
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,7 @@ function timeAgo(date: string): string {
 // ---------------------------------------------------------------------------
 
 export default function SkillsPage() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabKey>("installed");
   const [data, setData] = useState<SkillStatsData | null>(null);
   const [skills, setSkills] = useState<SkillEntry[]>([]);
@@ -84,8 +87,8 @@ export default function SkillsPage() {
   // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   const flash = useCallback((type: "ok" | "err", msg: string) => {
@@ -121,17 +124,17 @@ export default function SkillsPage() {
       });
       const json = await res.json();
       if (json.ok) {
-        flash("ok", `Skill "${name}" 安装成功`);
+        flash("ok", t("skills.install_ok", { name }));
         // Optimistic: append to local list without full reload
         setSkills(prev => {
           if (prev.some(s => s.name === name)) return prev;
           return [...prev, { name, description: searchResults.find(r => r.name === name)?.description ?? "", autoLoad: false, roles: [] }];
         });
       } else {
-        flash("err", `安装失败: ${json.error}`);
+        flash("err", t("skills.install_fail", { error: json.error }));
       }
     } catch {
-      flash("err", "安装失败");
+      flash("err", t("skills.install_fail_generic"));
     } finally {
       setInstalling(null);
     }
@@ -146,24 +149,24 @@ export default function SkillsPage() {
       });
       const json = await res.json();
       if (json.ok) {
-        flash("ok", `Skill "${name}" 已删除`);
+        flash("ok", t("skills.uninstall_ok", { name }));
         setSkills(prev => prev.filter(s => s.name !== name));
       } else {
-        flash("err", `删除失败: ${json.error}`);
+        flash("err", t("skills.uninstall_fail", { error: json.error }));
       }
     } catch {
-      flash("err", "删除失败");
+      flash("err", t("skills.uninstall_fail_generic"));
     }
   };
 
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorFallback message={error} />;
-  if (!data) return <div style={{ padding: "3rem", color: "var(--text-secondary)" }}>无数据</div>;
+  if (!data) return <div style={{ padding: "3rem", color: "var(--text-secondary)" }}>{t("skills.no_data")}</div>;
 
   const tabs: { key: TabKey; label: string; icon: string; badge?: string }[] = [
-    { key: "installed", label: "已安装", icon: "󰏓", badge: String(skills.length) },
-    { key: "stats", label: "使用统计", icon: "󰊯" },
-    { key: "marketplace", label: "技能市场", icon: "󰵮" },
+    { key: "installed", label: t("skills.tab_installed"), icon: "󰏓", badge: String(skills.length) },
+    { key: "stats", label: t("skills.tab_stats"), icon: "󰊯" },
+    { key: "marketplace", label: t("skills.tab_market"), icon: "󰵮" },
   ];
 
   return (
@@ -172,7 +175,7 @@ export default function SkillsPage() {
       {toast && (
         <div style={{
           position: "fixed", top: 20, right: 20, zIndex: 50,
-          padding: "10px 16px", borderRadius: 8,
+          padding: "10px 16px", borderRadius: "var(--radius-md)",
           background: toast.type === "ok" ? "#065f46" : "#7f1d1d",
           border: `1px solid ${toast.type === "ok" ? "#059669" : "#dc2626"}`,
           color: toast.type === "ok" ? "#6ee7b7" : "#fca5a5",
@@ -191,7 +194,7 @@ export default function SkillsPage() {
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "start", gap: 16 }}>
           <Link href="/" style={{
             marginTop: 4,
-            padding: "6px 12px", borderRadius: 6,
+            padding: "6px 12px", borderRadius: "var(--radius-sm)",
             background: "rgba(255,255,255,0.05)", color: "var(--text-dim)",
             textDecoration: "none", fontSize: 12,
             border: "1px solid rgba(255,255,255,0.08)",
@@ -199,13 +202,13 @@ export default function SkillsPage() {
           }}
           onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-dim)"; }}
-          >← 返回首页</Link>
+          >{t("common.back_home")}</Link>
           <div>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>
-              技能管理
+            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "var(--font-display)", color: "var(--cyan)" }}>
+              {t("skills.title")}
             </h1>
             <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)" }}>
-              管理 Agent 技能库 · 安装远程技能 · 查看使用统计
+              {t("skills.subtitle")}
             </p>
           </div>
         </div>
@@ -247,10 +250,10 @@ export default function SkillsPage() {
       {/* Content */}
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 32px" }}>
         {activeTab === "installed" && (
-          <InstalledTab skills={skills} onDelete={handleDelete} />
+          <InstalledTab skills={skills} onDelete={handleDelete} t={t} />
         )}
         {activeTab === "stats" && (
-          <StatsTab data={data} />
+          <StatsTab data={data} t={t} />
         )}
         {activeTab === "marketplace" && (
           <MarketplaceTab
@@ -261,6 +264,7 @@ export default function SkillsPage() {
             results={searchResults}
             installing={installing}
             onInstall={handleInstall}
+            t={t}
           />
         )}
       </main>
@@ -272,14 +276,10 @@ export default function SkillsPage() {
 // Installed Tab
 // ---------------------------------------------------------------------------
 
-function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n: string) => void }) {
+function InstalledTab({ skills, onDelete, t }: { skills: SkillEntry[]; onDelete: (n: string) => void; t: (key: string, params?: Record<string, unknown>) => string }) {
   if (skills.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: "4rem 0", color: "#475569" }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>󰏓</div>
-        <div style={{ fontSize: 14 }}>还没有安装任何技能</div>
-        <div style={{ fontSize: 12, marginTop: 4, color: "var(--border)" }}>切换到"技能市场"搜索并安装</div>
-      </div>
+      <EmptyState icon="󰏓" message={t("skills.no_skills")} hint={t("skills.go_market")} />
     );
   }
 
@@ -287,7 +287,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header row with count and scroll hint */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>共 {skills.length} 个技能</span>
+        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t("skills.total", { count: skills.length })}</span>
       </div>
       {/* Scrollable grid */}
       <div style={{
@@ -299,23 +299,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
         paddingRight: 8,
       }}>
       {skills.map(s => (
-        <div key={s.name} style={{
-          padding: 16,
-          background: "rgba(255,255,255,0.02)",
-          borderRadius: 10,
-          border: "1px solid rgba(255,255,255,0.06)",
-          transition: "border-color 0.2s, background 0.2s",
-          cursor: "default",
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(34,197,94,0.3)";
-          (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.04)";
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.06)";
-          (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.02)";
-        }}
-        >
+        <Card key={s.name} hoverable hoverBorderColor="rgba(34,197,94,0.3)" padding={16} borderRadius="var(--radius-md)" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{s.name}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -324,11 +308,11 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
                   fontSize: 10, padding: "2px 6px", borderRadius: 4,
                   background: "rgba(34,197,94,0.1)", color: "#4ade80",
                   border: "1px solid rgba(34,197,94,0.2)",
-                }}>AUTO</span>
+                }}>{t("skills.auto")}</span>
               )}
               <button
                 onClick={() => onDelete(s.name)}
-                title="删除"
+                title={t("common.delete")}
                 style={{
                   padding: "2px 6px", borderRadius: 4,
                   background: "rgba(239,68,68,0.08)", color: "#f87171",
@@ -338,7 +322,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.08)"; }}
-              >删除</button>
+              >{t("common.delete")}</button>
             </div>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 8 }}>
@@ -355,7 +339,7 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
               ))}
             </div>
           )}
-        </div>
+        </Card>
       ))}
     </div>
     </div>
@@ -366,20 +350,20 @@ function InstalledTab({ skills, onDelete }: { skills: SkillEntry[]; onDelete: (n
 // Stats Tab
 // ---------------------------------------------------------------------------
 
-function StatsTab({ data }: { data: SkillStatsData }) {
+function StatsTab({ data, t }: { data: SkillStatsData; t: (key: string, params?: Record<string, unknown>) => string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-        <StatCard label="累计调用" value={data.totalInvocations.allTime} accent="var(--cyan)" />
-        <StatCard label="近 7 天" value={data.totalInvocations.last7Days} accent="var(--green)" />
-        <StatCard label="近 24 小时" value={data.totalInvocations.last24Hours} accent="#a855f7" />
+        <StatCard label={t("skills.total_calls")} value={data.totalInvocations.allTime} accent="var(--cyan)" />
+        <StatCard label={t("skills.last_7d")} value={data.totalInvocations.last7Days} accent="var(--green)" />
+        <StatCard label={t("skills.last_24h")} value={data.totalInvocations.last24Hours} accent="#a855f7" />
       </div>
 
       {/* Top skills */}
       {data.topSkills.length > 0 && (
         <div>
-          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#cbd5e1" }}>热门技能</h3>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#cbd5e1" }}>{t("skills.hot_skills")}</h3>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {data.topSkills.map(s => (
               <span key={s.skillName} style={{
@@ -397,16 +381,16 @@ function StatsTab({ data }: { data: SkillStatsData }) {
 
       {/* Per-skill table */}
       {data.perSkill.length === 0 ? (
-        <div style={{ color: "#475569", fontSize: 13 }}>暂无使用记录</div>
+        <div style={{ color: "#475569", fontSize: 13 }}>{t("skills.no_usage")}</div>
       ) : (
         <div style={{
-          borderRadius: 10, overflow: "hidden",
+          borderRadius: "var(--radius-md)", overflow: "hidden",
           border: "1px solid rgba(255,255,255,0.06)",
         }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.03)" }}>
-                {["技能", "调用次数", "成功率", "Agent 数", "最后使用"].map(h => (
+                {[t("skills.col_skill"), t("skills.col_calls"), t("skills.col_success"), t("skills.col_agents"), t("skills.col_last")].map(h => (
                   <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
                 ))}
               </tr>
@@ -428,7 +412,7 @@ function StatsTab({ data }: { data: SkillStatsData }) {
                   </td>
                   <td style={{ padding: "10px 14px", color: "var(--text-dim)" }}>{s.agentCount}</td>
                   <td style={{ padding: "10px 14px", color: "var(--text-secondary)" }}>
-                    {s.lastUsed ? timeAgo(s.lastUsed) : "—"}
+                    {s.lastUsed ? timeAgo(s.lastUsed, t) : "—"}
                   </td>
                 </tr>
               ))}
@@ -445,12 +429,13 @@ function StatsTab({ data }: { data: SkillStatsData }) {
 // ---------------------------------------------------------------------------
 
 function MarketplaceTab({
-  query, setQuery, onSearch, searching, results, installing, onInstall,
+  query, setQuery, onSearch, searching, results, installing, onInstall, t,
 }: {
   query: string; setQuery: (v: string) => void;
   onSearch: () => void; searching: boolean;
   results: RemoteSkill[]; installing: string | null;
   onInstall: (name: string, url: string) => void;
+  t: (key: string, params?: Record<string, unknown>) => string;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -461,12 +446,12 @@ function MarketplaceTab({
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === "Enter" && onSearch()}
-          placeholder="搜索技能（如 web scraping, coding, data analysis）"
+          placeholder={t("skills.search_placeholder")}
           style={{
             flex: 1, padding: "10px 14px",
             background: "rgba(255,255,255,0.04)",
             border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 8, color: "var(--text-primary)", fontSize: 13,
+            borderRadius: "var(--radius-md)", color: "var(--text-primary)", fontSize: 13,
             outline: "none",
             transition: "border-color 0.2s",
           }}
@@ -480,7 +465,7 @@ function MarketplaceTab({
             padding: "10px 24px",
             background: "rgba(34,197,94,0.12)",
             border: "1px solid rgba(34,197,94,0.3)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-md)",
             color: "#4ade80",
             cursor: searching || query.trim().length < 2 ? "not-allowed" : "pointer",
             fontWeight: 600, fontSize: 13,
@@ -488,33 +473,21 @@ function MarketplaceTab({
             transition: "background 0.15s",
           }}
         >
-          {searching ? "搜索中..." : "搜索"}
+          {searching ? t("skills.searching") : t("skills.search")}
         </button>
       </div>
 
       {/* Results */}
       {results.length === 0 && !searching && (
-        <div style={{ textAlign: "center", padding: "3rem 0", color: "#475569" }}>
-          <div style={{ fontSize: 14 }}>输入关键词搜索远程技能</div>
-          <div style={{ fontSize: 12, marginTop: 4, color: "var(--border)" }}>支持 GitHub、LobeHub、ClawHub 等源</div>
-        </div>
+        <EmptyState icon="" message={t("skills.search_hint")} hint={t("skills.search_sources")} />
       )}
       {searching && (
-        <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-secondary)" }}>搜索中...</div>
+        <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-secondary)" }}>{t("skills.searching")}</div>
       )}
       {results.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
           {results.map(r => (
-            <div key={r.name + r.source} style={{
-              padding: 16,
-              background: "rgba(255,255,255,0.02)",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.06)",
-              transition: "border-color 0.2s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(168,85,247,0.3)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
-            >
+            <Card key={r.name + r.source} hoverable padding={16} borderRadius="var(--radius-md)" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#c084fc", flex: 1 }}>{r.name}</div>
                 <span style={{
@@ -531,13 +504,13 @@ function MarketplaceTab({
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ fontSize: 12, color: "#60a5fa", textDecoration: "none" }}
-                >查看源文件</a>
+                >{t("skills.view_source")}</a>
                 <button
                   onClick={() => onInstall(r.name, r.source_url)}
                   disabled={installing === r.name}
                   style={{
                     marginLeft: "auto",
-                    padding: "4px 12px", borderRadius: 6,
+                    padding: "4px 12px", borderRadius: "var(--radius-sm)",
                     background: installing === r.name ? "rgba(34,197,94,0.05)" : "rgba(34,197,94,0.1)",
                     border: "1px solid rgba(34,197,94,0.25)",
                     color: installing === r.name ? "var(--text-secondary)" : "#4ade80",
@@ -546,10 +519,10 @@ function MarketplaceTab({
                     transition: "background 0.15s",
                   }}
                 >
-                  {installing === r.name ? "安装中..." : "安装"}
+                  {installing === r.name ? t("skills.installing") : t("skills.install")}
                 </button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -565,7 +538,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   return (
     <div style={{
       padding: 16,
-      borderRadius: 10,
+      borderRadius: "var(--radius-md)",
       background: "rgba(255,255,255,0.02)",
       border: "1px solid rgba(255,255,255,0.06)",
       borderLeft: `3px solid ${accent}`,
@@ -582,19 +555,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 
 function LoadingSkeleton() {
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-void)", padding: "2rem 32px", display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ height: 28, width: 120, background: "rgba(255,255,255,0.06)", borderRadius: 6 }} />
-      <div style={{ display: "flex", gap: 8 }}>
-        {[1,2,3].map(i => (
-          <div key={i} style={{ height: 36, width: 100, background: "rgba(255,255,255,0.04)", borderRadius: 6 }} />
-        ))}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-        {[1,2,3].map(i => (
-          <div key={i} style={{ height: 80, background: "rgba(255,255,255,0.03)", borderRadius: 10 }} />
-        ))}
-      </div>
-    </div>
+    <Loading variant="skeleton" lines={5} fullPage />
   );
 }
 

@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useI18n } from "@/lib/i18n/context";
+import { Button, Card, Loading } from "@/components/ui";
 
 // ─── Types ────────────────────────────────────────────
 interface HourlyMetric {
@@ -59,7 +61,7 @@ function StatCard({ label, value, unit, trend, status }: {
 }) {
   const dotColor = status === "error" ? "var(--red)" : status === "warn" ? "var(--yellow)" : "var(--green)";
   return (
-    <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+    <Card padding={16} borderRadius="var(--radius-lg)" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
       <div className="flex items-center gap-2 mb-1">
         <span className="w-2 h-2 rounded-full" style={{ background: dotColor }} />
         <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-dim)' }}>{label}</span>
@@ -69,7 +71,7 @@ function StatCard({ label, value, unit, trend, status }: {
         {unit && <span className="text-sm" style={{ color: 'var(--text-dim)' }}>{unit}</span>}
       </div>
       {trend && <span className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>{trend}</span>}
-    </div>
+    </Card>
   );
 }
 
@@ -77,7 +79,8 @@ function StatCard({ label, value, unit, trend, status }: {
 function BarChart({ data, labelKey, valueKey, height = 120 }: {
   data: any[]; labelKey: string; valueKey: string; height?: number;
 }) {
-  if (!data.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>No data</div>;
+  const { t } = useI18n();
+  if (!data.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>{t("observability.no_data")}</div>;
   const maxVal = Math.max(...data.map((d) => Number(d[valueKey]) || 0), 1);
   return (
     <div className="flex items-end gap-1 h-[120px] px-2" style={{ height }}>
@@ -99,7 +102,8 @@ function BarChart({ data, labelKey, valueKey, height = 120 }: {
 
 // ─── Alert List ───────────────────────────────────────
 function AlertList({ alerts }: { alerts: AlertRecord[] }) {
-  if (!alerts.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>No recent alerts</div>;
+  const { t } = useI18n();
+  if (!alerts.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>{t("observability.no_alerts")}</div>;
   const severityIcon: Record<string, string> = { critical: "!!!", warning: "!!", info: "i" };
   const severityColor: Record<string, string> = { critical: "var(--red)", warning: "var(--yellow)", info: "var(--cyan)" };
   return (
@@ -124,15 +128,16 @@ function AlertList({ alerts }: { alerts: AlertRecord[] }) {
 
 // ─── Cost Table ───────────────────────────────────────
 function CostTable({ data }: { data: DailyCost[] }) {
-  if (!data.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>No cost data</div>;
+  const { t } = useI18n();
+  if (!data.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>{t("observability.no_cost")}</div>;
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="text-xs uppercase border-b" style={{ color: 'var(--text-dim)', borderColor: 'var(--border)' }}>
-          <th className="text-left py-2">Date</th>
-          <th className="text-right py-2">Requests</th>
-          <th className="text-right py-2">Tokens</th>
-          <th className="text-right py-2">Cost</th>
+          <th className="text-left py-2">{t("observability.col_date")}</th>
+          <th className="text-right py-2">{t("observability.col_requests")}</th>
+          <th className="text-right py-2">{t("observability.col_tokens")}</th>
+          <th className="text-right py-2">{t("observability.col_cost")}</th>
         </tr>
       </thead>
       <tbody>
@@ -153,6 +158,7 @@ function CostTable({ data }: { data: DailyCost[] }) {
 
 // ─── Main Dashboard ───────────────────────────────────
 export default function ObservabilityDashboard() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const hours = Number(searchParams.get("hours") || 24);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -182,17 +188,17 @@ export default function ObservabilityDashboard() {
   }, [fetchData]);
 
   if (loading && !data) {
-    return <div className="p-8 text-center" style={{ color: 'var(--text-dim)' }}>Loading observability data...</div>;
+    return <Loading />;
   }
 
   if (error && !data) {
     return (
       <div className="p-8 text-center">
-        <div className="mb-2" style={{ color: 'var(--red)' }}>Failed to load dashboard</div>
+        <div className="mb-2" style={{ color: 'var(--red)' }}>{t("observability.load_fail")}</div>
         <div className="text-sm" style={{ color: 'var(--text-dim)' }}>{error}</div>
-        <button onClick={fetchData} className="mt-4 px-4 py-2 rounded text-sm" style={{ background: 'var(--bg-panel)' }}>
-          Retry
-        </button>
+        <Button variant="secondary" onClick={fetchData}>
+          {t("common.retry")}
+        </Button>
       </div>
     );
   }
@@ -205,13 +211,13 @@ export default function ObservabilityDashboard() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Navigation */}
       <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'none', marginBottom: 16 }}>
-        ← 返回首页
+        {t("common.back_home")}
       </Link>
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-          Observability Dashboard
+        <h1 className="font-semibold" style={{ fontSize: 16, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>
+          {t("observability.title")}
         </h1>
         <div className="flex items-center gap-3">
           <select
@@ -220,13 +226,13 @@ export default function ObservabilityDashboard() {
             className="text-sm border rounded px-2 py-1"
             style={{ borderColor: 'var(--border)', background: 'var(--bg-panel)', color: 'var(--text-primary)' }}
           >
-            <option value={1}>Last 1h</option>
-            <option value={6}>Last 6h</option>
-            <option value={24}>Last 24h</option>
-            <option value={72}>Last 3d</option>
+            <option value={1}>{t("observability.range_1h")}</option>
+            <option value={6}>{t("observability.range_6h")}</option>
+            <option value={24}>{t("observability.range_24h")}</option>
+            <option value={72}>{t("observability.range_3d")}</option>
           </select>
           <button onClick={fetchData} className="text-sm" style={{ color: 'var(--text-dim)' }}>
-            Refresh
+            {t("observability.refresh")}
           </button>
         </div>
       </div>
@@ -239,29 +245,29 @@ export default function ObservabilityDashboard() {
           status={successStatus}
         />
         <StatCard
-          label="Requests"
+          label={t("observability.requests")}
           value={s?.totalRequests.toLocaleString() || "0"}
           trend={`in ${hours}h`}
         />
         <StatCard
-          label="Success Rate"
+          label={t("observability.success_rate")}
           value={s ? `${(s.successRate * 100).toFixed(1)}` : "0"}
           unit="%"
           status={successStatus}
         />
         <StatCard
-          label="Avg Latency"
+          label={t("observability.avg_latency")}
           value={s ? `${(s.avgLatency / 1000).toFixed(1)}` : "0"}
           unit="s"
         />
         <StatCard
-          label="P95 Latency"
+          label={t("observability.p95_latency")}
           value={s ? `${(s.p95Latency / 1000).toFixed(1)}` : "0"}
           unit="s"
           status={latencyStatus}
         />
         <StatCard
-          label="Cost"
+          label={t("observability.cost")}
           value={s ? `$${s.totalCost.toFixed(2)}` : "$0"}
           trend={`${((s?.totalTokens || 0) / 1000).toFixed(0)}k tokens`}
         />
@@ -270,47 +276,46 @@ export default function ObservabilityDashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Request Volume */}
-        <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Request Volume (hourly)</h3>
+        <Card padding={16} borderRadius="var(--radius-lg)" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>{t("observability.chart_volume")}</h3>
           <BarChart
             data={data?.metrics || []}
             labelKey="hour"
             valueKey="request_count"
           />
-        </div>
+        </Card>
 
         {/* Success vs Error */}
-        <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Success vs Errors (hourly)</h3>
+        <Card padding={16} borderRadius="var(--radius-lg)" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>{t("observability.chart_success")}</h3>
           <div className="flex gap-4 text-xs mb-2" style={{ color: 'var(--text-dim)' }}>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--green)', opacity: 0.7 }} /> Success</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--red)', opacity: 0.7 }} /> Error</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--yellow)', opacity: 0.7 }} /> Timeout</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--green)', opacity: 0.7 }} /> {t("observability.success")}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--red)', opacity: 0.7 }} /> {t("observability.error")}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'var(--yellow)', opacity: 0.7 }} /> {t("observability.timeout")}</span>
           </div>
           <BarChart
             data={data?.metrics || []}
             labelKey="hour"
             valueKey="success_count"
           />
-        </div>
+        </Card>
 
         {/* Cost Trend */}
-        <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Daily Cost (last 7 days)</h3>
+        <Card padding={16} borderRadius="var(--radius-lg)" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>{t("observability.chart_cost")}</h3>
           <CostTable data={data?.dailyCost || []} />
-        </div>
+        </Card>
 
         {/* Recent Alerts */}
-        <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Recent Alerts</h3>
+        <Card padding={16} borderRadius="var(--radius-lg)" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>{t("observability.alerts")}</h3>
           <AlertList alerts={data?.alerts || []} />
-        </div>
+        </Card>
       </div>
 
       {/* Footer */}
       <div className="text-xs text-center" style={{ color: 'var(--text-dim)' }}>
-        Auto-refresh every 30s | Data from Phoenix-Core metrics collector |
-        Schema: observability/db-schema.sql
+        {t("observability.footer")}
       </div>
     </div>
   );

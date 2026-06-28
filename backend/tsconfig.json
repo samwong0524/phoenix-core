@@ -24,6 +24,9 @@
       "@/lib/*": [
         "src/lib/*"
       ],
+      "@/components/*": [
+        "src/components/*"
+      ],
       "@/db": [
         "src/db/index.ts"
       ],

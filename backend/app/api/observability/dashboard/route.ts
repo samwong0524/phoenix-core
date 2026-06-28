@@ -2,12 +2,13 @@
 // Observability Dashboard API — 聚合查询 metrics_hourly, alert_events, cost_daily
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const db = getDb();
   const hours = Number(req.nextUrl.searchParams.get("hours") || 24);
   const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString().split("T")[0];

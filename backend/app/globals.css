@@ -21,16 +21,48 @@
   --green: #00ff88;
   --green-dim: rgba(0, 255, 136, 0.3);
   --yellow: #ffd700;
+  --yellow-dim: rgba(255, 215, 0, 0.3);
   --red: #ff3b3b;
+  --red-dim: rgba(255, 59, 59, 0.3);
 
-  /* PHOENIX CORE — Text */
+  /* PHOENIX CORE — Text (contrast-fixed for WCAG AA ≥4.5:1 on --bg-void) */
   --text-primary: rgba(220, 235, 255, 0.95);
-  --text-secondary: rgba(160, 185, 220, 0.7);
-  --text-dim: rgba(120, 150, 190, 0.5);
+  --text-secondary: rgba(180, 200, 230, 0.8);
+  --text-dim: rgba(140, 170, 210, 0.65);
+
+  /* PHOENIX CORE — Semantic colors */
+  --color-success: var(--green);
+  --color-warning: var(--yellow);
+  --color-error: var(--red);
+  --color-info: var(--cyan);
 
   /* PHOENIX CORE — Borders */
   --border: rgba(0, 240, 255, 0.12);
   --border-bright: rgba(0, 240, 255, 0.3);
+
+  /* PHOENIX CORE — Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* PHOENIX CORE — Border radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* PHOENIX CORE — Background layers (intermediate) */
+  --bg-chat: rgba(10, 17, 40, 0.85);
+  --bg-viz: rgba(8, 14, 32, 0.7);
+
+  /* PHOENIX CORE — Shadow glow system */
+  --shadow-glow-sm: 0 0 8px var(--cyan-glow);
+  --shadow-glow-md: 0 0 20px var(--cyan-glow);
+  --shadow-glow-lg: 0 0 40px var(--cyan-glow), 0 0 20px var(--cyan-glow);
 
   /* PHOENIX CORE — Misc */
   --bg-hover: rgba(0, 240, 255, 0.05);
@@ -41,12 +73,6 @@
   --font-mono: "JetBrains Mono", "ui-monospace", "SFMono-Regular", monospace;
 
   /* Keep HSL variables for Tailwind compat */
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --border-hsl: 217.2 32.6% 17.5%;
-}
-
-.dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
   --border-hsl: 217.2 32.6% 17.5%;
@@ -235,8 +261,7 @@ textarea {
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  font-family: var(--font-mono);
 }
 
 .btn {
@@ -244,7 +269,7 @@ textarea {
   border: 1px solid var(--border);
   color: var(--text-primary);
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: var(--font-body);
 }
@@ -273,7 +298,7 @@ textarea {
 .input {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-void);
   border: 1px solid var(--border);
   color: var(--text-primary);
@@ -352,6 +377,12 @@ textarea {
   touch-action: none;
   user-select: none;
   overflow: visible;
+  cursor: pointer;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+.viz-node:hover {
+  filter: drop-shadow(0 0 18px var(--cyan-glow)) brightness(1.15);
+  transform: scale(1.05);
 }
 
 .mid-resizer:hover {
@@ -365,7 +396,7 @@ textarea {
   min-height: 0;
   position: relative;
   border-top: 1px solid var(--border);
-  background: rgba(8, 14, 32, 0.7);
+  background: var(--bg-viz);
 }
 
 .viz-canvas {
@@ -396,7 +427,7 @@ textarea {
   max-width: 320px;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   padding: 12px;
   font-size: 12px;
@@ -472,10 +503,6 @@ textarea {
   top: 50%;
   left: -13px;
   transform: translateY(-50%);
-}
-
-.viz-node.active {
-  z-index: 3;
 }
 
 .viz-node.active .viz-reticle::before,
@@ -586,7 +613,7 @@ textarea {
 
 .bubble {
   max-width: 70%;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 10px 12px;
   border: 1px solid var(--border-bright);
   white-space: pre-wrap;
@@ -626,7 +653,7 @@ textarea {
 .card {
   border: 1px solid var(--border);
   background: rgba(15, 25, 55, 0.88);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -666,7 +693,7 @@ textarea {
 .agent-panel {
   border: 1px solid var(--border);
   background: rgba(15, 25, 55, 0.88);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -737,7 +764,7 @@ textarea {
 
 .history-item {
   border: 1px solid var(--accent, var(--border));
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-card);
   overflow: hidden;
   position: relative;
@@ -802,7 +829,7 @@ textarea {
   border: 1px solid var(--red);
   background: rgba(255, 59, 59, 0.1);
   color: var(--text-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 10px 12px;
   margin: 12px 12px 0;
   font-size: 13px;
@@ -849,7 +876,7 @@ textarea {
 }
 .ws-title {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 1.5px;
@@ -857,8 +884,8 @@ textarea {
 }
 .ws-id {
   word-break: break-all;
-  opacity: 0.6;
-  font-size: 9px;
+  opacity: 0.8;
+  font-size: 10px;
   margin-bottom: 3px;
 }
 
@@ -999,7 +1026,7 @@ textarea {
 }
 .status-dot.error {
   background: var(--red);
-  box-shadow: 0 0 8px rgba(255, 59, 59, 0.3);
+  box-shadow: 0 0 8px var(--red-dim);
 }
 @keyframes dotPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -1070,7 +1097,7 @@ textarea {
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid var(--border);
-  background: rgba(10, 17, 40, 0.85);
+  background: var(--bg-chat);
   z-index: 2;
   position: relative;
 }
@@ -1089,7 +1116,7 @@ textarea {
 /* Action buttons */
 .btn-action {
   padding: 5px 12px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-body);
   font-size: 11px;
   font-weight: 500;
@@ -1130,11 +1157,6 @@ textarea {
   display: flex;
   flex-direction: column;
   max-width: 80%;
-}
-.msg-in {
-  opacity: 0;
-  animation: msg-in 0.4s ease-out;
-  animation-fill-mode: both;
 }
 .msg.user {
   align-self: flex-end;
@@ -1189,7 +1211,7 @@ textarea {
 }
 .msg-bubble {
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 12.5px;
   line-height: 1.6;
   position: relative;
@@ -1223,7 +1245,7 @@ textarea {
 .code-block {
   margin: 8px 0 4px;
   padding: 12px 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(5, 10, 20, 0.9);
   border: 1px solid var(--border);
   font-family: var(--font-mono);
@@ -1237,7 +1259,7 @@ textarea {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 240, 255, 0.006) 2px, rgba(0, 240, 255, 0.006) 4px);
   pointer-events: none;
 }
@@ -1246,7 +1268,7 @@ textarea {
 .chat-input-area {
   padding: 10px 18px;
   border-top: 1px solid var(--border);
-  background: rgba(10, 17, 40, 0.85);
+  background: var(--bg-chat);
   z-index: 2;
   display: flex;
   gap: 8px;
@@ -1255,7 +1277,7 @@ textarea {
 .chat-input-field {
   flex: 1;
   padding: 9px 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-primary);
@@ -1273,7 +1295,7 @@ textarea {
 }
 .send-btn {
   padding: 9px 18px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: none;
   background: linear-gradient(135deg, var(--cyan), #0088cc);
   color: var(--bg-void);
@@ -1298,12 +1320,12 @@ textarea {
 .chat-attach {
   width: 34px;
   height: 34px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text-secondary);
-  font-size: 18px;
-  font-weight: 300;
+  font-size: 16px;
+  font-weight: 400;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1319,17 +1341,17 @@ textarea {
 }
 .chat-model {
   padding: 5px 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.25s;
   outline: none;
   flex-shrink: 0;
-  max-width: 150px;
+  max-width: 200px;
 }
 .chat-model:hover,
 .chat-model:focus {
@@ -1341,7 +1363,7 @@ textarea {
 /* ===== TOPOLOGY PANEL ===== */
 .topo-panel {
   border-top: 1px solid var(--border);
-  background: rgba(8, 14, 32, 0.7);
+  background: var(--bg-viz);
   position: relative;
 }
 .topo-toolbar {
@@ -1489,7 +1511,7 @@ textarea {
 }
 .event-dot.message {
   background: var(--yellow);
-  box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+  box-shadow: 0 0 5px var(--yellow-dim);
 }
 .event-dot.llm {
   background: var(--cyan);
@@ -1592,7 +1614,7 @@ textarea {
 .llm-entry {
   padding: 8px 10px;
   margin-bottom: 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.025);
   border-left: 3px solid transparent;
   font-size: 10px;
@@ -1654,7 +1676,7 @@ textarea {
 /* Realtime content blocks */
 .rt-block {
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.02);
   font-size: 10.5px;
   line-height: 1.5;
@@ -1665,7 +1687,7 @@ textarea {
 }
 .reason-block {
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: rgba(168, 85, 247, 0.06);
   border: 1px solid rgba(168, 85, 247, 0.18);
   font-size: 10.5px;
@@ -1677,7 +1699,7 @@ textarea {
 }
 .tool-block {
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.02);
   font-size: 10px;
   line-height: 1.45;
@@ -1775,7 +1797,7 @@ textarea {
 }
 .as-dot.red {
   background: var(--red);
-  box-shadow: 0 0 6px rgba(255, 59, 59, 0.3);
+  box-shadow: 0 0 6px var(--red-dim);
 }
 .as-label {
   font-size: 9px;
@@ -1792,6 +1814,101 @@ textarea {
 
 /* Glitch override for logo uses existing @keyframes glitch */
 
+/* ===== SHARED UI COMPONENTS — Hover/Focus states ===== */
+@keyframes phx-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Button hover/active states */
+.phx-btn:not(:disabled):hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 16px var(--cyan-glow);
+}
+.phx-btn-primary:not(:disabled):hover {
+  box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(0, 240, 255, 0.08);
+}
+.phx-btn-danger:not(:disabled):hover {
+  box-shadow: 0 0 16px var(--red-dim);
+}
+.phx-btn-success:not(:disabled):hover {
+  box-shadow: 0 0 16px var(--green-dim);
+}
+.phx-btn:not(:disabled):active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+.phx-btn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--cyan-glow);
+}
+
+/* Input focus states */
+.phx-input:focus {
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 0 2px var(--cyan-glow);
+}
+.phx-input:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -1px;
+  border-color: var(--cyan);
+}
+
+/* Back link hover */
+.phx-back-link:hover {
+  color: var(--cyan) !important;
+}
+
+/* ===== MODELS PAGE — Interactive states ===== */
+.models-btn {
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.models-btn:hover {
+  border-color: var(--cyan-dim);
+  color: var(--cyan);
+  box-shadow: 0 0 18px var(--cyan-glow);
+}
+.models-input:focus {
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 0 2px var(--cyan-glow);
+}
+.models-back-link:hover {
+  color: var(--cyan);
+}
+.models-eye-btn:hover {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+}
+
+/* ===== GRAPH PAGE — Interactive states ===== */
+.graph-link:hover {
+  color: var(--cyan);
+}
+
+/* ===== PIPELINE PAGE — Interactive states ===== */
+.pipeline-back-link {
+  transition: all 0.2s ease;
+}
+.pipeline-back-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--cyan);
+}
+.pipeline-stage-card {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.pipeline-stage-card:hover {
+  box-shadow: 0 0 12px var(--cyan-glow);
+}
+.pipeline-approve-btn:hover {
+  opacity: 0.85;
+  box-shadow: 0 0 12px var(--green-dim);
+}
+.pipeline-reject-btn:hover {
+  opacity: 0.85;
+  box-shadow: 0 0 12px var(--red-dim);
+}
+
 /* ===== ACCESSIBILITY — FOCUS VISIBLE ===== */
 /* Global focus-visible ring for keyboard navigation (WCAG 2.4.7) */
 *:focus-visible {
@@ -1801,7 +1918,8 @@ textarea {
 
 /* Inputs: replace outline:none with visible focus ring */
 .input:focus-visible,
-.chat-input-field:focus-visible {
+.chat-input-field:focus-visible,
+.models-input:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: -1px;
   border-color: var(--cyan);
@@ -1811,7 +1929,9 @@ textarea {
 .btn:focus-visible,
 .btn-primary:focus-visible,
 .btn-action:focus-visible,
-.send-btn:focus-visible {
+.send-btn:focus-visible,
+.models-btn:focus-visible,
+.models-eye-btn:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px var(--cyan-glow);
@@ -1839,13 +1959,13 @@ select:focus-visible,
 
 /* Button press: scale 0.97 on press, 1.02 on release, settle to 1.0 */
 /* Scene compliance: scale Δ3% (< 5%), duration 200ms (< 2s), no infinite */
-.btn, .btn-primary, .btn-action, .send-btn, .chat-attach {
+.btn, .btn-primary, .btn-action, .send-btn, .chat-attach, .models-btn {
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
               box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1),
               border-color 0.2s cubic-bezier(0.2, 0, 0, 1),
               background-color 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
-.btn:active, .btn-primary:active, .btn-action:active, .send-btn:active, .chat-attach:active {
+.btn:active, .btn-primary:active, .btn-action:active, .send-btn:active, .chat-attach:active, .models-btn:active {
   transform: scale(0.97);
   transition-duration: 0.1s;
 }
@@ -1876,7 +1996,7 @@ select:focus-visible,
 /* Aligned with motion-plan.reduced_motion_fallback.strategy */
 @media (prefers-reduced-motion: reduce) {
   .btn:active, .btn-primary:active, .btn-action:active,
-  .send-btn:active, .chat-attach:active {
+  .send-btn:active, .chat-attach:active, .models-btn:active {
     transform: none;
   }
   .card {

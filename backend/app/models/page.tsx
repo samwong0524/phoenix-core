@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, Save, Send, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/context";
+import { Button, Card, Input, Loading, PageHeader } from "@/components/ui";
 
 type Config = {
   llmProvider: string;
@@ -22,6 +23,7 @@ type TestResult = {
 };
 
 export default function ModelsPage() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,17 +89,13 @@ export default function ModelsPage() {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
-        <Loader2 className="animate-spin" size={24} style={{ color: "var(--cyan)" }} />
-      </div>
-    );
+    return <Loading fullPage />;
   }
 
   if (!config) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--red)" }}>
-        Failed to load configuration
+        {t("models.load_fail")}
       </div>
     );
   }
@@ -105,37 +103,22 @@ export default function ModelsPage() {
   return (
     <div style={{ height: "100vh", overflowY: "auto", background: "var(--bg-void)" }}>
       {/* Top bar */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 16,
-        padding: "16px 24px", borderBottom: "1px solid var(--border)",
-        position: "sticky", top: 0, zIndex: 10,
-        background: "var(--bg-void)",
-      }}>
-        <Link href="/" style={{
-          display: "flex", alignItems: "center", gap: 6,
-          color: "var(--cyan)", textDecoration: "none", fontSize: 13, fontWeight: 600,
-        }}>
-          <ArrowLeft size={16} />
-          Back
-        </Link>
-        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
-        <h1 style={{ margin: 0, fontSize: 15, fontFamily: "var(--font-display)", color: "var(--cyan)" }}>
-          LLM Configuration
-        </h1>
-        {saved && (
+      <PageHeader title={t("models.title")} backHref="/" backLabel={`← ${t("common.back_home")}`} sticky separator />
+      {saved && (
+        <div style={{ padding: "0 24px", marginTop: 8 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--green)" }}>
-            <CheckCircle2 size={14} /> Saved
+            <CheckCircle2 size={14} /> {t("models.saved")}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px 80px" }}>
         {/* Provider selection */}
-        <Field label="LLM Provider">
+        <Field label={t("models.provider")}>
           <select
             value={config.llmProvider}
             onChange={(e) => update("llmProvider", e.target.value)}
-            style={inputStyle}
+            className="models-input"
           >
             <option value="freellmapi">FreeLLMAPI</option>
             <option value="openrouter">OpenRouter</option>
@@ -145,31 +128,32 @@ export default function ModelsPage() {
         </Field>
 
         {/* Base URL */}
-        <Field label="API Base URL">
-          <input
-            type="text"
+        <Field label={t("models.api_base")}>
+          <Input
+            variant="mono"
             value={config.baseUrl}
             onChange={(e) => update("baseUrl", e.target.value)}
             placeholder="http://127.0.0.1:8080/v1"
-            style={inputStyle}
           />
           <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-            For llama.cpp: http://127.0.0.1:8080/v1
+            {t("models.api_base_hint")}
           </p>
         </Field>
 
         {/* API Key */}
-        <Field label="API Key">
+        <Field label={t("models.api_key")}>
           <div style={{ position: "relative" }}>
-            <input
+            <Input
               type={showKey ? "text" : "password"}
+              variant="mono"
               value={config.apiKey}
               onChange={(e) => update("apiKey", e.target.value)}
-              placeholder={config.hasApiKey ? config.apiKeyMasked : "(empty)"}
-              style={{ ...inputStyle, paddingRight: 40 }}
+              placeholder={config.hasApiKey ? config.apiKeyMasked : t("models.api_key_empty")}
+              style={{ paddingRight: 40 }}
             />
             <button
               onClick={() => setShowKey(!showKey)}
+              className="models-eye-btn"
               style={{
                 position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
                 background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer",
@@ -180,48 +164,31 @@ export default function ModelsPage() {
             </button>
           </div>
           <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-            Leave empty for local servers (llama.cpp). For cloud APIs, paste your key here.
+            {t("models.api_key_hint")}
           </p>
         </Field>
 
         {/* Model name */}
-        <Field label="Model">
-          <input
-            type="text"
+        <Field label={t("models.model")}>
+          <Input
+            variant="mono"
             value={config.model}
             onChange={(e) => update("model", e.target.value)}
             placeholder="auto or exact model name"
-            style={inputStyle}
           />
           <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-            Use "auto" for provider default, or specify exact model.
+            {t("models.model_hint")}
           </p>
         </Field>
 
         {/* Buttons */}
         <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
-          <button
-            onClick={save}
-            disabled={saving}
-            style={{
-              ...btnStyle, background: saving ? "var(--text-dim)" : "var(--cyan)",
-              color: saving ? "var(--text-dim)" : "#050a14",
-            }}
-          >
-            <Save size={16} />
-            {saving ? "Saving..." : "Save Config"}
-          </button>
-          <button
-            onClick={testConnection}
-            disabled={testing}
-            style={{
-              ...btnStyle, background: "var(--bg-card)", color: "var(--cyan)",
-              border: "1px solid var(--border-bright)",
-            }}
-          >
-            <Send size={16} />
-            {testing ? "Testing..." : "Test Connection"}
-          </button>
+          <Button variant="primary" onClick={save} disabled={saving} loading={saving}>
+            {saving ? t("common.saving") || "Saving..." : t("common.save")}
+          </Button>
+          <Button variant="secondary" onClick={testConnection}>
+            Test Connection
+          </Button>
         </div>
 
         {/* Test result */}
@@ -239,15 +206,15 @@ export default function ModelsPage() {
             )}
             <div style={{ fontSize: 12, lineHeight: 1.6 }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                {testResult.ok ? "Connection successful" : "Connection failed"}
+                {testResult.ok ? t("models.test_ok") : t("models.test_fail")}
               </div>
               {testResult.ok && (
                 <>
                   <div style={{ color: "var(--text-secondary)" }}>
-                    Model: {testResult.model}
+                    {t("models.test_model")} {testResult.model}
                   </div>
                   <div style={{ color: "var(--text-secondary)", marginTop: 4 }}>
-                    Reply: {testResult.reply}
+                    {t("models.test_reply")} {testResult.reply}
                   </div>
                 </>
               )}
@@ -261,20 +228,17 @@ export default function ModelsPage() {
         )}
 
         {/* Current status */}
-        <div style={{
-          marginTop: 40, padding: "16px 20px", borderRadius: 8,
-          border: "1px solid var(--border)", background: "var(--bg-panel)",
-        }}>
+        <Card padding="16px 20px" borderRadius="var(--radius-sm)">
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
-            Current Active Config
+            {t("models.active_config")}
           </div>
           <div style={{ fontSize: 12, lineHeight: 2, fontFamily: "var(--font-mono)" }}>
-            <div><span style={{ color: "var(--text-dim)" }}>Provider: </span><span style={{ color: "var(--cyan)" }}>{config.llmProvider}</span></div>
-            <div><span style={{ color: "var(--text-dim)" }}>URL: </span><span style={{ color: "var(--text-secondary)" }}>{config.baseUrl}</span></div>
-            <div><span style={{ color: "var(--text-dim)" }}>Key: </span><span style={{ color: "var(--text-secondary)" }}>{config.hasApiKey ? config.apiKeyMasked : "(empty)"}</span></div>
-            <div><span style={{ color: "var(--text-dim)" }}>Model: </span><span style={{ color: "var(--cyan)" }}>{config.model}</span></div>
+            <div><span style={{ color: "var(--text-dim)" }}>{t("models.cfg_provider")} </span><span style={{ color: "var(--cyan)" }}>{config.llmProvider}</span></div>
+            <div><span style={{ color: "var(--text-dim)" }}>{t("models.cfg_url")} </span><span style={{ color: "var(--text-secondary)" }}>{config.baseUrl}</span></div>
+            <div><span style={{ color: "var(--text-dim)" }}>{t("models.cfg_key")} </span><span style={{ color: "var(--text-secondary)" }}>{config.hasApiKey ? config.apiKeyMasked : t("models.api_key_empty")}</span></div>
+            <div><span style={{ color: "var(--text-dim)" }}>{t("models.cfg_model")} </span><span style={{ color: "var(--cyan)" }}>{config.model}</span></div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -290,23 +254,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 14px",
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  color: "var(--text-primary)",
-  fontSize: 13,
-  fontFamily: "var(--font-mono)",
-  outline: "none",
-  boxSizing: "border-box",
-};
-
-const btnStyle = {
-  display: "inline-flex", alignItems: "center", gap: 8,
-  padding: "10px 20px", borderRadius: 6, fontWeight: 600, fontSize: 13,
-  border: "none", cursor: "pointer",
-  transition: "opacity 0.15s ease",
-};
