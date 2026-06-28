@@ -1,0 +1,463 @@
+{
+  "skill": "check",
+  "generated_at": "2026-06-27T18:43:41Z",
+  "project_name": "Phoenix-Core",
+  "target": "Full frontend: app/ (pages + components + CSS) + src/lib/motion.ts",
+  "mode": "A (auto review)",
+  "findings": [
+    {
+      "id": "F-001",
+      "category": "responsive",
+      "severity": "blocker",
+      "description": "整个应用无任何 media query（除 prefers-reduced-motion），三栏布局使用固定宽度（260px sidebar + flex + auto），在 <900px 屏幕上完全不可用",
+      "suggestion": "添加 mobile/tablet/desktop 三档断点：≤768px 单栏（sidebar 折叠为抽屉）、769-1024px 双栏、>1024px 三栏",
+      "location": "app/globals.css (line 158 .app grid-template-columns)"
+    },
+    {
+      "id": "F-002",
+      "category": "responsive",
+      "severity": "blocker",
+      "description": "body 设置 overflow: hidden，小屏上溢出内容被裁切且无法滚动访问",
+      "suggestion": "移除 body overflow: hidden，改为在 .app 容器上处理滚动，或在各面板内部设置 overflow-y: auto",
+      "location": "app/globals.css (line 65)"
+    },
+    {
+      "id": "F-003",
+      "category": "components",
+      "severity": "blocker",
+      "description": "存在 4 套不兼容的样式系统：① globals.css 共享类 ② Tailwind utility（仅 observability 页）③ inline style + 硬编码 hex（skills/pipeline 页）④ inline style + CSS var（models 页）。页面间视觉不一致",
+      "suggestion": "统一采用 globals.css 设计系统 + framer-motion，移除 Tailwind 依赖或在 tailwind.config 中桥接 CSS 变量。所有页面必须使用同一套 token",
+      "location": "跨页面：skills/page.tsx, pipeline/page.tsx, observability/page.tsx, models/page.tsx"
+    },
+    {
+      "id": "F-004",
+      "category": "flow-continuity",
+      "severity": "blocker",
+      "description": "Observability 页面无任何导航出口（无返回首页、无面包屑），形成死胡同页面",
+      "suggestion": "添加 <Link href=\"/\">← 返回首页</Link> 导航，与其他页面保持一致",
+      "location": "app/observability/page.tsx"
+    },
+    {
+      "id": "F-005",
+      "category": "accessibility",
+      "severity": "blocker",
+      "description": "所有交互元素（按钮、输入框、链接、卡片）无 :focus-visible 样式。input 和 chat-input-field 设置 outline: none 移除了原生焦点环，键盘用户无法看到当前焦点位置",
+      "suggestion": "为所有交互元素添加 :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px }，移除 outline: none 或替换为可见的焦点指示",
+      "location": "app/globals.css (lines 259, 1243, 1309)"
+    },
+    {
+      "id": "F-006",
+      "category": "visual-hierarchy",
+      "severity": "major",
+      "description": "标题层级扁平且缺失：page.tsx 只有 <h1>，所有分区标题用 <div> 实现；observability 页 h1→h3 跳级，缺少 <h2>",
+      "suggestion": "使用语义化标题层级 h1>h2>h3，分区标题改用 <h2>/<h3> 元素",
+      "location": "app/page.tsx (line 28), app/observability/page.tsx (line 207→267)"
+    },
+    {
+      "id": "F-007",
+      "category": "visual-hierarchy",
+      "severity": "major",
+      "description": "多处字号过小：.stat-label 7px、.ws-id 9px、.sys-tag 7.5px，低于 WCAG 建议的最小 11px",
+      "suggestion": "最小字号设为 11px，关键标签信息提升至 12px 以上",
+      "location": "app/globals.css (lines 1690, 841, 1590)"
+    },
+    {
+      "id": "F-008",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "IMMessageList 消息列表为空时不渲染任何内容，用户看到空白聊天区域，无引导提示",
+      "suggestion": "添加空状态占位：如「发送第一条消息开始对话」+ 操作引导",
+      "location": "app/im/IMMessageList.tsx (line 116)"
+    },
+    {
+      "id": "F-009",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Graph 页面和 Pipeline 页面在异步数据加载期间无 loading 状态，页面渲染空白",
+      "suggestion": "添加 skeleton 或 spinner 加载状态，参考 Models 页面的 loading 处理",
+      "location": "app/graph/page.tsx (lines 42-53), app/pipeline/page.tsx (lines 107-129)"
+    },
+    {
+      "id": "F-010",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Home 页面 catch {} 空块静默吞掉数据库错误，用户无任何反馈",
+      "suggestion": "添加错误状态 UI：显示「加载失败，请重试」+ 重试按钮",
+      "location": "app/page.tsx (lines 19-20)"
+    },
+    {
+      "id": "F-011",
+      "category": "feedback",
+      "severity": "major",
+      "description": "「Stop All Agents」破坏性操作无二次确认，单击即停止所有 agent",
+      "suggestion": "添加 confirm 对话框或二次点击确认机制",
+      "location": "app/im/page.tsx (line 1024)"
+    },
+    {
+      "id": "F-012",
+      "category": "feedback",
+      "severity": "major",
+      "description": "Skills 页面删除技能无确认对话框，单击「删除」立即移除",
+      "suggestion": "添加确认对话框，参考 workspaces-list.tsx 的 confirm() 模式",
+      "location": "app/skills/page.tsx (lines 140-157)"
+    },
+    {
+      "id": "F-013",
+      "category": "feedback",
+      "severity": "major",
+      "description": "模型选择器切换后 fetch 静默执行，无成功/失败反馈，catch 为空",
+      "suggestion": "添加 toast 提示「模型已切换」或错误提示",
+      "location": "app/im/page.tsx (lines 2291-2296)"
+    },
+    {
+      "id": "F-014",
+      "category": "feedback",
+      "severity": "major",
+      "description": "文件上传错误使用 alert() 弹窗，与设计系统的 toast 模式不一致，阻塞主线程",
+      "suggestion": "替换为统一的 toast 组件，参考 IM 页面的 .toast 实现",
+      "location": "app/im/page.tsx (line 1143), app/_components/skills-list.tsx (lines 89,91)"
+    },
+    {
+      "id": "F-015",
+      "category": "components",
+      "severity": "major",
+      "description": "按钮 border-radius 不统一：.btn=10px, .btn-action=5px, .send-btn=7px, .chat-attach=7px，Models 页面=6px，Skills 页面=6px/4px",
+      "suggestion": "定义 --radius-sm: 6px, --radius-md: 10px token，所有按钮统一使用",
+      "location": "app/globals.css (lines 226, 1069, 1253, 1277)"
+    },
+    {
+      "id": "F-016",
+      "category": "components",
+      "severity": "major",
+      "description": "Home 页面全部使用 inline style，完全绕过设计系统，无法主题化",
+      "suggestion": "将 inline style 迁移到 CSS 类或使用 .card/.btn 等共享类",
+      "location": "app/page.tsx (lines 24-115)"
+    },
+    {
+      "id": "F-017",
+      "category": "components",
+      "severity": "major",
+      "description": "Skills 页面和 Pipeline 页面使用硬编码 hex 色值（#0F172A, #0a0a0f），与 globals.css 的 --bg-void: #050a14 不一致",
+      "suggestion": "替换为 CSS 变量 var(--bg-void), var(--bg-card), var(--border) 等",
+      "location": "app/skills/page.tsx, app/pipeline/page.tsx (line 307)"
+    },
+    {
+      "id": "F-018",
+      "category": "components",
+      "severity": "major",
+      "description": "Pipeline 页面使用 system-ui 字体，与全局 --font-body: Exo 2 不一致",
+      "suggestion": "替换为 font-family: var(--font-body)",
+      "location": "app/pipeline/page.tsx (line 307)"
+    },
+    {
+      "id": "F-019",
+      "category": "copy",
+      "severity": "major",
+      "description": "中英文混用无 i18n 策略：Skills/Pipeline 全中文，Graph/Models/Observability 全英文，IM 页面混合",
+      "suggestion": "确定主语言（layout lang=zh-CN 建议中文为主），统一所有页面文案语言",
+      "location": "跨页面"
+    },
+    {
+      "id": "F-020",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "--text-dim (rgba(120,150,190,0.5)) 在 --bg-void (#050a14) 上对比度约 2.8:1，不满足 WCAG AA 4.5:1",
+      "suggestion": "提升 --text-dim 亮度至对比度 ≥4.5:1，或仅用于装饰性文本",
+      "location": "app/globals.css (line 27)"
+    },
+    {
+      "id": "F-021",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "全应用无 ARIA landmarks（<main>, <nav>, <aside>），布局全部使用 <div>",
+      "suggestion": "为 IMShell 添加 <nav>（sidebar）、<main>（chat）、<aside>（details）语义标签",
+      "location": "app/im/IMShell.tsx, app/page.tsx"
+    },
+    {
+      "id": "F-022",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "Agent 树使用 div + onClick，不可键盘聚焦和导航",
+      "suggestion": "改用 <button> 或添加 role=\"treeitem\" + tabIndex={0} + onKeyDown handler",
+      "location": "app/im/page.tsx (line 1779)"
+    },
+    {
+      "id": "F-023",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "所有表单 <input> 无 <label htmlFor> 关联，仅依赖 placeholder",
+      "suggestion": "为每个 input 添加关联的 <label> 或 aria-label",
+      "location": "app/models/page.tsx (line 286), app/_components/create-workspace.tsx"
+    },
+    {
+      "id": "F-024",
+      "category": "flow-continuity",
+      "severity": "major",
+      "description": "各页面导航模式不一致：Home→IM/Graph/Skills/Models，Graph→IM，Pipeline→IM，Observability→无，Models→Home",
+      "suggestion": "创建共享 <PageHeader> 组件，统一包含返回链接和面包屑",
+      "location": "跨页面"
+    },
+    {
+      "id": "F-025",
+      "category": "responsive",
+      "severity": "major",
+      "description": "6 个页面中仅 Observability 有响应式处理（Tailwind grid-cols），其余 5 页全部固定宽度",
+      "suggestion": "为所有页面添加 mobile/tablet 断点适配",
+      "location": "app/observability/page.tsx (唯一有响应式的页面)"
+    },
+    {
+      "id": "F-026",
+      "category": "responsive",
+      "severity": "major",
+      "description": "Graph 页面 gridTemplateColumns: repeat(2, minmax(0, 320px)) 在窄屏溢出",
+      "suggestion": "改为 repeat(auto-fit, minmax(280px, 1fr))",
+      "location": "app/graph/page.tsx (line 96)"
+    },
+    {
+      "id": "F-027",
+      "category": "responsive",
+      "severity": "major",
+      "description": "Pipeline 页面三栏固定宽度（300px + flex + 420px）在 <1020px 屏幕溢出",
+      "suggestion": "添加响应式断点，小屏改为垂直堆叠",
+      "location": "app/pipeline/page.tsx (line 307)"
+    },
+    {
+      "id": "F-028",
+      "category": "feedback",
+      "severity": "major",
+      "description": "Pipeline 页面 review approve/reject 仅更新本地 state，未调用 API，为非功能 stub",
+      "suggestion": "实现 EventBus emit 或 API 调用，或标注为 TODO 并禁用按钮",
+      "location": "app/pipeline/page.tsx (lines 297-304)"
+    },
+    {
+      "id": "F-029",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "全应用交互元素无 aria-label：发送按钮、停止按钮、文件上传按钮、模型选择器、缩放按钮等均缺失",
+      "suggestion": "为所有 <button>、<a>、可交互 <div> 添加 aria-label",
+      "location": "跨页面"
+    },
+    {
+      "id": "F-030",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Home 页面无 loading 状态，数据库慢查询时用户看到空白工作区列表",
+      "suggestion": "添加 skeleton 加载态或使用 React Suspense fallback",
+      "location": "app/page.tsx (lines 17-21)"
+    },
+    {
+      "id": "F-031",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Home 页面工作区列表为空时无空状态提示，用户看到空白区域",
+      "suggestion": "添加「暂无工作区，点击上方按钮创建」空状态 UI",
+      "location": "app/page.tsx (line 105)"
+    },
+    {
+      "id": "F-032",
+      "category": "components",
+      "severity": "major",
+      "description": "AgentStatusCard 使用硬编码 hex 色值（#1a1a1a, #333, #888, #4a4, #cc0, #f44），与 CSS 变量体系完全脱节",
+      "suggestion": "替换为 var(--green), var(--yellow), var(--red) 等 CSS 变量",
+      "location": "app/im/AgentStatusCard.tsx (lines 7-13)"
+    },
+    {
+      "id": "F-033",
+      "category": "components",
+      "severity": "major",
+      "description": "cx() 和 api() 函数在 page.tsx、helpers.ts、IMHistoryList.tsx 中重复定义且行为有差异",
+      "suggestion": "统一从 helpers.ts 导入，删除 page.tsx 和 IMHistoryList.tsx 中的重复定义",
+      "location": "app/im/page.tsx (lines 225,245), app/im/helpers.ts, app/im/IMHistoryList.tsx (line 1)"
+    },
+    {
+      "id": "F-034",
+      "category": "components",
+      "severity": "major",
+      "description": "types.ts 与 page.tsx 定义了重叠但不同的类型（Group 缺少/多余 creatorId 字段等），类型不同步",
+      "suggestion": "统一从 types.ts 导出，page.tsx 删除本地类型定义",
+      "location": "app/im/types.ts, app/im/page.tsx (lines 21-97)"
+    },
+    {
+      "id": "F-035",
+      "category": "feedback",
+      "severity": "major",
+      "description": "Toast 无关闭按钮、无自动消失定时器、多错误时叠加覆盖",
+      "suggestion": "添加 auto-dismiss（3-5s）+ 手动关闭按钮 + 堆叠机制",
+      "location": "app/im/page.tsx (line 2253), app/globals.css (line 780 .toast)"
+    },
+    {
+      "id": "F-036",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "状态指示器仅靠颜色传达（status-dot online/busy/idle/error），无文字替代供屏幕阅读器使用",
+      "suggestion": "添加 aria-label 或 sr-only 文字说明状态含义",
+      "location": "app/im/page.tsx (line 1799), app/globals.css (.status-dot)"
+    },
+    {
+      "id": "F-037",
+      "category": "accessibility",
+      "severity": "major",
+      "description": "Viz 拓扑动画（framer-motion）未使用 useReducedMotion 做无障碍降级",
+      "suggestion": "在 viz 区域的 motion 组件上接入 useReducedMotion，禁用空间位移",
+      "location": "app/im/page.tsx (lines 2084-2225)"
+    },
+    {
+      "id": "F-038",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Models 页面错误状态无重试按钮，仅显示纯文本",
+      "suggestion": "添加「重试」按钮重新触发数据加载",
+      "location": "app/models/page.tsx (lines 97-103)"
+    },
+    {
+      "id": "F-039",
+      "category": "edge-states",
+      "severity": "major",
+      "description": "Skills 页面 ErrorFallback 无重试机制",
+      "suggestion": "添加重试按钮或自动重试逻辑",
+      "location": "app/skills/page.tsx (lines 601-610)"
+    },
+    {
+      "id": "F-040",
+      "category": "flow-continuity",
+      "severity": "major",
+      "description": "IM 页面切换 sub-agent 后无「返回上一对话」的明确导航，只能手动点击侧栏",
+      "suggestion": "添加面包屑或「返回」链接指向之前的 active group",
+      "location": "app/im/page.tsx (line 994)"
+    },
+    {
+      "id": "F-041",
+      "category": "flow-continuity",
+      "severity": "minor",
+      "description": "IM Suspense fallback 是纯文本「Loading...」，与 phoenix-grid-bg 视觉风格不协调",
+      "suggestion": "使用品牌化的 loading skeleton 或 spinner",
+      "location": "app/im/page.tsx (line 251)"
+    },
+    {
+      "id": "F-042",
+      "category": "ia",
+      "severity": "minor",
+      "description": "Agent 树将 agent 层级关系和会话 group 混为一体，多成员 group 以不同视觉形式渲染在底部",
+      "suggestion": "统一 agent 和 group 的展示逻辑，或明确区分两种概念",
+      "location": "app/im/page.tsx (lines 535, 612)"
+    },
+    {
+      "id": "F-043",
+      "category": "ia",
+      "severity": "minor",
+      "description": "右侧面板无 Tab 机制，7 个信息区块（events, LLM history, content, reasoning, tools, stats, status）全部垂直堆叠",
+      "suggestion": "将 streaming 区域改为 Tab 切换（Content / Reasoning / Tools），减少滚动",
+      "location": "app/im/page.tsx (right section)"
+    },
+    {
+      "id": "F-044",
+      "category": "ia",
+      "severity": "minor",
+      "description": "全应用无面包屑导航，用户无法感知当前在层级中的位置",
+      "suggestion": "在 PageHeader 组件中添加面包屑",
+      "location": "跨页面"
+    },
+    {
+      "id": "F-045",
+      "category": "copy",
+      "severity": "minor",
+      "description": "按钮文案大小写不一致：SEND（全大写）、Stop All Agents（首字母大写）、Reset（首字母大写）",
+      "suggestion": "统一为 sentence case 或 title case",
+      "location": "app/im/page.tsx (lines 1921, 2307)"
+    },
+    {
+      "id": "F-046",
+      "category": "copy",
+      "severity": "minor",
+      "description": "错误信息面向开发者而非用户：「Usage: /create <role>」「SSE disconnected」",
+      "suggestion": "改为用户友好的错误描述 + 可操作指引",
+      "location": "app/im/page.tsx (lines 989, 1064)"
+    },
+    {
+      "id": "F-047",
+      "category": "copy",
+      "severity": "minor",
+      "description": "空状态文案语言不一致：「No groups yet.」(英文) vs 「暂无事件」(中文)",
+      "suggestion": "统一为与页面主语言一致",
+      "location": "app/im/page.tsx (line 1879)"
+    },
+    {
+      "id": "F-048",
+      "category": "visual-hierarchy",
+      "severity": "minor",
+      "description": "间距值无系统规范：出现 2/3/4/5/6/7/8/9/10/12/14/16/18/20/24px 等 15 种不同值",
+      "suggestion": "定义 4px 基数的间距 token：--space-1: 4px, --space-2: 8px, --space-3: 12px, --space-4: 16px, --space-5: 24px",
+      "location": "app/globals.css (跨文件)"
+    },
+    {
+      "id": "F-049",
+      "category": "visual-hierarchy",
+      "severity": "minor",
+      "description": "page.tsx 的 NavCard inline borderRadius: 8 与 .card 类的 12px 冲突",
+      "suggestion": "移除 inline style 覆盖，统一使用 .card 类的 border-radius",
+      "location": "app/page.tsx (line 141)"
+    },
+    {
+      "id": "F-050",
+      "category": "components",
+      "severity": "minor",
+      "description": "Test 页面使用浅色主题（#f8fafc 背景），与全局暗色设计系统直接矛盾",
+      "suggestion": "限制为 development only（NODE_ENV check）或改为暗色主题",
+      "location": "app/test/page.tsx"
+    },
+    {
+      "id": "F-051",
+      "category": "components",
+      "severity": "minor",
+      "description": "QuickPick 使用硬编码色值（#1a1a1a, #2a2a2a, #333）而非 CSS 变量",
+      "suggestion": "替换为 var(--bg-panel), var(--bg-card), var(--border) 等",
+      "location": "app/_components/quickpick.tsx"
+    },
+    {
+      "id": "F-052",
+      "category": "components",
+      "severity": "minor",
+      "description": "Observability 页面使用 Tailwind 色值（zinc-200, blue-500, red-500）而非 Phoenix CSS 变量",
+      "suggestion": "替换为 var(--text-primary), var(--cyan), var(--red) 等",
+      "location": "app/observability/page.tsx"
+    },
+    {
+      "id": "F-053",
+      "category": "feedback",
+      "severity": "minor",
+      "description": "IM 页面使用 window.prompt() 输入 sub-agent role，与设计系统不一致且无障碍性差",
+      "suggestion": "替换为自定义 Modal 对话框",
+      "location": "app/im/page.tsx (line 994)"
+    },
+    {
+      "id": "F-054",
+      "category": "feedback",
+      "severity": "minor",
+      "description": "Viz 缩放按钮无 min/max 边界禁用，可无限缩小/放大",
+      "suggestion": "在缩放边界时 disabled 对应按钮",
+      "location": "app/im/page.tsx (lines 2002-2032)"
+    },
+    {
+      "id": "F-055",
+      "category": "accessibility",
+      "severity": "minor",
+      "description": "QuickPick 模态框无 role=\"dialog\"、aria-modal=\"true\"、无焦点陷阱",
+      "suggestion": "添加 ARIA dialog 属性和 focus trap",
+      "location": "app/_components/quickpick.tsx"
+    },
+    {
+      "id": "F-056",
+      "category": "accessibility",
+      "severity": "minor",
+      "description": "Pipeline 页面连接状态指示器仅靠颜色传达，无文字替代",
+      "suggestion": "添加 aria-label 描述连接状态",
+      "location": "app/pipeline/page.tsx (line 312)"
+    }
+  ],
+  "summary": {
+    "blocker": 5,
+    "major": 35,
+    "minor": 16,
+    "pass": 0
+  }
+}
