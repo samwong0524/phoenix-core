@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
@@ -58,6 +58,76 @@ function WorkflowEditor() {
       })
       .catch(() => {});
   }, [workflowId, loadFromDSL, setWorkflowMeta]);
+
+  // SSE subscription for pipeline execution events
+  const connectionTimeRef = useRef(Date.now());
+  const setExecutionStatus = useWorkflowStore((s: WorkflowState) => s.setExecutionStatus);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const currentStatus = useWorkflowStore.getState().workflowStatus;
+    if (currentStatus !== "active") return;
+
+    connectionTimeRef.current = Date.now();
+    const es = new EventSource(
+      `/api/ui-stream?workspaceId=${encodeURIComponent(workspaceId)}`
+    );
+
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data) as {
+          event: string;
+          data: Record<string, unknown>;
+        };
+
+        // Skip replayed history events
+        if (event.data && typeof event.data === "object" && "at" in event.data) {
+          const eventTime = event.data.at as number;
+          if (eventTime < connectionTimeRef.current) return;
+        }
+
+        const d = event.data;
+        switch (event.event) {
+          case "pipeline.stage_start": {
+            const nodeId = d.nodeId as string;
+            if (nodeId) setExecutionStatus(nodeId, "running");
+            break;
+          }
+          case "pipeline.stage_complete": {
+            const nodeId = d.nodeId as string;
+            const status = d.status as string;
+            if (nodeId) {
+              setExecutionStatus(
+                nodeId,
+                status === "completed" ? "completed" : "failed"
+              );
+            }
+            break;
+          }
+          case "pipeline.complete": {
+            setRunning(false);
+            const overallStatus = d.overallStatus as string;
+            setMessage(
+              overallStatus === "completed"
+                ? "Workflow completed successfully!"
+                : `Workflow finished with errors (${d.failedTasks} failed tasks)`
+            );
+            break;
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      // EventSource will auto-reconnect
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [workspaceId, setExecutionStatus]);
 
   // Save workflow
   async function handleSave() {
@@ -136,6 +206,7 @@ function WorkflowEditor() {
     setRunning(true);
     setMessage(null);
     resetExecutionStatus();
+    connectionTimeRef.current = Date.now();
     try {
       const res = await fetch(
         `/api/workflows/${encodeURIComponent(wfId)}/activate`,
@@ -143,10 +214,9 @@ function WorkflowEditor() {
       );
       if (!res.ok) throw new Error(`Activate failed: ${res.status}`);
       setWorkflowMeta({ status: "active" });
-      setMessage("Workflow activated! Check IM for execution.");
+      setMessage("Workflow activated! Watching execution...");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Run failed");
-    } finally {
       setRunning(false);
     }
   }
@@ -202,7 +272,7 @@ function WorkflowEditor() {
         <Button
           variant="primary"
           onClick={() => void handleSave()}
-          disabled={saving}
+          disabled={saving || running}
         >
           {saving ? "Saving..." : "Save"}
         </Button>
@@ -210,8 +280,12 @@ function WorkflowEditor() {
           variant="ghost"
           onClick={() => void handleRun()}
           disabled={running || !useWorkflowStore.getState().workflowId}
+          style={running ? {
+            color: "var(--cyan)",
+            animation: "pulse 1.5s ease-in-out infinite",
+          } : undefined}
         >
-          {running ? "Running..." : "Run"}
+          {running ? "● Running..." : "Run"}
         </Button>
       </div>
 

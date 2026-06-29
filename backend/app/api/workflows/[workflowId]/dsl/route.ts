@@ -54,12 +54,17 @@ export async function GET(
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i]!;
     const nodeId = `agent-${i + 1}`;
+    // Decode nodeId::label format
+    const sepIdx = t.name.indexOf("::");
+    const displayLabel = sepIdx > 0 && t.name.startsWith("agent-")
+      ? t.name.slice(sepIdx + 2)
+      : t.name;
     nodes.push({
       id: nodeId,
       type: "agent",
       position: { x: 250 + i * 250, y: 200 },
       data: {
-        label: t.name,
+        label: displayLabel,
         role: t.assigneeRole || "assistant",
         description: t.description || "",
         expectedOutput: t.expectedOutput || "",
@@ -142,11 +147,12 @@ export async function PUT(
     // Delete existing tasks
     await db.delete(tasks).where(eq(tasks.workflowId, workflowId));
 
-    // Build node map: id → label
+    // Build node map: id → encoded task name (nodeId::label)
     const nodeMap = new Map<string, string>();
     for (const n of body.dsl.nodes) {
       if (n.type === "agent") {
-        nodeMap.set(n.id, (n.data as any).label || n.id);
+        const label = (n.data as any).label || n.id;
+        nodeMap.set(n.id, `${n.id}::${label}`);
       }
     }
 
@@ -155,16 +161,19 @@ export async function PUT(
       if (n.type !== "agent") continue;
       const data = n.data as any;
 
-      // Compute depends_on from edges
+      // Compute depends_on from edges (store encoded task names)
       const dependsOn = body.dsl.edges
         .filter((e) => e.target === n.id)
         .map((e) => nodeMap.get(e.source))
-        .filter((label): label is string => !!label);
+        .filter((name): name is string => !!name);
+
+      // Encode nodeId into task name for event mapping
+      const taskName = `${n.id}::${data.label || "Untitled Step"}`;
 
       await db.insert(tasks).values({
         id: crypto.randomUUID(),
         workflowId,
-        name: data.label || "Untitled Step",
+        name: taskName,
         description: data.description || null,
         assigneeRole: data.role || null,
         expectedOutput: data.expectedOutput || null,

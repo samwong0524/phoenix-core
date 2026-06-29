@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 import { store } from "@/lib/storage";
+import { getWorkspaceUIBus } from "./ui-bus";
 
 type UUID = string;
 
@@ -159,17 +160,43 @@ export class WorkflowEngine {
         );
         await this.logTaskEvent(task.id, "task_timed_out", { duration_ms: now - startedAt });
         console.warn(`[WorkflowEngine] Task ${task.id} timed out`);
+
+        // Emit stage_complete with failed status for timed out task
+        const taskNameRows = await db.execute(
+          sql`SELECT name, workflow_id FROM tasks WHERE id = ${task.id} LIMIT 1`
+        );
+        const taskRow = (taskNameRows as unknown as Array<{ name: string; workflow_id: string }>)[0];
+        if (taskRow) {
+          const { nodeId, label } = WorkflowEngine.parseNodeId(taskRow.name);
+          await this.emitPipelineEvent(taskRow.workflow_id, "pipeline.stage_complete", {
+            stageName: taskRow.name,
+            nodeId,
+            label,
+            status: "failed",
+            output: "Task timed out",
+          });
+          await this.checkWorkflowCompletion(taskRow.workflow_id);
+        }
       }
     }
   }
 
   private async assignAndExecuteTask(task: TaskRow, now: Date) {
     const db = getDb();
+    const { nodeId, label } = WorkflowEngine.parseNodeId(task.name);
 
     await db.execute(
       sql`UPDATE tasks SET status = 'in_progress', started_at = ${now} WHERE id = ${task.id}`
     );
     await this.logTaskEvent(task.id, "task_started");
+
+    // Emit stage_start event for visual editor
+    await this.emitPipelineEvent(task.workflow_id, "pipeline.stage_start", {
+      stageName: task.name,
+      nodeId,
+      label,
+      role: task.assignee_role || "assistant",
+    });
 
     if (task.assignee_id) {
       await this.sendTaskToAgent(task);
@@ -192,6 +219,16 @@ export class WorkflowEngine {
     );
     await this.logTaskEvent(task.id, "task_failed_no_agent", { role: task.assignee_role });
     console.warn(`[WorkflowEngine] Task ${task.id} failed: no agent for role "${task.assignee_role}"`);
+
+    // Emit stage_complete with failed status
+    await this.emitPipelineEvent(task.workflow_id, "pipeline.stage_complete", {
+      stageName: task.name,
+      nodeId,
+      label,
+      status: "failed",
+      output: "No agent found for role: " + (task.assignee_role || "unknown"),
+    });
+    await this.checkWorkflowCompletion(task.workflow_id);
   }
 
   private async findAgentByRole(role: string): Promise<AgentInfo | null> {
@@ -272,6 +309,59 @@ export class WorkflowEngine {
     }
   }
 
+  /** Resolve workspaceId from a workflow's group */
+  private async resolveWorkspaceId(workflowId: UUID): Promise<string | null> {
+    try {
+      const db = getDb();
+      const rows = await db.execute(
+        sql`SELECT g.workspace_id FROM workflows w
+            JOIN groups g ON g.id = w.group_id
+            WHERE w.id = ${workflowId} LIMIT 1`
+      );
+      const row = (rows as unknown as Array<{ workspace_id: string }>)[0];
+      return row?.workspace_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Parse nodeId from task name format "nodeId::label" */
+  static parseNodeId(taskName: string): { nodeId: string | null; label: string } {
+    const sepIdx = taskName.indexOf("::");
+    if (sepIdx > 0 && taskName.startsWith("agent-")) {
+      return {
+        nodeId: taskName.slice(0, sepIdx),
+        label: taskName.slice(sepIdx + 2),
+      };
+    }
+    return { nodeId: null, label: taskName };
+  }
+
+  /** Emit a pipeline event to the UI bus for a workflow */
+  private async emitPipelineEvent(
+    workflowId: UUID,
+    event: string,
+    data: Record<string, unknown>
+  ) {
+    const workspaceId = await this.resolveWorkspaceId(workflowId);
+    if (!workspaceId) return;
+    getWorkspaceUIBus().emit(workspaceId, {
+      event: event as any,
+      data: { ...data, pipelineId: workflowId, workflowId },
+    } as any);
+  }
+
+  /** Check if a workflow has any remaining pending or in_progress tasks */
+  private async hasActiveTasks(workflowId: UUID): Promise<boolean> {
+    const db = getDb();
+    const rows = await db.execute(
+      sql`SELECT COUNT(*) as cnt FROM tasks
+          WHERE workflow_id = ${workflowId} AND status IN ('pending', 'in_progress')`
+    );
+    const row = (rows as unknown as Array<{ cnt: number }>)[0];
+    return (row?.cnt ?? 0) > 0;
+  }
+
   static async processTaskCompletion(taskId: UUID, result: string) {
     const db = getDb();
     const now = new Date();
@@ -282,25 +372,62 @@ export class WorkflowEngine {
     const task = (rows as unknown as Array<{ review_count: number; max_revisions: number; workflow_id: UUID; name: string }>)[0];
     if (!task) return;
 
+    const { nodeId, label } = WorkflowEngine.parseNodeId(task.name);
     const reviewCount = task.review_count ?? 0;
     const maxRevisions = task.max_revisions ?? 3;
+    const engine = WorkflowEngine.getInstance();
 
     if (reviewCount >= maxRevisions) {
       await db.execute(
         sql`UPDATE tasks SET status = 'failed', error = 'Max revisions exceeded', completed_at = ${now} WHERE id = ${taskId}`
       );
-      const engine = WorkflowEngine.getInstance();
       await engine.logTaskEvent(taskId, "task_failed_max_revisions", { review_count: reviewCount });
+
+      // Emit stage_complete with failed status
+      await engine.emitPipelineEvent(task.workflow_id, "pipeline.stage_complete", {
+        stageName: task.name,
+        nodeId,
+        label,
+        status: "failed",
+        output: "Max revisions exceeded",
+      });
     } else {
       await db.execute(
         sql`UPDATE tasks SET status = 'reviewed', result = ${result}, reviewed_at = ${now} WHERE id = ${taskId}`
       );
-      const engine = WorkflowEngine.getInstance();
       await engine.logTaskEvent(taskId, "task_reviewed", { result });
+
+      // Emit stage_complete with completed status
+      await engine.emitPipelineEvent(task.workflow_id, "pipeline.stage_complete", {
+        stageName: task.name,
+        nodeId,
+        label,
+        status: "completed",
+        output: (result || "").slice(0, 500),
+      });
     }
 
-    const engine = WorkflowEngine.getInstance();
     await engine.processWorkflow(task.workflow_id);
+    await engine.checkWorkflowCompletion(task.workflow_id);
+  }
+
+  /** Check if all tasks in a workflow are done and emit pipeline.complete */
+  private async checkWorkflowCompletion(workflowId: UUID) {
+    const stillActive = await this.hasActiveTasks(workflowId);
+    if (stillActive) return;
+
+    // Check if any task failed
+    const db = getDb();
+    const failRows = await db.execute(
+      sql`SELECT COUNT(*) as cnt FROM tasks WHERE workflow_id = ${workflowId} AND status = 'failed'`
+    );
+    const failCount = ((failRows as unknown as Array<{ cnt: number }>)[0]?.cnt) ?? 0;
+    const overallStatus = failCount > 0 ? "completed_with_errors" : "completed";
+
+    await this.emitPipelineEvent(workflowId, "pipeline.complete", {
+      overallStatus,
+      failedTasks: failCount,
+    });
   }
 }
 

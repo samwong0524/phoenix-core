@@ -30,6 +30,7 @@ export default function AgentNode({ data, selected }: NodeProps) {
   const agentData = data as unknown as AgentNodeData;
   const status = agentData.executionStatus || "idle";
   const style = statusStyles[status];
+  const isRunning = status === "running";
 
   return (
     <div
@@ -42,16 +43,31 @@ export default function AgentNode({ data, selected }: NodeProps) {
         boxShadow: selected
           ? "0 0 20px rgba(0, 240, 255, 0.2)"
           : style.shadow,
-        transition: "border-color 0.2s, box-shadow 0.2s",
+        transition: "border-color 0.3s, box-shadow 0.3s",
         overflow: "hidden",
+        animation: isRunning ? "agentPulse 2s ease-in-out infinite" : undefined,
       }}
     >
+      {/* Pulse animation keyframes */}
+      {isRunning && (
+        <style>{`
+          @keyframes agentPulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(0, 240, 255, 0.2); }
+            50% { box-shadow: 0 0 24px rgba(0, 240, 255, 0.5); }
+          }
+          @keyframes progressSlide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+          }
+        `}</style>
+      )}
+
       {/* Input handle */}
       <Handle
         type="target"
         position={Position.Left}
         style={{
-          background: "var(--cyan, #00f0ff)",
+          background: isRunning ? "var(--cyan, #00f0ff)" : "var(--border-bright)",
           width: 10,
           height: 10,
           border: "2px solid var(--bg-panel, #0a0e1a)",
@@ -73,10 +89,11 @@ export default function AgentNode({ data, selected }: NodeProps) {
           style={{
             fontSize: 11,
             fontWeight: 700,
-            color: "var(--cyan)",
+            color: isRunning ? "var(--cyan)" : "var(--text-dim)",
             fontFamily: "var(--font-mono)",
             textTransform: "uppercase",
             letterSpacing: "0.05em",
+            transition: "color 0.3s",
           }}
         >
           {agentData.role || "agent"}
@@ -115,12 +132,32 @@ export default function AgentNode({ data, selected }: NodeProps) {
         )}
       </div>
 
+      {/* Running progress bar */}
+      {isRunning && (
+        <div
+          style={{
+            height: 2,
+            background: "var(--bg-panel)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: "40%",
+              height: "100%",
+              background: "var(--cyan, #00f0ff)",
+              animation: "progressSlide 1.5s ease-in-out infinite",
+            }}
+          />
+        </div>
+      )}
+
       {/* Output handle */}
       <Handle
         type="source"
         position={Position.Right}
         style={{
-          background: "var(--cyan, #00f0ff)",
+          background: isRunning ? "var(--cyan, #00f0ff)" : "var(--border-bright)",
           width: 10,
           height: 10,
           border: "2px solid var(--bg-panel, #0a0e1a)",
