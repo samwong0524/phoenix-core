@@ -15,6 +15,12 @@ function WorkflowEditor() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [tplDesc, setTplDesc] = useState("");
+  const [tplIcon, setTplIcon] = useState("📋");
+  const [tplCategory, setTplCategory] = useState("general");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const workflowName = useWorkflowStore((s) => s.workflowName);
   const workflowDescription = useWorkflowStore((s) => s.workflowDescription);
@@ -221,6 +227,33 @@ function WorkflowEditor() {
     }
   }
 
+  // Save as template
+  async function handleSaveAsTemplate() {
+    setSavingTemplate(true);
+    setMessage(null);
+    try {
+      const dsl = toDSL();
+      const res = await fetch("/api/workflow-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: tplName || workflowName,
+          description: tplDesc || workflowDescription,
+          icon: tplIcon,
+          category: tplCategory,
+          dsl,
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      setMessage("Saved as template!");
+      setShowSaveAsTemplate(false);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Save template failed");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Top bar */}
@@ -269,6 +302,24 @@ function WorkflowEditor() {
             {message}
           </span>
         )}
+        <Link
+          href={`/workflow/templates${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`}
+          style={{ fontSize: 11, color: "var(--text-dim)", textDecoration: "none", fontFamily: "var(--font-mono)" }}
+        >
+          Templates
+        </Link>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setTplName(workflowName);
+            setTplDesc(workflowDescription);
+            setShowSaveAsTemplate(true);
+          }}
+          disabled={!useWorkflowStore.getState().workflowId}
+          style={{ fontSize: 11 }}
+        >
+          Save as Template
+        </Button>
         <Button
           variant="primary"
           onClick={() => void handleSave()}
@@ -288,6 +339,59 @@ function WorkflowEditor() {
           {running ? "● Running..." : "Run"}
         </Button>
       </div>
+
+      {/* Save as Template dialog */}
+      {showSaveAsTemplate && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.6)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowSaveAsTemplate(false)}>
+          <div
+            style={{
+              background: "var(--bg-panel)", border: "1px solid var(--border)",
+              borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+              Save as Template
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Name</label>
+                <input value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Description</label>
+                <textarea value={tplDesc} onChange={(e) => setTplDesc(e.target.value)} rows={2} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Icon</label>
+                  <input value={tplIcon} onChange={(e) => setTplIcon(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 16, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 2 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Category</label>
+                  <select value={tplCategory} onChange={(e) => setTplCategory(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }}>
+                    <option value="general">General</option>
+                    <option value="research">Research</option>
+                    <option value="development">Development</option>
+                    <option value="content">Content</option>
+                    <option value="operations">Operations</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+              <Button variant="ghost" onClick={() => setShowSaveAsTemplate(false)}>Cancel</Button>
+              <Button variant="primary" onClick={() => void handleSaveAsTemplate()} disabled={savingTemplate}>
+                {savingTemplate ? "Saving..." : "Save Template"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Canvas */}
       <div style={{ flex: 1 }}>

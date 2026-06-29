@@ -75,6 +75,7 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
           <NavCard href="/im" title={t("home.im_title")} desc={t("home.im_desc")} />
           <NavCard href="/workflow" title="Workflow" desc="Visual pipeline editor" />
           <NavCard href="/history" title="History" desc="Workflow execution history" />
+          <NavCard href="/workflow/templates" title="Templates" desc="Reusable workflow templates" />
           <NavCard href="/graph" title={t("home.graph_title")} desc={t("home.graph_desc")} />
           <NavCard href="/skills" title={t("home.skills_title")} desc={t("home.skills_desc")} />
           <NavCard href="/models" title={t("home.models_title")} desc={t("home.models_desc")} />

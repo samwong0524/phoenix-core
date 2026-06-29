@@ -226,3 +226,20 @@ export const pipelineExecutions = pgTable("pipeline_executions", {
   pipelineIdx: index("pipeline_exec_pipeline_idx").on(t.pipelineId),
   workflowIdx: index("pipeline_exec_workflow_idx").on(t.workflowId),
 }));
+
+// 工作流模板市场（全局共享）
+export const workflowTemplates = pgTable("workflow_templates", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon").notNull().default("📋"),
+  category: text("category").notNull().default("general"),
+  tags: text("tags").array().default([]),
+  dsl: jsonb("dsl").notNull(),
+  nodeCount: integer("node_count").notNull().default(0),
+  edgeCount: integer("edge_count").notNull().default(0),
+  usageCount: integer("usage_count").notNull().default(0),
+  isBuiltin: boolean("is_builtin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
