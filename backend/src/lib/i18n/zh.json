@@ -249,5 +249,26 @@
     "working": "工作中",
     "paused": "已暂停",
     "error": "错误"
+  },
+  "templates": {
+    "title": "选择模板开始",
+    "subtitle": "预设团队配置，一键创建",
+    "back": "返回",
+    "creating": "创建中...",
+    "agents_count": "{count} 个 Agent",
+    "blank": { "name": "空白工作区", "desc": "你 + 一个通用助手，最简配置" },
+    "research-team": { "name": "研究团队", "desc": "调研 · 分析 · 撰写" },
+    "dev-team": { "name": "开发团队", "desc": "前后端 + 审查 + 测试" },
+    "content-team": { "name": "内容创作", "desc": "写作 · 编辑 · SEO" },
+    "product-team": { "name": "产品团队", "desc": "PM · 设计 · 开发 · QA" },
+    "support-team": { "name": "客服助手", "desc": "接待 · 知识库 · 升级" },
+    "welcome": {
+      "blank": "你好！我是你的助手，有什么可以帮你的？",
+      "research-team": "研究团队已就位。我负责协调，Researcher 负责调研搜集，Creator 负责撰写报告。请告诉我你的研究课题。",
+      "dev-team": "开发团队已就位：Coordinator 协调任务，Frontend 负责前端，Backend 负责后端，Reviewer 负责代码审查，QA 负责测试。请描述你的项目需求。",
+      "content-team": "内容创作团队已就位：Creator 负责写作，Editor 负责润色，SEO Specialist 负责搜索优化。请告诉我你需要什么类型的内容。",
+      "product-team": "产品团队已就位：PM 负责需求管理，Designer 负责设计，Developer 负责开发，QA 负责测试。建议从产品需求文档开始。",
+      "support-team": "客服团队已就位：Coordinator 负责分配请求，Support 处理常规咨询，Specialist 管理知识库，Escalation 处理升级问题。"
+    }
   }
 }

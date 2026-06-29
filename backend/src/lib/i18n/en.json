@@ -249,5 +249,26 @@
     "working": "Working",
     "paused": "Paused",
     "error": "Error"
+  },
+  "templates": {
+    "title": "Choose a Template",
+    "subtitle": "Pre-configured teams, one-click setup",
+    "back": "Back",
+    "creating": "Creating...",
+    "agents_count": "{count} Agents",
+    "blank": { "name": "Blank Workspace", "desc": "You + one general assistant, minimal setup" },
+    "research-team": { "name": "Research Team", "desc": "Research · Analysis · Writing" },
+    "dev-team": { "name": "Dev Team", "desc": "Frontend + Backend + Review + QA" },
+    "content-team": { "name": "Content Creation", "desc": "Writing · Editing · SEO" },
+    "product-team": { "name": "Product Team", "desc": "PM · Design · Dev · QA" },
+    "support-team": { "name": "Customer Support", "desc": "Triage · Knowledge Base · Escalation" },
+    "welcome": {
+      "blank": "Hi! I'm your assistant. How can I help?",
+      "research-team": "Research team is ready. I coordinate, Researcher gathers information, Creator writes reports. Tell me your research topic.",
+      "dev-team": "Dev team is ready: Coordinator leads, Frontend handles UI, Backend handles APIs, Reviewer reviews code, QA runs tests. Describe your project requirements.",
+      "content-team": "Content team is ready: Creator writes, Editor polishes, SEO Specialist optimizes for search. What type of content do you need?",
+      "product-team": "Product team is ready: PM manages requirements, Designer handles design, Developer implements, QA tests. Start with a product brief.",
+      "support-team": "Support team is ready: Coordinator triages, Support handles inquiries, Specialist manages knowledge base, Escalation handles complex issues."
+    }
   }
 }

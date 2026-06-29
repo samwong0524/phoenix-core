@@ -372,6 +372,147 @@ export const store = {
     return { workspaceId, humanAgentId, assistantAgentId, defaultGroupId };
   },
 
+  async createWorkspaceFromTemplate(input: {
+    template: import("@/lib/templates").WorkspaceTemplate;
+    name: string;
+    locale?: "zh" | "en";
+  }) {
+    const { template, name, locale = "zh" } = input;
+
+    // Blank template delegates to existing method for backward compatibility
+    if (template.id === "blank") {
+      return this.createWorkspaceWithDefaults({ name });
+    }
+
+    const db = getDb();
+    const workspaceId = uuid();
+    const humanAgentId = uuid();
+    const createdAt = now();
+
+    // Build agent ID map: role → uuid
+    const agentIds: Record<string, string> = {};
+    for (const agent of template.agents) {
+      agentIds[agent.role] = uuid();
+    }
+
+    // Build all agent histories in parallel
+    const historyEntries = await Promise.all(
+      template.agents.map(async (agent) => ({
+        id: agentIds[agent.role]!,
+        role: agent.role,
+        history: await initialAgentHistory({
+          agentId: agentIds[agent.role]!,
+          workspaceId,
+          role: agent.role,
+          guidance: agent.guidance,
+        }),
+      }))
+    );
+
+    const humanHistory = await initialAgentHistory({
+      agentId: humanAgentId,
+      workspaceId,
+      role: "human",
+    });
+
+    // Generate group IDs
+    const groupIds = template.groups.map(() => uuid());
+
+    await db.transaction(async (tx) => {
+      // 1. Workspace
+      await tx.insert(workspaces).values({ id: workspaceId, name, createdAt });
+
+      // 2. Agents (human + all template agents)
+      await tx.insert(agents).values([
+        {
+          id: humanAgentId,
+          workspaceId,
+          role: "human",
+          parentId: null,
+          llmHistory: humanHistory,
+          createdAt,
+        },
+        ...historyEntries.map((h) => ({
+          id: h.id,
+          workspaceId,
+          role: h.role,
+          parentId: null,
+          llmHistory: h.history,
+          createdAt,
+        })),
+      ]);
+
+      // 3. Groups + members
+      const roleToId: Record<string, string> = { human: humanAgentId, ...agentIds };
+
+      for (let i = 0; i < template.groups.length; i++) {
+        const groupDef = template.groups[i]!;
+        const groupId = groupIds[i]!;
+
+        await tx.insert(groups).values({
+          id: groupId,
+          workspaceId,
+          name: groupDef.name,
+          createdAt,
+        });
+
+        const memberIds = groupDef.members
+          .map((role) => roleToId[role])
+          .filter((id): id is string => !!id);
+
+        if (memberIds.length > 0) {
+          await tx.insert(groupMembers).values(
+            memberIds.map((userId) => ({
+              groupId,
+              userId,
+              joinedAt: createdAt,
+            }))
+          );
+        }
+      }
+    });
+
+    // 4. Emit UI bus events
+    await emitDbWrite({ workspaceId, table: "workspaces", action: "insert", recordId: workspaceId });
+    await emitDbWrite({ workspaceId, table: "agents", action: "insert" });
+    await emitDbWrite({ workspaceId, table: "groups", action: "insert", recordId: groupIds[0] });
+    await emitDbWrite({ workspaceId, table: "group_members", action: "insert" });
+
+    // 5. Welcome message — resolve from i18n JSON
+    const mainGroupId = groupIds[0]!;
+    const firstAgentId = Object.values(agentIds)[0]!;
+
+    let welcomeText = "";
+    try {
+      const messages = await import(`@/lib/i18n/${locale}.json`);
+      const keys = template.welcomeKey.split(".");
+      let val: unknown = messages;
+      for (const k of keys) {
+        val = (val as Record<string, unknown>)?.[k];
+      }
+      welcomeText = (val as string) ?? "";
+    } catch {
+      welcomeText = "";
+    }
+
+    if (welcomeText) {
+      await this.sendMessage({
+        groupId: mainGroupId,
+        senderId: firstAgentId,
+        content: welcomeText,
+        contentType: "text",
+      });
+    }
+
+    // The "assistant" agent ID: use first template agent for backward-compat field
+    return {
+      workspaceId,
+      humanAgentId,
+      assistantAgentId: firstAgentId,
+      defaultGroupId: mainGroupId,
+    };
+  },
+
   async ensureWorkspaceDefaults(input: { workspaceId: UUID }) {
     const db = getDb();
     const createdAt = now();

@@ -5,7 +5,7 @@ import { type ReactNode } from "react";
 import { useI18n, LanguageSwitcher } from "@/lib/i18n/context";
 import { Card, PageHeader, Alert } from "@/components/ui";
 import WorkspacesList from "./workspaces-list";
-import CreateWorkspace from "./create-workspace";
+import TemplateGallery from "./template-gallery";
 
 type HomePageContentProps = {
   workspaces: Array<{ id: string; name: string; createdAt: string }>;
@@ -89,12 +89,15 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
           <WorkspacesList workspaces={workspaces} />
         </div>
 
-        {/* Create Workspace */}
+        {/* Template Gallery */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-            {t("home.new_workspace")}
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+            {t("templates.title")}
           </div>
-          <CreateWorkspace />
+          <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
+            {t("templates.subtitle")}
+          </p>
+          <TemplateGallery />
         </div>
       </div>
     </div>
