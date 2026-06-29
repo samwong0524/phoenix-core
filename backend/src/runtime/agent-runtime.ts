@@ -2718,6 +2718,17 @@ export class AgentRunner {
         }
       }
 
+      // 3-round output nudge: prevent silent exploration without reply
+      if ((round + 1) % 3 === 0 && round < maxToolRounds - 1) {
+        const nudgeMsg = input.hasHumanSender
+          ? `[System] You have completed ${round + 1} tool rounds without producing a user-visible reply. You MUST call send_group_message NOW with your current findings or analysis. Do NOT make more tool calls without replying first.`
+          : `[System] You have completed ${round + 1} tool rounds. Summarize your progress via send_group_message before continuing.`;
+        input.history.push({
+          role: "system",
+          content: nudgeMsg,
+        });
+      }
+
     }
 
     // Nudge Engine: trigger periodic background analysis after tool loop completes
@@ -2726,6 +2737,23 @@ export class AgentRunner {
       this.nudgeCounter = 0;
       void this.nudgeAnalysis(input.groupId);
       void this.skillMaintenance();
+    }
+
+    // Force reply: if human was waiting and agent never sent anything, auto-send
+    if (input.hasHumanSender && !didSend) {
+      const fallbackText = assistantText || assistantThinking || "(Agent completed analysis but did not generate a response)";
+      try {
+        await store.sendMessage({
+          groupId: input.groupId,
+          senderId: this.agentId,
+          content: fallbackText,
+          contentType: "text",
+        });
+        didSend = true;
+        console.warn(`[AgentRunner] forced reply for ${this.agentId.slice(0, 8)}: loop ended without send_group_message`);
+      } catch (err) {
+        console.error(`[AgentRunner] failed to force reply:`, err);
+      }
     }
 
     return { assistantText, assistantThinking, didSend };

@@ -1,37 +1,29 @@
 /**
- * Phoenix-Core — 任务监控面板
+ * Phoenix-Core — 任务监控面板 (QoderWork CN 风格)
  *
- * 替代原来的 events-panel + details-panel（7 个调试区块）
- * 三个 Tab：Agents / Activity / Metrics
- * 面向用户（非开发者调试），开发者模式可切换回原始视图
+ * 右侧面板：待办 / 产物 / 技能与 MCP / 意识更新
+ * 原始调试面板收进"调试"按钮
  */
 
-import { memo, useState, useMemo } from "react";
-import { translateEvent, statusText, statusColor } from "./eventTranslator";
+import { memo, useState, useMemo, useCallback } from "react";
 import { TraceTree } from "./TraceTree";
 
-// ─── Types ───────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────
 
 type AgentStatus = "IDLE" | "BUSY" | "WAKING";
 
-type AgentInfo = {
-  id: string;
-  role: string;
-};
+type AgentInfo = { id: string; role: string };
+type GroupInfo = { id: string; name: string | null; memberIds: string[]; contextTokens: number };
+type VizEventItem = { id: string; kind: string; label: string; at: number };
 
-type GroupInfo = {
-  id: string;
-  name: string | null;
-  memberIds: string[];
-  contextTokens: number;
-};
+/** TodoWrite 条目 */
+type TodoItem = { status: "completed" | "in_progress" | "pending"; content: string };
 
-type VizEventItem = {
-  id: string;
-  kind: "agent" | "message" | "llm" | "tool" | "db";
-  label: string;
-  at: number;
-};
+/** 产物文件 */
+type ArtifactFile = { path: string; type: "text" | "binary" | "directory" };
+
+/** 技能条目 */
+type SkillEntry = { name: string; type: "skill" | "mcp" };
 
 type TaskMonitorProps = {
   agents: AgentInfo[];
@@ -39,345 +31,236 @@ type TaskMonitorProps = {
   groups: GroupInfo[];
   activeGroupId: string | null;
   vizEvents: VizEventItem[];
-  /** Currently streaming agent id */
   streamAgentId: string | null;
-  /** Streaming content (for agent detail expansion) */
   contentStream: string;
   toolStream: string;
-  /** Agent error */
   agentError: string | null;
-  /** LLM history raw text (for dev mode) */
   llmHistory?: string;
-  /** Locale */
   locale?: "zh" | "en";
+  /** TodoWrite 条目（从 message 中解析） */
+  todoItems?: TodoItem[];
+  /** 产物文件列表 */
+  artifacts?: ArtifactFile[];
+  /** 使用的技能/MCP */
+  usedSkills?: SkillEntry[];
 };
 
-type TabId = "agents" | "activity" | "metrics" | "trace" | "dev";
+type SectionId = "todo" | "artifacts" | "skills" | "awareness" | "debug";
 
-// ─── Component ───────────────────────────────────────────────
+// ─── Collapsible Section ────────────────────────────────────
+
+function CollapsibleSection({
+  title,
+  icon,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  icon: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={sectionStyle}>
+      <div
+        style={sectionHeaderStyle}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={sectionChevronStyle}>{open ? "▾" : "▸"}</span>
+        <span style={sectionIconStyle}>{icon}</span>
+        <span style={sectionTitleStyle}>{title}</span>
+      </div>
+      {open && <div style={sectionContentStyle}>{children}</div>}
+    </div>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────
 
 export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
   const {
-    agents,
-    agentStatusById,
-    groups,
-    activeGroupId,
-    vizEvents,
-    streamAgentId,
-    contentStream,
-    toolStream,
-    agentError,
-    llmHistory = "",
-    locale = "zh",
+    agents, agentStatusById, groups, activeGroupId,
+    vizEvents, streamAgentId, contentStream, toolStream,
+    agentError, llmHistory = "", locale = "zh",
+    todoItems, artifacts, usedSkills,
   } = props;
 
-  const [activeTab, setActiveTab] = useState<TabId>("agents");
-  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-
+  const [showDebug, setShowDebug] = useState(false);
   const isZh = locale === "zh";
 
-  // Filter out human agent for status display
+  // Filter non-human agents
   const nonHumanAgents = useMemo(
     () => agents.filter((a) => a.role !== "human"),
     [agents]
   );
 
-  // Status counts
-  const statusCounts = useMemo(() => {
-    let online = 0, busy = 0, idle = 0;
-    for (const a of nonHumanAgents) {
-      const s = agentStatusById[a.id];
-      if (s === "BUSY" || s === "WAKING") busy++;
-      else if (s === "IDLE") online++;
-      else idle++;
-    }
-    return { online, busy, idle };
-  }, [nonHumanAgents, agentStatusById]);
-
-  // Token totals
-  const totalTokens = useMemo(
-    () => groups.reduce((sum, g) => sum + (g.contextTokens || 0), 0),
-    [groups]
-  );
-
-  const activeGroup = useMemo(
-    () => groups.find((g) => g.id === activeGroupId),
-    [groups, activeGroupId]
-  );
-
   return (
     <div style={monitorStyle}>
-      {/* Tab bar */}
-      <div style={tabBarStyle}>
-        {(["agents", "activity", "metrics", "trace", "dev"] as TabId[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              ...tabStyle,
-              ...(activeTab === tab ? tabActiveStyle : {}),
-              ...(tab === "dev" ? { fontSize: 10, fontFamily: "var(--font-mono)" } : {}),
-            }}
-          >
-            {tab === "agents" && "Agents"}
-            {tab === "activity" && (isZh ? "活动" : "Activity")}
-            {tab === "metrics" && (isZh ? "度量" : "Metrics")}
-            {tab === "trace" && "Trace"}
-            {tab === "dev" && "DEV"}
-          </button>
-        ))}
+      {/* Header */}
+      <div style={headerStyle}>
+        <span style={headerTitleStyle}>{isZh ? "任务监控" : "Task Monitor"}</span>
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          style={{
+            ...headerDebugBtnStyle,
+            ...(showDebug ? { color: "var(--cyan)", background: "rgba(0,240,255,0.1)" } : {}),
+          }}
+          title={isZh ? "调试面板" : "Debug panel"}
+        >
+          ⚙️
+        </button>
       </div>
 
-      {/* Tab content */}
-      <div style={tabContentStyle}>
-        {activeTab === "agents" && (
-          <AgentsTab
-            agents={nonHumanAgents}
-            agentStatusById={agentStatusById}
-            streamAgentId={streamAgentId}
-            contentStream={contentStream}
-            toolStream={toolStream}
-            agentError={agentError}
-            expandedAgent={expandedAgent}
-            onToggle={(id) => setExpandedAgent(expandedAgent === id ? null : id)}
-            locale={locale}
-          />
-        )}
-        {activeTab === "activity" && (
-          <ActivityTab vizEvents={vizEvents} locale={locale} />
-        )}
-        {activeTab === "metrics" && (
-          <MetricsTab
-            totalTokens={totalTokens}
-            activeGroup={activeGroup}
-            agentCount={nonHumanAgents.length}
-            statusCounts={statusCounts}
-            locale={locale}
-          />
-        )}
-        {activeTab === "trace" && (
-          <TraceTree llmHistory={llmHistory ?? ""} streamAgentId={streamAgentId} />
-        )}
-        {activeTab === "dev" && (
-          <DevTab
-            vizEvents={vizEvents}
-            llmHistory={llmHistory}
-            contentStream={contentStream}
-            toolStream={toolStream}
-            agentError={agentError}
-            streamAgentId={streamAgentId}
-            locale={locale}
-          />
+      {/* Scrollable content */}
+      <div style={scrollStyle}>
+        {/* 待办 */}
+        <CollapsibleSection title={isZh ? "待办" : "Todo"} icon="✓" defaultOpen={!!todoItems?.length}>
+          {todoItems && todoItems.length > 0 ? (
+            todoItems.map((item, i) => (
+              <div key={i} style={todoItemStyle}>
+                <span style={todoCheckStyle(item.status)}>
+                  {item.status === "completed" ? "✅" : item.status === "in_progress" ? "🔄" : "⏳"}
+                </span>
+                <span style={todoTextStyle(item.status)}>{item.content}</span>
+              </div>
+            ))
+          ) : (
+            <div style={emptyHintStyle}>{isZh ? "暂无待办任务" : "No tasks yet"}</div>
+          )}
+        </CollapsibleSection>
+
+        {/* 产物 */}
+        <CollapsibleSection title={isZh ? "产物" : "Artifacts"} icon="📦" defaultOpen={!!artifacts?.length}>
+          {artifacts && artifacts.length > 0 ? (
+            <div>
+              <div style={artifactsSubLabelStyle}>{isZh ? "文件" : "Files"}</div>
+              {artifacts.map((file, i) => (
+                <div key={i} style={artifactItemStyle}>
+                  <span style={artifactIconStyle}>{file.type === "directory" ? "📁" : "📄"}</span>
+                  <span style={artifactNameStyle}>{file.path}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={emptyHintStyle}>{isZh ? "暂无产物" : "No artifacts yet"}</div>
+          )}
+        </CollapsibleSection>
+
+        {/* 技能与 MCP */}
+        <CollapsibleSection title={isZh ? "技能与 MCP" : "Skills & MCP"} icon="" defaultOpen={!!usedSkills?.length}>
+          {usedSkills && usedSkills.length > 0 ? (
+            usedSkills.map((skill, i) => (
+              <div key={i} style={skillItemStyle}>
+                <span style={skillIconStyle}>
+                  {skill.type === "mcp" ? "" : "🔧"}
+                </span>
+                <span style={skillNameStyle}>{skill.name}</span>
+              </div>
+            ))
+          ) : (
+            <div style={emptyHintStyle}>{isZh ? "暂无技能/MCP" : "No skills/MCP yet"}</div>
+          )}
+        </CollapsibleSection>
+
+        {/* 意识更新 */}
+        <CollapsibleSection title={isZh ? "意识更新" : "Awareness"} icon="💡" defaultOpen={false}>
+          <div style={awarenessGridStyle}>
+            <div style={awarenessBtnStyle}>
+              <span>🧠</span>
+              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{isZh ? "记忆" : "Memory"}</span>
+            </div>
+            <div style={awarenessBtnStyle}>
+              <span>📅</span>
+              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{isZh ? "日历" : "Calendar"}</span>
+            </div>
+          </div>
+        </CollapsibleSection>
+
+        {/* 调试面板（收拢状态） */}
+        {showDebug && (
+          <CollapsibleSection title={isZh ? "调试" : "Debug"} icon="" defaultOpen>
+            <DebugPanel
+              vizEvents={vizEvents}
+              llmHistory={llmHistory}
+              contentStream={contentStream}
+              toolStream={toolStream}
+              agentError={agentError}
+              streamAgentId={streamAgentId}
+              locale={locale}
+            />
+          </CollapsibleSection>
         )}
       </div>
 
-      {/* Status bar (always visible) */}
+      {/* Status bar */}
       <div style={statusBarStyle}>
-        <StatusDot color="var(--green)" count={statusCounts.online} label={isZh ? "在线" : "Online"} />
-        <StatusDot color="var(--magenta)" count={statusCounts.busy} label={isZh ? "忙碌" : "Busy"} />
-        <StatusDot color="var(--text-dim)" count={statusCounts.idle} label={isZh ? "空闲" : "Idle"} />
+        <StatusDot
+          color="var(--green)"
+          count={nonHumanAgents.filter((a) => agentStatusById[a.id] === "IDLE").length}
+          label={isZh ? "在线" : "Online"}
+        />
+        <StatusDot
+          color="var(--magenta)"
+          count={nonHumanAgents.filter((a) => agentStatusById[a.id] === "BUSY" || agentStatusById[a.id] === "WAKING").length}
+          label={isZh ? "忙碌" : "Busy"}
+        />
+        <StatusDot
+          color="var(--text-dim)"
+          count={nonHumanAgents.filter((a) => !agentStatusById[a.id]).length}
+          label={isZh ? "空闲" : "Idle"}
+        />
       </div>
     </div>
   );
 });
 
-// ─── Agents Tab ──────────────────────────────────────────────
+// ─── Debug Panel (original tabs) ────────────────────────────
 
-function AgentsTab({
-  agents,
-  agentStatusById,
-  streamAgentId,
-  contentStream,
-  toolStream,
-  agentError,
-  expandedAgent,
-  onToggle,
-  locale,
-}: {
-  agents: AgentInfo[];
-  agentStatusById: Record<string, AgentStatus>;
-  streamAgentId: string | null;
-  contentStream: string;
-  toolStream: string;
-  agentError: string | null;
-  expandedAgent: string | null;
-  onToggle: (id: string) => void;
-  locale: "zh" | "en";
-}) {
+function DebugPanel({
+  vizEvents, llmHistory, contentStream, toolStream, agentError, streamAgentId, locale,
+}: Omit<TaskMonitorProps, "agents" | "agentStatusById" | "groups" | "activeGroupId" | "todoItems" | "artifacts" | "usedSkills">) {
+  const [tab, setTab] = useState<"trace" | "events" | "raw">("trace");
   const isZh = locale === "zh";
 
-  if (agents.length === 0) {
-    return (
-      <div style={emptyStyle}>
-        {isZh ? "暂无活跃 Agent" : "No active agents"}
-      </div>
-    );
-  }
-
   return (
-    <div style={agentListStyle}>
-      {agents.map((agent) => {
-        const status = agentStatusById[agent.id];
-        const isStreaming = agent.id === streamAgentId;
-        const isExpanded = expandedAgent === agent.id;
-        const color = statusColor(status);
-
-        return (
-          <div key={agent.id} style={agentCardStyle}>
-            <div
-              style={agentCardHeaderStyle}
-              onClick={() => onToggle(agent.id)}
-            >
-              <span style={{ ...agentDotStyle, background: color }} />
-              <span style={agentRoleStyle}>
-                {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)}
-              </span>
-              <span style={{ ...agentStatusTextStyle, color }}>
-                {statusText(status, locale)}
-              </span>
-              {isStreaming && (
-                <span style={streamingBadgeStyle}>
-                  {isZh ? "输出中" : "Streaming"}
-                </span>
-              )}
+    <div>
+      <div style={{ display: "flex", gap: 2, marginBottom: 6 }}>
+        {(["trace", "events", "raw"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              flex: 1, padding: "4px 8px", fontSize: 10, fontFamily: "var(--font-mono)",
+              background: tab === t ? "rgba(0,240,255,0.1)" : "var(--bg-card)",
+              color: tab === t ? "var(--cyan)" : "var(--text-dim)",
+              border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer",
+            }}
+          >
+            {t === "trace" ? "Trace" : t === "events" ? (isZh ? "事件" : "Events") : "Raw"}
+          </button>
+        ))}
+      </div>
+      {tab === "trace" && <TraceTree llmHistory={llmHistory ?? ""} streamAgentId={streamAgentId} />}
+      {tab === "events" && (
+        <div style={{ maxHeight: 200, overflow: "auto" }}>
+          {[...vizEvents].reverse().slice(0, 50).map((evt) => (
+            <div key={evt.id} style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-dim)", padding: "2px 0", borderBottom: "1px solid var(--border)" }}>
+              [{evt.kind}] {evt.label}
             </div>
-            {isExpanded && (
-              <div style={agentDetailStyle}>
-                {isStreaming && contentStream ? (
-                  <div style={detailBlockStyle}>
-                    <div style={detailLabelStyle}>
-                      {isZh ? "当前输出" : "Current output"}
-                    </div>
-                    <div style={detailContentStyle}>
-                      {contentStream.slice(0, 500)}
-                      {contentStream.length > 500 ? "..." : ""}
-                    </div>
-                  </div>
-                ) : null}
-                {isStreaming && toolStream ? (
-                  <div style={detailBlockStyle}>
-                    <div style={detailLabelStyle}>
-                      {isZh ? "工具调用" : "Tool calls"}
-                    </div>
-                    <div style={detailContentStyle}>{toolStream.slice(0, 300)}</div>
-                  </div>
-                ) : null}
-                {isStreaming && agentError ? (
-                  <div style={{ ...detailBlockStyle, color: "var(--red)" }}>
-                    {agentError}
-                  </div>
-                ) : null}
-                {!isStreaming && (
-                  <div style={detailBlockStyle}>
-                    <span style={{ color: "var(--text-dim)", fontSize: 11 }}>
-                      {isZh ? "ID: " : "ID: "}
-                      {agent.id.slice(0, 8)}...
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      )}
+      {tab === "raw" && (
+        <pre style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-secondary)", maxHeight: 200, overflow: "auto", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          {contentStream || "—"}
+        </pre>
+      )}
     </div>
   );
 }
 
-// ─── Activity Tab ────────────────────────────────────────────
-
-function ActivityTab({
-  vizEvents,
-  locale,
-}: {
-  vizEvents: VizEventItem[];
-  locale: "zh" | "en";
-}) {
-  const isZh = locale === "zh";
-
-  if (vizEvents.length === 0) {
-    return (
-      <div style={emptyStyle}>
-        {isZh ? "暂无活动" : "No activity yet"}
-      </div>
-    );
-  }
-
-  return (
-    <div style={activityListStyle}>
-      {[...vizEvents].reverse().map((evt) => {
-        const { text, icon } = translateEvent(evt, locale);
-        const time = new Date(evt.at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        });
-
-        return (
-          <div key={evt.id} style={activityItemStyle}>
-            <span style={activityIconStyle}>{icon}</span>
-            <span style={activityTextStyle}>{text}</span>
-            <span style={activityTimeStyle}>{time}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Metrics Tab ─────────────────────────────────────────────
-
-function MetricsTab({
-  totalTokens,
-  activeGroup,
-  agentCount,
-  statusCounts,
-  locale,
-}: {
-  totalTokens: number;
-  activeGroup: GroupInfo | undefined;
-  agentCount: number;
-  statusCounts: { online: number; busy: number; idle: number };
-  locale: "zh" | "en";
-}) {
-  const isZh = locale === "zh";
-  const groupTokens = activeGroup?.contextTokens ?? 0;
-
-  return (
-    <div style={metricsGridStyle}>
-      <MetricCard
-        label={isZh ? "总 Token" : "Total Tokens"}
-        value={totalTokens ? `${(totalTokens / 1000).toFixed(1)}k` : "-"}
-        color="var(--cyan)"
-      />
-      <MetricCard
-        label={isZh ? "当前会话" : "Current Session"}
-        value={groupTokens ? `${(groupTokens / 1000).toFixed(1)}k` : "-"}
-        color="var(--cyan)"
-      />
-      <MetricCard
-        label={isZh ? "Agent 数" : "Agents"}
-        value={String(agentCount)}
-        color="var(--yellow)"
-      />
-      <MetricCard
-        label={isZh ? "预估成本" : "Est. Cost"}
-        value={totalTokens ? `$${(totalTokens * 0.000003).toFixed(2)}` : "-"}
-        color="var(--green)"
-      />
-    </div>
-  );
-}
-
-function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div style={metricCardStyle}>
-      <div style={metricLabelStyle}>{label}</div>
-      <div style={{ ...metricValueStyle, color }}>{value}</div>
-    </div>
-  );
-}
+// ─── Status Dot ──────────────────────────────────────────────
 
 function StatusDot({ color, count, label }: { color: string; count: number; label: string }) {
   return (
@@ -389,374 +272,133 @@ function StatusDot({ color, count, label }: { color: string; count: number; labe
   );
 }
 
-// ─── Dev Tab ─────────────────────────────────────────────────
-
-function DevTab({
-  vizEvents,
-  llmHistory,
-  contentStream,
-  toolStream,
-  agentError,
-  streamAgentId,
-  locale,
-}: {
-  vizEvents: VizEventItem[];
-  llmHistory: string;
-  contentStream: string;
-  toolStream: string;
-  agentError: string | null;
-  streamAgentId: string | null;
-  locale: "zh" | "en";
-}) {
-  const isZh = locale === "zh";
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-      {/* Streaming info */}
-      <div style={devSectionStyle}>
-        <div style={devLabelStyle}>
-          <span style={devDotStyle} />
-          {isZh ? "实时内容" : "Realtime content"}
-          {contentStream ? <span style={devBadgeStyle}>●</span> : null}
-        </div>
-        <pre style={devPreStyle}>{contentStream || (isZh ? "—" : "—")}</pre>
-      </div>
-
-      <div style={devSectionStyle}>
-        <div style={devLabelStyle}>
-          <span style={devDotStyle} />
-          {isZh ? "实时推理" : "Realtime reasoning"}
-        </div>
-        <pre style={devPreStyle}>{isZh ? "(已合并到内容流)" : "(merged into content stream)"}</pre>
-      </div>
-
-      <div style={devSectionStyle}>
-        <div style={devLabelStyle}>
-          <span style={devDotStyle} />
-          {isZh ? "工具调用" : "Tool calls"}
-          {toolStream ? <span style={devBadgeStyle}>●</span> : null}
-        </div>
-        <pre style={devPreStyle}>{toolStream || "—"}</pre>
-      </div>
-
-      {agentError ? (
-        <div style={{ ...devSectionStyle, color: "var(--red)", border: "1px solid rgba(255,59,59,0.2)", borderRadius: "var(--radius-sm)", padding: "var(--space-2)" }}>
-          {agentError}
-        </div>
-      ) : null}
-
-      {/* LLM History */}
-      <div style={devSectionStyle}>
-        <div style={devLabelStyle}>
-          <span style={devDotStyle} />
-          LLM history
-          {streamAgentId ? <span style={devBadgeStyle}>streaming: {streamAgentId.slice(0, 8)}</span> : null}
-        </div>
-        <pre style={{ ...devPreStyle, maxHeight: 200 }}>
-          {llmHistory || "—"}
-        </pre>
-      </div>
-
-      {/* Raw events */}
-      <div style={devSectionStyle}>
-        <div style={devLabelStyle}>
-          <span style={devDotStyle} />
-          {isZh ? "原始事件" : "Raw events"}
-          <span style={devBadgeStyle}>{vizEvents.length}</span>
-        </div>
-        <div style={{ maxHeight: 160, overflow: "auto" }}>
-          {vizEvents.length === 0 ? (
-            <pre style={devPreStyle}>—</pre>
-          ) : (
-            vizEvents.slice(-20).reverse().map((evt) => (
-              <div key={evt.id} style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-dim)", padding: "2px 0", borderBottom: "1px solid var(--border)" }}>
-                <span style={{ color: evt.kind === "agent" ? "var(--green)" : evt.kind === "llm" ? "var(--cyan)" : evt.kind === "tool" ? "var(--magenta)" : "var(--text-secondary)" }}>
-                  [{evt.kind}]
-                </span>{" "}
-                {evt.label}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Styles ──────────────────────────────────────────────────
 
 const monitorStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  background: "var(--bg-panel)",
-  borderLeft: "1px solid var(--border)",
-  fontFamily: "var(--font-body)",
-  overflow: "hidden",
+  display: "flex", flexDirection: "column", height: "100%",
+  background: "var(--bg-panel)", borderLeft: "1px solid var(--border)",
+  fontFamily: "var(--font-body)", overflow: "hidden",
 };
 
-const tabBarStyle: React.CSSProperties = {
-  display: "flex",
-  borderBottom: "1px solid var(--border)",
-  padding: "0 var(--space-2)",
-  flexShrink: 0,
+const headerStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", justifyContent: "space-between",
+  padding: "12px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0,
 };
 
-const tabStyle: React.CSSProperties = {
-  flex: 1,
-  padding: "10px 8px",
-  background: "none",
-  border: "none",
-  borderBottom: "2px solid transparent",
-  color: "var(--text-dim)",
-  fontSize: 11,
-  fontWeight: 500,
-  cursor: "pointer",
-  transition: "all 0.2s",
-  fontFamily: "var(--font-body)",
+const headerTitleStyle: React.CSSProperties = {
+  fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
 };
 
-const tabActiveStyle: React.CSSProperties = {
-  color: "var(--cyan)",
-  borderBottomColor: "var(--cyan)",
+const headerDebugBtnStyle: React.CSSProperties = {
+  background: "none", border: "1px solid var(--border)", borderRadius: 4,
+  padding: "2px 6px", cursor: "pointer", fontSize: 12, color: "var(--text-dim)",
 };
 
-const tabContentStyle: React.CSSProperties = {
-  flex: 1,
-  overflow: "auto",
-  padding: "var(--space-2)",
+const scrollStyle: React.CSSProperties = {
+  flex: 1, overflow: "auto", padding: "var(--space-2)",
 };
 
-const emptyStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  height: 120,
-  color: "var(--text-dim)",
+const sectionStyle: React.CSSProperties = {
+  marginBottom: 10,
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8,
+  padding: "8px 6px", cursor: "pointer",
+  borderBottom: "1px solid var(--border)", marginBottom: 6,
+};
+
+const sectionChevronStyle: React.CSSProperties = {
+  fontSize: 10, color: "var(--text-dim)", width: 12, textAlign: "center",
+};
+
+const sectionIconStyle: React.CSSProperties = {
   fontSize: 12,
 };
 
-// Agents tab
-const agentListStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-2)",
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: 12, fontWeight: 500, color: "var(--text-secondary)",
 };
 
-const agentCardStyle: React.CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-sm)",
-  overflow: "hidden",
+const sectionContentStyle: React.CSSProperties = {
+  paddingLeft: 4,
 };
 
-const agentCardHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  padding: "8px 10px",
-  cursor: "pointer",
+const emptyHintStyle: React.CSSProperties = {
+  fontSize: 11, color: "var(--text-dim)", padding: "8px 4px", fontStyle: "italic",
 };
 
-const agentDotStyle: React.CSSProperties = {
-  width: 8,
-  height: 8,
-  borderRadius: "50%",
-  flexShrink: 0,
+// Todo items
+const todoItemStyle: React.CSSProperties = {
+  display: "flex", alignItems: "flex-start", gap: 6, padding: "4px 0",
 };
 
-const agentRoleStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: "var(--text-primary)",
-  flex: 1,
+const todoCheckStyle = (status: string): React.CSSProperties => ({
+  fontSize: 12, flexShrink: 0, opacity: status === "completed" ? 0.5 : 1,
+});
+
+const todoTextStyle = (status: string): React.CSSProperties => ({
+  fontSize: 12, color: status === "completed" ? "var(--text-dim)" : "var(--text-secondary)",
+  textDecoration: status === "completed" ? "line-through" : "none",
+});
+
+// Artifacts
+const artifactsSubLabelStyle: React.CSSProperties = {
+  fontSize: 10, color: "var(--text-dim)", textTransform: "uppercase",
+  letterSpacing: "0.5px", marginBottom: 4,
 };
 
-const agentStatusTextStyle: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
+const artifactItemStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 6, padding: "4px 0",
 };
 
-const streamingBadgeStyle: React.CSSProperties = {
-  fontSize: 9,
-  padding: "1px 6px",
-  borderRadius: "var(--radius-full)",
-  background: "rgba(0, 255, 136, 0.15)",
-  color: "var(--green)",
-  fontWeight: 500,
+const artifactIconStyle: React.CSSProperties = { fontSize: 12, flexShrink: 0 };
+
+const artifactNameStyle: React.CSSProperties = {
+  fontSize: 11, color: "var(--text-secondary)", wordBreak: "break-all",
 };
 
-const agentDetailStyle: React.CSSProperties = {
-  padding: "0 10px 8px",
-  borderTop: "1px solid var(--border)",
-  marginTop: 2,
+// Skills
+const skillItemStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 6, padding: "4px 0",
 };
 
-const detailBlockStyle: React.CSSProperties = {
-  marginTop: "var(--space-2)",
+const skillIconStyle: React.CSSProperties = { fontSize: 12, flexShrink: 0 };
+
+const skillNameStyle: React.CSSProperties = {
+  fontSize: 11, color: "var(--text-secondary)",
 };
 
-const detailLabelStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: "var(--text-dim)",
-  marginBottom: 2,
-  textTransform: "uppercase",
-  letterSpacing: "0.5px",
+// Awareness
+const awarenessGridStyle: React.CSSProperties = {
+  display: "flex", gap: 8, padding: "4px 0",
 };
 
-const detailContentStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: "var(--text-secondary)",
-  fontFamily: "var(--font-mono)",
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-all",
-  maxHeight: 120,
-  overflow: "auto",
-};
-
-// Activity tab
-const activityListStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 1,
-};
-
-const activityItemStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  padding: "6px 8px",
-  borderRadius: "var(--radius-sm)",
-  transition: "background 0.15s",
-};
-
-const activityIconStyle: React.CSSProperties = {
-  fontSize: 12,
-  flexShrink: 0,
-  width: 18,
-  textAlign: "center",
-};
-
-const activityTextStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: "var(--text-secondary)",
-  flex: 1,
-  lineHeight: 1.4,
-};
-
-const activityTimeStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: "var(--text-dim)",
-  fontFamily: "var(--font-mono)",
-  flexShrink: 0,
-};
-
-// Metrics tab
-const metricsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "var(--space-2)",
-  padding: "var(--space-1)",
-};
-
-const metricCardStyle: React.CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-sm)",
-  padding: "10px 12px",
-};
-
-const metricLabelStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: "var(--text-dim)",
-  marginBottom: 4,
-  textTransform: "uppercase",
-  letterSpacing: "0.5px",
-};
-
-const metricValueStyle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 600,
-  fontFamily: "var(--font-mono)",
+const awarenessBtnStyle: React.CSSProperties = {
+  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+  padding: "8px 16px", borderRadius: 4, border: "1px solid var(--border)",
+  cursor: "pointer", background: "var(--bg-card)",
 };
 
 // Status bar
 const statusBarStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-around",
-  padding: "8px 12px",
-  borderTop: "1px solid var(--border)",
-  flexShrink: 0,
+  display: "flex", justifyContent: "space-around",
+  padding: "8px 12px", borderTop: "1px solid var(--border)", flexShrink: 0,
 };
 
 const statusDotContainerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
+  display: "flex", alignItems: "center", gap: 4,
 };
 
 const statusDotStyle: React.CSSProperties = {
-  width: 6,
-  height: 6,
-  borderRadius: "50%",
+  width: 6, height: 6, borderRadius: "50%",
 };
 
 const statusDotLabelStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: "var(--text-dim)",
+  fontSize: 11, color: "var(--text-dim)",
 };
 
 const statusDotCountStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: "var(--text-secondary)",
+  fontSize: 12, fontWeight: 600, color: "var(--text-secondary)",
   fontFamily: "var(--font-mono)",
-};
-
-// Dev tab
-const devSectionStyle: React.CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-sm)",
-  padding: "var(--space-2)",
-};
-
-const devLabelStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  fontSize: 10,
-  fontWeight: 500,
-  color: "var(--text-dim)",
-  textTransform: "uppercase",
-  letterSpacing: "0.5px",
-  marginBottom: 4,
-};
-
-const devDotStyle: React.CSSProperties = {
-  width: 6,
-  height: 6,
-  borderRadius: "50%",
-  background: "var(--cyan)",
-};
-
-const devBadgeStyle: React.CSSProperties = {
-  marginLeft: "auto",
-  fontSize: 9,
-  padding: "1px 6px",
-  borderRadius: "var(--radius-full)",
-  background: "rgba(0, 240, 255, 0.1)",
-  color: "var(--cyan)",
-  fontWeight: 500,
-};
-
-const devPreStyle: React.CSSProperties = {
-  margin: 0,
-  whiteSpace: "pre-wrap",
-  fontSize: 10,
-  fontFamily: "var(--font-mono)",
-  color: "var(--text-secondary)",
-  maxHeight: 100,
-  overflow: "auto",
-  wordBreak: "break-all",
 };

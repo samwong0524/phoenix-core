@@ -318,7 +318,7 @@ textarea {
   height: 100vh;
   width: 100vw;
   display: grid;
-  grid-template-columns: 260px 1fr auto;
+  grid-template-columns: 260px 1fr 280px;
   position: relative;
   z-index: var(--z-content);
   background: var(--bg-void);
@@ -328,14 +328,14 @@ textarea {
 /* Large desktop: wider sidebar */
 @media (min-width: 1280px) {
   .app {
-    grid-template-columns: 300px 1fr auto;
+    grid-template-columns: 300px 1fr 300px;
   }
 }
 
 /* Tablet: sidebar narrows */
 @media (max-width: 1024px) {
   .app {
-    grid-template-columns: 200px 1fr auto;
+    grid-template-columns: 200px 1fr 260px;
   }
 }
 

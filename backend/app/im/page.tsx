@@ -319,6 +319,16 @@ function IMPageInner() {
   const [contentStream, setContentStream] = useState("");
   const [reasoningStream, setReasoningStream] = useState("");
   const [toolStream, setToolStream] = useState("");
+  const [agentActivity, setAgentActivity] = useState<string | null>(null); // "thinking" | "executing" | "generating" | null
+  const [agentActivityTool, setAgentActivityTool] = useState<string>("");
+  const activityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setActivityDebounced = useCallback((activity: string | null, tool = "") => {
+    if (activityDebounceRef.current) clearTimeout(activityDebounceRef.current);
+    activityDebounceRef.current = setTimeout(() => {
+      setAgentActivity(activity);
+      setAgentActivityTool(tool);
+    }, 150);
+  }, []);
   const [llmHistory, setLlmHistory] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [vizEvents, setVizEvents] = useState<VizEvent[]>([]);
@@ -687,6 +697,72 @@ function IMPageInner() {
     return group.memberIds.find((id) => id !== session.humanAgentId) ?? session.assistantAgentId;
   }, [activeGroupId, groups, session]);
 
+  // ── Parse llmHistory → TaskMonitor data ──────────────────────
+  const taskMonitorData = useMemo(() => {
+    const todos: Array<{ status: "completed" | "in_progress" | "pending"; content: string }> = [];
+    const artifactSet = new Map<string, "text" | "binary" | "directory">();
+    const skillSet = new Map<string, "skill" | "mcp">();
+
+    let entries: any[] = [];
+    try {
+      entries = JSON.parse(llmHistory || "[]");
+    } catch { entries = []; }
+
+    for (const entry of entries) {
+      if (entry?.role !== "assistant" || !Array.isArray(entry.tool_calls)) continue;
+      for (const call of entry.tool_calls) {
+        const fnName: string = call?.function?.name ?? "";
+        let args: any = {};
+        try { args = JSON.parse(call?.function?.arguments ?? "{}"); } catch {}
+
+        // TodoWrite → extract todos
+        if (fnName === "TodoWrite" && Array.isArray(args.todos)) {
+          todos.length = 0; // latest wins
+          for (const t of args.todos) {
+            if (typeof t?.content === "string" && typeof t?.status === "string") {
+              todos.push({ status: t.status, content: t.content });
+            }
+          }
+        }
+
+        // Write / Edit / NotebookEdit → file artifact
+        if (fnName === "Write" && typeof args.file_path === "string") {
+          artifactSet.set(args.file_path, "text");
+        }
+        if (fnName === "Edit" && typeof args.file_path === "string") {
+          artifactSet.set(args.file_path, "text");
+        }
+        if (fnName === "NotebookEdit" && typeof args.notebook_path === "string") {
+          artifactSet.set(args.notebook_path, "text");
+        }
+
+        // Bash → output files (heuristic: look for > path or tee path)
+        if (fnName === "Bash" && typeof args.command === "string") {
+          const m = args.command.match(/(?:>\s*|tee\s+)([^\s;|&]+\.\w+)/);
+          if (m) artifactSet.set(m[1], "text");
+        }
+
+        // Skill usage
+        if (fnName === "Skill" && typeof args.skill === "string") {
+          skillSet.set(args.skill, "skill");
+        }
+
+        // MCP tools (mcp__ prefix)
+        if (fnName.startsWith("mcp__")) {
+          const parts = fnName.split("__");
+          const serverName = parts[1] ?? fnName;
+          skillSet.set(serverName, "mcp");
+        }
+      }
+    }
+
+    return {
+      todoItems: todos,
+      artifacts: Array.from(artifactSet).map(([path, type]) => ({ path, type })),
+      usedSkills: Array.from(skillSet).map(([name, type]) => ({ name, type })),
+    };
+  }, [llmHistory]);
+
   const refreshAgents = useCallback(async (s: WorkspaceDefaults) => {
     const { agents } = await api<{ agents: AgentMeta[] }>(
       `/api/agents?workspaceId=${encodeURIComponent(s.workspaceId)}&meta=true`
@@ -997,10 +1073,13 @@ function IMPageInner() {
             if (chunk) {
               if (payload.data.kind === "content") {
                 setContentStream((t) => t + chunk);
+                setActivityDebounced("generating");
               } else if (payload.data.kind === "reasoning") {
                 setReasoningStream((t) => t + chunk);
+                setActivityDebounced("thinking");
               } else {
-                const name = payload.data.tool_call_name ?? payload.data.tool_call_id ?? "tool_call";
+                const name = payload.data.tool_call_name ?? payload.data.tool_call_id ?? "tool";
+                setActivityDebounced("executing", name);
                 const key = payload.data.tool_call_id ?? name;
                 const buffers =
                   payload.data.kind === "tool_result"
@@ -1023,6 +1102,7 @@ function IMPageInner() {
             setContentStream("");
             setReasoningStream("");
             setToolStream("");
+            setActivityDebounced("thinking");
             toolCallBuffersRef.current = new Map();
             toolResultBuffersRef.current = new Map();
             return;
@@ -1036,6 +1116,8 @@ function IMPageInner() {
             return;
           }
           if (payload.event === "agent.done") {
+            setAgentActivity(null);
+            setAgentActivityTool("");
             setAgentError(null);
             toolCallBuffersRef.current = new Map();
             toolResultBuffersRef.current = new Map();
@@ -2181,6 +2263,25 @@ const renderContent = useCallback((content: string, contentType: string, message
             : `1fr ${MID_SPLITTER_SIZE}px minmax(${MID_GRAPH_MIN_HEIGHT}px, 1fr)`
         }}>
           <div className="chat">
+            {/* Agent activity status indicator */}
+            {agentActivity && (
+              <div className="chat-agent-status" style={{
+                position: "sticky", top: 0, zIndex: 10,
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 12px", fontSize: 11, fontFamily: "var(--font-mono)",
+                background: agentActivity === "thinking" ? "rgba(255,215,0,0.08)" : agentActivity === "executing" ? "rgba(0,255,255,0.08)" : "rgba(0,255,136,0.08)",
+                borderBottom: agentActivity === "thinking" ? "1px solid rgba(255,215,0,0.2)" : agentActivity === "executing" ? "1px solid rgba(0,255,255,0.2)" : "1px solid rgba(0,255,136,0.2)",
+                color: agentActivity === "thinking" ? "var(--yellow)" : agentActivity === "executing" ? "var(--cyan)" : "var(--green)",
+                transition: "all 0.2s ease",
+              }}>
+                <span style={{ fontSize: 14, lineHeight: 1 }}>
+                  {agentActivity === "thinking" ? "🧠" : agentActivity === "executing" ? "🔧" : "💬"}
+                </span>
+                <span>
+                  {agentActivity === "thinking" ? "深度思考…" : agentActivity === "executing" ? `执行中 ${agentActivityTool.length > 16 ? agentActivityTool.slice(0, 14) + "…" : agentActivityTool}…` : "生成中…"}
+                </span>
+              </div>
+            )}
             <IMMessageList
               messages={messages}
               humanAgentId={session?.humanAgentId ?? null}
@@ -2610,6 +2711,9 @@ const renderContent = useCallback((content: string, contentType: string, message
           agentError={agentError}
           llmHistory={llmHistory}
           locale={locale}
+          todoItems={taskMonitorData.todoItems}
+          artifacts={taskMonitorData.artifacts}
+          usedSkills={taskMonitorData.usedSkills}
         />
       }
     />
