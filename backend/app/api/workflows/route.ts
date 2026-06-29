@@ -28,6 +28,14 @@ export async function POST(req: Request) {
     name: string;
     description?: string;
     creatorId: string;
+    dsl?: {
+      nodes: Array<{
+        id: string;
+        type: string;
+        data: { label?: string; role?: string; description?: string; expectedOutput?: string };
+      }>;
+      edges: Array<{ id: string; source: string; target: string }>;
+    };
   };
 
   if (!body.groupId || !body.name || !body.creatorId) {
@@ -44,5 +52,33 @@ export async function POST(req: Request) {
                 ${body.creatorId}, 'draft', ${now}, ${now})`
   );
 
-  return Response.json({ id, name: body.name, status: "draft" }, { status: 201 });
+  // Create tasks from DSL if provided
+  if (body.dsl) {
+    const nodeMap = new Map<string, string>();
+    for (const n of body.dsl.nodes) {
+      if (n.type === "agent") {
+        nodeMap.set(n.id, n.data.label || n.id);
+      }
+    }
+
+    for (const n of body.dsl.nodes) {
+      if (n.type !== "agent") continue;
+
+      const dependsOn = body.dsl.edges
+        .filter((e) => e.target === n.id)
+        .map((e) => nodeMap.get(e.source))
+        .filter(Boolean);
+
+      const taskId = crypto.randomUUID();
+      await db.execute(
+        sql`INSERT INTO tasks (id, workflow_id, name, description, assignee_role, expected_output, depends_on, status, created_at)
+            VALUES (${taskId}, ${id}, ${n.data.label || "Untitled Step"},
+                    ${n.data.description ?? null}, ${n.data.role ?? null},
+                    ${n.data.expectedOutput ?? null}, ${dependsOn},
+                    'pending', ${now})`
+      );
+    }
+  }
+
+  return Response.json({ workflowId: id, name: body.name, status: "draft" }, { status: 201 });
 }

@@ -1,0 +1,246 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
+import { useWorkflowStore, type WorkflowState } from "../_components/workflow/store";
+import { Button } from "@/components/ui";
+
+function WorkflowEditor() {
+  const searchParams = useSearchParams();
+  const workspaceId = searchParams.get("workspaceId") || "";
+  const workflowId = searchParams.get("workflowId");
+
+  const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const workflowName = useWorkflowStore((s) => s.workflowName);
+  const workflowDescription = useWorkflowStore((s) => s.workflowDescription);
+  const workflowStatus = useWorkflowStore((s) => s.workflowStatus);
+  const setWorkflowMeta = useWorkflowStore((s) => s.setWorkflowMeta);
+  const setAvailableRoles = useWorkflowStore((s) => s.setAvailableRoles);
+  const loadFromDSL = useWorkflowStore((s) => s.loadFromDSL);
+  const toDSL = useWorkflowStore((s) => s.toDSL);
+  const resetExecutionStatus = useWorkflowStore((s) => s.resetExecutionStatus);
+
+  // Load workspace agents for role selection
+  useEffect(() => {
+    if (!workspaceId) return;
+    fetch(`/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const roles = (data.agents || [])
+          .map((a: any) => a.role)
+          .filter((r: string) => r && r !== "human")
+          .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i);
+        setAvailableRoles(roles);
+      })
+      .catch(() => {});
+  }, [workspaceId, setAvailableRoles]);
+
+  // Load existing workflow if editing
+  useEffect(() => {
+    if (!workflowId) return;
+    fetch(`/api/workflows/${encodeURIComponent(workflowId)}/dsl`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.dsl) {
+          loadFromDSL(data.dsl);
+          setWorkflowMeta({
+            id: data.workflow.id,
+            name: data.workflow.name,
+            description: data.workflow.description || "",
+            status: data.workflow.status,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [workflowId, loadFromDSL, setWorkflowMeta]);
+
+  // Save workflow
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const dsl = toDSL();
+
+      // Get group ID for this workspace
+      const groupsRes = await fetch(
+        `/api/groups?workspaceId=${encodeURIComponent(workspaceId)}`
+      );
+      const groupsData = await groupsRes.json();
+      const groupId = groupsData.groups?.[0]?.id;
+      if (!groupId) throw new Error("No group found for workspace");
+
+      // Get human agent ID as creator
+      const agentsRes = await fetch(
+        `/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`
+      );
+      const agentsData = await agentsRes.json();
+      const humanAgent = (agentsData.agents || []).find(
+        (a: any) => a.role === "human"
+      );
+      const creatorId = humanAgent?.id;
+      if (!creatorId) throw new Error("No human agent found");
+
+      if (workflowId && useWorkflowStore.getState().workflowId) {
+        // Update existing
+        const res = await fetch(
+          `/api/workflows/${encodeURIComponent(workflowId)}/dsl`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: workflowName,
+              description: workflowDescription,
+              dsl,
+            }),
+          }
+        );
+        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+        setMessage("Saved!");
+      } else {
+        // Create new
+        const res = await fetch("/api/workflows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groupId,
+            name: workflowName,
+            description: workflowDescription,
+            creatorId,
+            dsl,
+          }),
+        });
+        if (!res.ok) throw new Error(`Create failed: ${res.status}`);
+        const data = await res.json();
+        setWorkflowMeta({ id: data.workflowId });
+        setMessage("Created!");
+      }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Run workflow (activate)
+  async function handleRun() {
+    const wfId = useWorkflowStore.getState().workflowId;
+    if (!wfId) {
+      setMessage("Save the workflow first");
+      return;
+    }
+    setRunning(true);
+    setMessage(null);
+    resetExecutionStatus();
+    try {
+      const res = await fetch(
+        `/api/workflows/${encodeURIComponent(wfId)}/activate`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error(`Activate failed: ${res.status}`);
+      setWorkflowMeta({ status: "active" });
+      setMessage("Workflow activated! Check IM for execution.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Run failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Top bar */}
+      <div
+        style={{
+          height: 44,
+          borderBottom: "1px solid var(--border)",
+          background: "var(--bg-panel)",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 16px",
+          gap: 12,
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            fontSize: 12,
+            color: "var(--text-dim)",
+            textDecoration: "none",
+          }}
+        >
+          ← Home
+        </Link>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--cyan)",
+            fontFamily: "var(--font-display)",
+          }}
+        >
+          WORKFLOW EDITOR
+        </div>
+        <div style={{ flex: 1 }} />
+        {message && (
+          <span
+            style={{
+              fontSize: 11,
+              color:
+                message.includes("failed") || message.includes("Save the")
+                  ? "var(--red-text)"
+                  : "var(--green)",
+            }}
+          >
+            {message}
+          </span>
+        )}
+        <Button
+          variant="primary"
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save"}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => void handleRun()}
+          disabled={running || !useWorkflowStore.getState().workflowId}
+        >
+          {running ? "Running..." : "Run"}
+        </Button>
+      </div>
+
+      {/* Canvas */}
+      <div style={{ flex: 1 }}>
+        <WorkflowCanvas />
+      </div>
+    </div>
+  );
+}
+
+export default function WorkflowPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            height: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text-dim)",
+          }}
+        >
+          Loading workflow editor...
+        </div>
+      }
+    >
+      <WorkflowEditor />
+    </Suspense>
+  );
+}
