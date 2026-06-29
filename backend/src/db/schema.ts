@@ -88,6 +88,7 @@ export const workflows = pgTable("workflows", {
     .notNull()
     .references(() => agents.id),
   status: text("status").notNull().default("draft"),
+  layoutData: jsonb("layout_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => ({
@@ -99,6 +100,7 @@ export const tasks = pgTable("tasks", {
   workflowId: uuid("workflow_id")
     .notNull()
     .references(() => workflows.id),
+  nodeId: text("node_id"),
   name: text("name").notNull(),
   description: text("description"),
   assigneeRole: text("assignee_role"),

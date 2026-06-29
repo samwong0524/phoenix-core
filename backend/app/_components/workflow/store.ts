@@ -7,6 +7,7 @@ import type {
   WorkflowEdge,
   WorkflowDSL,
   AgentNodeData,
+  ConditionNodeData,
   ExecutionStatus,
 } from "@/lib/workflow-types";
 
@@ -30,8 +31,10 @@ export interface WorkflowState {
   setEdges: (edges: WorkflowEdge[]) => void;
   setSelectedNodeId: (id: string | null) => void;
   addAgentNode: (position: { x: number; y: number }, role?: string) => void;
+  addConditionNode: (position: { x: number; y: number }) => void;
   removeNode: (id: string) => void;
   updateAgentData: (id: string, data: Partial<AgentNodeData>) => void;
+  updateNodeData: (id: string, data: Record<string, unknown>) => void;
   setExecutionStatus: (nodeId: string, status: ExecutionStatus) => void;
   resetExecutionStatus: () => void;
   setAvailableRoles: (roles: string[]) => void;
@@ -50,8 +53,12 @@ export interface WorkflowState {
 }
 
 let nodeCounter = 0;
+let condCounter = 0;
 function nextNodeId() {
   return `agent-${++nodeCounter}`;
+}
+function nextCondId() {
+  return `cond-${++condCounter}`;
 }
 
 export const useWorkflowStore = create<WorkflowState>()(
@@ -98,6 +105,22 @@ export const useWorkflowStore = create<WorkflowState>()(
       });
     },
 
+    addConditionNode: (position) => {
+      const id = nextCondId();
+      set((state) => {
+        state.nodes.push({
+          id,
+          type: "condition",
+          position,
+          data: {
+            label: `Condition ${state.nodes.filter((n) => n.type === "condition").length + 1}`,
+            condition: "",
+            executionStatus: "idle",
+          },
+        } as WorkflowNode);
+      });
+    },
+
     removeNode: (id) =>
       set((state) => {
         const node = state.nodes.find((n) => n.id === id);
@@ -119,21 +142,32 @@ export const useWorkflowStore = create<WorkflowState>()(
         }
       }),
 
+    updateNodeData: (id, data) =>
+      set((state) => {
+        const node = state.nodes.find((n) => n.id === id);
+        if (node) {
+          Object.assign(node.data, data);
+        }
+      }),
+
     setExecutionStatus: (nodeId, status) =>
       set((state) => {
         const node = state.nodes.find(
-          (n) => n.id === nodeId && n.type === "agent"
+          (n) => n.id === nodeId && (n.type === "agent" || n.type === "condition")
         );
         if (node && "executionStatus" in node.data) {
-          (node.data as AgentNodeData).executionStatus = status;
+          (node.data as AgentNodeData | ConditionNodeData).executionStatus = status;
         }
       }),
 
     resetExecutionStatus: () =>
       set((state) => {
         for (const node of state.nodes) {
-          if (node.type === "agent" && "executionStatus" in node.data) {
-            (node.data as AgentNodeData).executionStatus = "idle";
+          if (
+            (node.type === "agent" || node.type === "condition") &&
+            "executionStatus" in node.data
+          ) {
+            (node.data as AgentNodeData | ConditionNodeData).executionStatus = "idle";
           }
         }
       }),
@@ -165,15 +199,23 @@ export const useWorkflowStore = create<WorkflowState>()(
           source: e.source,
           target: e.target,
           ...(e.label ? { label: e.label } : {}),
+          ...(e.branchLabel ? { data: { branchLabel: e.branchLabel } } : {}),
         })) as WorkflowEdge[];
-        // Reset counter to avoid ID collisions
-        const maxNum = dsl.nodes
+        // Reset counters to avoid ID collisions
+        const maxAgentNum = dsl.nodes
           .filter((n) => n.id.startsWith("agent-"))
           .reduce((max, n) => {
             const num = parseInt(n.id.split("-")[1] || "0", 10);
             return num > max ? num : max;
           }, 0);
-        nodeCounter = maxNum;
+        const maxCondNum = dsl.nodes
+          .filter((n) => n.id.startsWith("cond-"))
+          .reduce((max, n) => {
+            const num = parseInt(n.id.split("-")[1] || "0", 10);
+            return num > max ? num : max;
+          }, 0);
+        nodeCounter = maxAgentNum;
+        condCounter = maxCondNum;
       }),
 
     toDSL: (): WorkflowDSL => {
@@ -181,7 +223,7 @@ export const useWorkflowStore = create<WorkflowState>()(
       return {
         nodes: nodes.map((n) => ({
           id: n.id,
-          type: n.type as "start" | "agent" | "end",
+          type: n.type as "start" | "agent" | "condition" | "end",
           position: { ...n.position },
           data: { ...n.data } as any,
         })),
@@ -190,6 +232,9 @@ export const useWorkflowStore = create<WorkflowState>()(
           source: e.source,
           target: e.target,
           ...(e.label ? { label: String(e.label) } : {}),
+          ...((e.data as any)?.branchLabel
+            ? { branchLabel: (e.data as any).branchLabel }
+            : {}),
         })),
       };
     },

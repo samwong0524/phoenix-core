@@ -5,8 +5,13 @@ import { useWorkflowStore } from "./store";
 export default function NodePalette() {
   const availableRoles = useWorkflowStore((s) => s.availableRoles);
 
-  function onDragStart(e: React.DragEvent, role: string) {
+  function onDragStartAgent(e: React.DragEvent, role: string) {
     e.dataTransfer.setData("application/workflow-role", role);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function onDragStartCondition(e: React.DragEvent) {
+    e.dataTransfer.setData("application/workflow-node-type", "condition");
     e.dataTransfer.effectAllowed = "move";
   }
 
@@ -37,8 +42,49 @@ export default function NodePalette() {
         Nodes
       </div>
 
-      {/* Draggable agent node template */}
-      <div style={{ padding: "12px 14px" }}>
+      <div style={{ padding: "12px 14px", overflowY: "auto", flex: 1 }}>
+        {/* Control Flow section */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--text-dim)",
+            marginBottom: 8,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          Control Flow
+        </div>
+        <div
+          draggable
+          onDragStart={onDragStartCondition}
+          style={{
+            padding: "8px 12px",
+            background: "var(--bg-card)",
+            border: "1px solid #a855f730",
+            borderRadius: 8,
+            cursor: "grab",
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: "var(--font-mono)",
+            color: "#a855f7",
+            marginBottom: 16,
+            transition: "border-color 0.15s, box-shadow 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLElement).style.borderColor = "#a855f7";
+            (e.target as HTMLElement).style.boxShadow = "0 0 8px rgba(168,85,247,0.15)";
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLElement).style.borderColor = "#a855f730";
+            (e.target as HTMLElement).style.boxShadow = "none";
+          }}
+        >
+          ◇ Condition
+        </div>
+
+        {/* Agent Nodes section */}
         <div
           style={{
             fontSize: 11,
@@ -59,7 +105,7 @@ export default function NodePalette() {
             lineHeight: 1.5,
           }}
         >
-          Drag a role onto the canvas to add an agent step.
+          Drag a role onto the canvas.
         </div>
 
         {/* Role list */}
@@ -69,7 +115,7 @@ export default function NodePalette() {
               <div
                 key={role}
                 draggable
-                onDragStart={(e) => onDragStart(e, role)}
+                onDragStart={(e) => onDragStartAgent(e, role)}
                 style={{
                   padding: "8px 12px",
                   background: "var(--bg-card)",
@@ -99,7 +145,7 @@ export default function NodePalette() {
       </div>
 
       {/* Legend */}
-      <div style={{ marginTop: "auto", padding: "12px 14px", borderTop: "1px solid var(--border)" }}>
+      <div style={{ padding: "12px 14px", borderTop: "1px solid var(--border)" }}>
         <div style={{ fontSize: 10, color: "var(--text-dim)", lineHeight: 1.6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
@@ -108,6 +154,10 @@ export default function NodePalette() {
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <span style={{ width: 10, height: 10, borderRadius: 4, background: "var(--bg-card)", border: "1px solid var(--border)", display: "inline-block" }} />
             Agent Step
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <span style={{ width: 10, height: 10, transform: "rotate(45deg)", background: "var(--bg-card)", border: "1px solid #a855f7", display: "inline-block" }} />
+            Condition
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--red)", display: "inline-block" }} />

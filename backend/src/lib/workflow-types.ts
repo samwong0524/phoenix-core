@@ -28,29 +28,44 @@ export interface AgentNodeData {
   [key: string]: unknown;
 }
 
+export interface ConditionNodeData {
+  label: string;
+  condition: string;
+  inputVariable?: string;
+  executionStatus?: ExecutionStatus;
+  [key: string]: unknown;
+}
+
 // ── Node / Edge union types ───────────────────────────────────────
 
 export type WorkflowNode =
   | Node<StartNodeData, "start">
   | Node<AgentNodeData, "agent">
+  | Node<ConditionNodeData, "condition">
   | Node<EndNodeData, "end">;
 
-export type WorkflowEdge = Edge;
+export interface WorkflowEdgeData {
+  branchLabel?: "true" | "false" | string;
+  [key: string]: unknown;
+}
+
+export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 // ── Serialization DSL ─────────────────────────────────────────────
 
 export interface WorkflowDSL {
   nodes: Array<{
     id: string;
-    type: "start" | "agent" | "end";
+    type: "start" | "agent" | "condition" | "end";
     position: { x: number; y: number };
-    data: StartNodeData | AgentNodeData | EndNodeData;
+    data: StartNodeData | AgentNodeData | ConditionNodeData | EndNodeData;
   }>;
   edges: Array<{
     id: string;
     source: string;
     target: string;
     label?: string;
+    branchLabel?: string;
   }>;
 }
 

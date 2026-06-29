@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 import StartNode from "./nodes/StartNode";
 import EndNode from "./nodes/EndNode";
 import AgentNode from "./nodes/AgentNode";
+import ConditionNode from "./nodes/ConditionNode";
 import NodePalette from "./NodePalette";
 import PropertiesPanel from "./PropertiesPanel";
 import { useWorkflowStore } from "./store";
@@ -28,24 +29,31 @@ import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow-types";
 const nodeTypes = {
   start: StartNode,
   agent: AgentNode,
+  condition: ConditionNode,
   end: EndNode,
 };
 
-// Connection validation: start → agent, agent → agent/end
+// Connection validation: supports DAG with condition branching
 function isValidConnection(conn: Connection | WorkflowEdge) {
   const store = useWorkflowStore.getState();
   const sourceNode = store.nodes.find((n) => n.id === conn.source);
   const targetNode = store.nodes.find((n) => n.id === conn.target);
   if (!sourceNode || !targetNode) return false;
 
-  // Start can only connect to agent
-  if (sourceNode.type === "start" && targetNode.type !== "agent") return false;
-  // Agent can connect to agent or end
-  if (sourceNode.type === "agent" && targetNode.type === "start") return false;
   // End cannot have outgoing connections
   if (sourceNode.type === "end") return false;
+  // Start cannot have incoming, and can connect to agent or condition
+  if (targetNode.type === "start") return false;
+  // Start can connect to agent or condition
+  if (sourceNode.type === "start" && targetNode.type !== "agent" && targetNode.type !== "condition") return false;
   // No self-loops
   if (conn.source === conn.target) return false;
+
+  // Condition nodes: max 2 outgoing edges (true/false)
+  if (sourceNode.type === "condition") {
+    const existingOutgoing = store.edges.filter((e) => e.source === conn.source);
+    if (existingOutgoing.length >= 2) return false;
+  }
 
   return true;
 }
@@ -132,12 +140,22 @@ function WorkflowCanvasInner() {
   const onConnect = useCallback(
     (params: Connection) => {
       if (!isValidConnection(params)) return;
+
+      // Auto-assign branch labels for condition node edges
+      const sourceNode = useWorkflowStore.getState().nodes.find((n) => n.id === params.source);
+      let branchLabel: string | undefined;
+      if (sourceNode?.type === "condition") {
+        const existingCount = useWorkflowStore.getState().edges.filter((e) => e.source === params.source).length;
+        branchLabel = existingCount === 0 ? "true" : "false";
+      }
+
       const newEdge = {
-        id: `e-${params.source}-${params.target}`,
+        id: `e-${params.source}${params.sourceHandle ? `-${params.sourceHandle}` : ""}-${params.target}`,
         source: params.source!,
         target: params.target!,
+        ...(branchLabel ? { data: { branchLabel } } : {}),
       };
-      setEdges((eds) => addEdge(newEdge, eds));
+      setEdges((eds) => addEdge({ ...params, ...newEdge }, eds));
       // Sync to store
       store.setEdges([...store.edges, newEdge] as WorkflowEdge[]);
     },
@@ -153,15 +171,19 @@ function WorkflowCanvasInner() {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      const nodeType = e.dataTransfer.getData("application/workflow-node-type");
       const role = e.dataTransfer.getData("application/workflow-role");
-      if (!role) return;
 
       const position = screenToFlowPosition({
         x: e.clientX,
         y: e.clientY,
       });
 
-      store.addAgentNode(position, role);
+      if (nodeType === "condition") {
+        store.addConditionNode(position);
+      } else if (role) {
+        store.addAgentNode(position, role);
+      }
     },
     [screenToFlowPosition, store]
   );

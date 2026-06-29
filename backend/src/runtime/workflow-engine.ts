@@ -128,7 +128,7 @@ export class WorkflowEngine {
     const allPending = (rows as unknown as TaskRow[]) ?? [];
 
     const completedRows = await db.execute(
-      sql`SELECT id FROM tasks WHERE workflow_id = ${workflowId} AND status IN ('completed', 'reviewed')`
+      sql`SELECT id FROM tasks WHERE workflow_id = ${workflowId} AND status IN ('completed', 'reviewed', 'skipped')`
     );
     const completedIds = new Set(
       ((completedRows as unknown as Array<{ id: string }>) ?? []).map((r) => r.id)
@@ -328,7 +328,7 @@ export class WorkflowEngine {
   /** Parse nodeId from task name format "nodeId::label" */
   static parseNodeId(taskName: string): { nodeId: string | null; label: string } {
     const sepIdx = taskName.indexOf("::");
-    if (sepIdx > 0 && taskName.startsWith("agent-")) {
+    if (sepIdx > 0 && (taskName.startsWith("agent-") || taskName.startsWith("cond-"))) {
       return {
         nodeId: taskName.slice(0, sepIdx),
         label: taskName.slice(sepIdx + 2),
@@ -405,10 +405,114 @@ export class WorkflowEngine {
         status: "completed",
         output: (result || "").slice(0, 500),
       });
+
+      // If this is a condition node, handle branch skipping
+      if (nodeId && nodeId.startsWith("cond-")) {
+        await engine.handleConditionBranching(task.workflow_id, nodeId, result || "");
+      }
     }
 
     await engine.processWorkflow(task.workflow_id);
     await engine.checkWorkflowCompletion(task.workflow_id);
+  }
+
+  /**
+   * Handle condition node branching: determine which branch was taken,
+   * then mark all downstream tasks on the untaken branch as skipped.
+   */
+  private async handleConditionBranching(
+    workflowId: UUID,
+    condNodeId: string,
+    result: string
+  ) {
+    const db = getDb();
+
+    // Read layout_data to find edges from this condition node
+    const wfRows = await db.execute(
+      sql`SELECT layout_data FROM workflows WHERE id = ${workflowId} LIMIT 1`
+    );
+    const layoutData = (wfRows as unknown as Array<{
+      layout_data: {
+        edges: Array<{ id: string; source: string; target: string; branchLabel?: string }>;
+      } | null;
+    }>)[0]?.layout_data;
+
+    if (!layoutData) return;
+
+    // Find outgoing edges from this condition node
+    const outEdges = layoutData.edges.filter((e) => e.source === condNodeId);
+    const trueEdge = outEdges.find(
+      (e) => e.branchLabel === "true"
+    );
+    const falseEdge = outEdges.find(
+      (e) => e.branchLabel === "false"
+    );
+
+    if (!trueEdge || !falseEdge) return;
+
+    // Parse result to determine which branch was taken
+    const resultLower = result.toLowerCase().trim();
+    const isTrue =
+      resultLower === "true" ||
+      resultLower.includes("true") ||
+      resultLower === "yes";
+    const untakenTarget = isTrue ? falseEdge.target : trueEdge.target;
+
+    // Recursively mark untaken branch tasks as skipped
+    await this.skipDownstreamTasks(workflowId, untakenTarget, new Set());
+  }
+
+  /** Recursively skip a task and all its exclusive downstream dependents */
+  private async skipDownstreamTasks(
+    workflowId: UUID,
+    nodeId: string,
+    visited: Set<string>
+  ) {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+
+    const db = getDb();
+
+    // Find the task matching this nodeId
+    const taskRows = await db.execute(
+      sql`SELECT id, name FROM tasks
+          WHERE workflow_id = ${workflowId} AND node_id = ${nodeId}
+          LIMIT 1`
+    );
+    const task = (taskRows as unknown as Array<{ id: string; name: string }>)[0];
+    if (!task) return;
+
+    // Mark as skipped
+    const now = new Date();
+    await db.execute(
+      sql`UPDATE tasks SET status = 'skipped', completed_at = ${now} WHERE id = ${task.id} AND status = 'pending'`
+    );
+
+    // Find downstream tasks that depend ONLY on this skipped task
+    // (if they have other non-skipped dependencies, they shouldn't be skipped)
+    const downstreamRows = await db.execute(
+      sql`SELECT id, name, node_id, depends_on FROM tasks
+          WHERE workflow_id = ${workflowId} AND status = 'pending'`
+    );
+    const downstreamTasks =
+      (downstreamRows as unknown as Array<{
+        id: string;
+        name: string;
+        node_id: string | null;
+        depends_on: string[] | null;
+      }>) ?? [];
+
+    // Build encoded name for this task
+    const encodedName = task.name;
+
+    for (const dt of downstreamTasks) {
+      const deps = dt.depends_on || [];
+      // Only skip if this task is the sole dependency
+      // (multi-dependency tasks need more complex merge logic)
+      if (deps.length === 1 && deps[0] === encodedName && dt.node_id) {
+        await this.skipDownstreamTasks(workflowId, dt.node_id, visited);
+      }
+    }
   }
 
   /** Check if all tasks in a workflow are done and emit pipeline.complete */

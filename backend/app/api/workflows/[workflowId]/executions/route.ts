@@ -89,16 +89,17 @@ export async function GET(
     failed: 0,
     pending: 0,
     inProgress: 0,
+    skipped: 0,
     totalDuration: 0,
   };
 
   const tasks = rawTasks.map((t) => {
     // Decode nodeId::label format
     const sepIdx = t.name.indexOf("::");
-    const nodeId = sepIdx > 0 && t.name.startsWith("agent-")
+    const nodeId = sepIdx > 0 && (t.name.startsWith("agent-") || t.name.startsWith("cond-"))
       ? t.name.slice(0, sepIdx)
       : null;
-    const displayName = sepIdx > 0 && t.name.startsWith("agent-")
+    const displayName = sepIdx > 0 && (t.name.startsWith("agent-") || t.name.startsWith("cond-"))
       ? t.name.slice(sepIdx + 2)
       : t.name;
 
@@ -126,6 +127,9 @@ export async function GET(
         break;
       case "in_progress":
         summary.inProgress++;
+        break;
+      case "skipped":
+        summary.skipped++;
         break;
       default:
         summary.pending++;
@@ -160,6 +164,16 @@ export async function GET(
     summary.totalDuration = lastEnd - firstStart;
   }
 
+  // Fetch layout_data for edge info (DAG visualization)
+  const layoutRows = await db.execute(
+    sql`SELECT layout_data FROM workflows WHERE id = ${workflowId} LIMIT 1`
+  );
+  const layoutData = (layoutRows as unknown as Array<{
+    layout_data: {
+      edges: Array<{ id: string; source: string; target: string; branchLabel?: string }>;
+    } | null;
+  }>)[0]?.layout_data;
+
   return Response.json({
     workflow: {
       id: wf.id,
@@ -171,6 +185,7 @@ export async function GET(
     },
     summary,
     tasks,
+    edges: layoutData?.edges || [],
   });
 }
 

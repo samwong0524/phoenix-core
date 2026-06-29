@@ -2,12 +2,13 @@ export const runtime = "nodejs";
 
 import { getDb } from "@/db";
 import { workflows, tasks } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { WorkflowDSL } from "@/lib/workflow-types";
 
 /**
  * GET /api/workflows/:workflowId/dsl
- * Rebuild a WorkflowDSL from workflows + tasks tables.
+ * Restore the full visual DAG from layout_data (or fallback to linear chain).
  */
 export async function GET(
   _req: Request,
@@ -16,27 +17,44 @@ export async function GET(
   const { workflowId } = await params;
   const db = getDb();
 
-  // Fetch workflow
-  const wfRows = await db
-    .select()
-    .from(workflows)
-    .where(eq(workflows.id, workflowId))
-    .limit(1);
+  // Fetch workflow with layout_data via raw SQL (jsonb)
+  const wfRows = await db.execute(
+    sql`SELECT id, name, description, status, group_id, layout_data
+        FROM workflows WHERE id = ${workflowId} LIMIT 1`
+  );
+  const wf = (wfRows as unknown as Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    group_id: string;
+    layout_data: WorkflowDSL | null;
+  }>)[0];
 
-  if (wfRows.length === 0) {
+  if (!wf) {
     return Response.json({ error: "Workflow not found" }, { status: 404 });
   }
 
-  const wf = wfRows[0]!;
+  // If layout_data exists, return it directly (preserves real DAG topology)
+  if (wf.layout_data) {
+    return Response.json({
+      workflow: {
+        id: wf.id,
+        name: wf.name,
+        description: wf.description,
+        status: wf.status,
+        groupId: wf.group_id,
+      },
+      dsl: wf.layout_data,
+    });
+  }
 
-  // Fetch tasks
+  // Fallback: rebuild linear chain from tasks table (legacy data)
   const taskRows = await db
     .select()
     .from(tasks)
     .where(eq(tasks.workflowId, workflowId));
 
-  // Build DSL: linear chain layout
-  // Sort tasks by dependency order
   const sorted = topologicalSort(taskRows);
 
   const nodes: WorkflowDSL["nodes"] = [
@@ -54,11 +72,11 @@ export async function GET(
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i]!;
     const nodeId = `agent-${i + 1}`;
-    // Decode nodeId::label format
     const sepIdx = t.name.indexOf("::");
-    const displayLabel = sepIdx > 0 && t.name.startsWith("agent-")
-      ? t.name.slice(sepIdx + 2)
-      : t.name;
+    const displayLabel =
+      sepIdx > 0 && t.name.startsWith("agent-")
+        ? t.name.slice(sepIdx + 2)
+        : t.name;
     nodes.push({
       id: nodeId,
       type: "agent",
@@ -79,7 +97,6 @@ export async function GET(
     prevId = nodeId;
   }
 
-  // Add end node
   nodes.push({
     id: "end",
     type: "end",
@@ -100,7 +117,7 @@ export async function GET(
       name: wf.name,
       description: wf.description,
       status: wf.status,
-      groupId: wf.groupId,
+      groupId: wf.group_id,
     },
     dsl,
   });
@@ -108,7 +125,7 @@ export async function GET(
 
 /**
  * PUT /api/workflows/:workflowId/dsl
- * Update workflow name/description and sync tasks from DSL.
+ * Save full DSL to layout_data + sync tasks (including condition nodes).
  */
 export async function PUT(
   req: Request,
@@ -142,23 +159,30 @@ export async function PUT(
       .where(eq(workflows.id, workflowId));
   }
 
-  // Sync tasks from DSL
+  // Sync DSL + tasks
   if (body.dsl) {
-    // Delete existing tasks
+    // 1. Save layout_data (full DSL with positions + edge labels)
+    await db.execute(
+      sql`UPDATE workflows SET layout_data = ${JSON.stringify(body.dsl)}::jsonb, updated_at = ${now} WHERE id = ${workflowId}`
+    );
+
+    // 2. Delete existing tasks
     await db.delete(tasks).where(eq(tasks.workflowId, workflowId));
 
-    // Build node map: id → encoded task name (nodeId::label)
+    // 3. Build node→encoded name map for depends_on resolution
+    //    Agent nodes: "agent-N::Label"
+    //    Condition nodes: "cond-N::Label"
     const nodeMap = new Map<string, string>();
     for (const n of body.dsl.nodes) {
-      if (n.type === "agent") {
+      if (n.type === "agent" || n.type === "condition") {
         const label = (n.data as any).label || n.id;
         nodeMap.set(n.id, `${n.id}::${label}`);
       }
     }
 
-    // Create tasks from agent nodes
+    // 4. Create tasks from agent + condition nodes
     for (const n of body.dsl.nodes) {
-      if (n.type !== "agent") continue;
+      if (n.type !== "agent" && n.type !== "condition") continue;
       const data = n.data as any;
 
       // Compute depends_on from edges (store encoded task names)
@@ -167,16 +191,20 @@ export async function PUT(
         .map((e) => nodeMap.get(e.source))
         .filter((name): name is string => !!name);
 
-      // Encode nodeId into task name for event mapping
       const taskName = `${n.id}::${data.label || "Untitled Step"}`;
 
       await db.insert(tasks).values({
         id: crypto.randomUUID(),
         workflowId,
+        nodeId: n.id,
         name: taskName,
-        description: data.description || null,
-        assigneeRole: data.role || null,
-        expectedOutput: data.expectedOutput || null,
+        description:
+          n.type === "condition"
+            ? data.condition || null
+            : data.description || null,
+        assigneeRole: n.type === "agent" ? data.role || null : null,
+        expectedOutput:
+          n.type === "agent" ? data.expectedOutput || null : null,
         dependsOn,
         status: "pending",
         createdAt: new Date(),
