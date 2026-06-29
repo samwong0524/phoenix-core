@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n/context";
@@ -157,7 +157,7 @@ function CostTable({ data }: { data: DailyCost[] }) {
 }
 
 // ─── Main Dashboard ───────────────────────────────────
-export default function ObservabilityDashboard() {
+function ObservabilityDashboardInner() {
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const hours = Number(searchParams.get("hours") || 24);
@@ -318,5 +318,13 @@ export default function ObservabilityDashboard() {
         {t("observability.footer")}
       </div>
     </div>
+  );
+}
+
+export default function ObservabilityDashboard() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, color: "var(--text-dim)" }}>Loading...</div>}>
+      <ObservabilityDashboardInner />
+    </Suspense>
   );
 }

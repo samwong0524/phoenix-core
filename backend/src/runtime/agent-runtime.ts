@@ -2707,12 +2707,19 @@ export class AgentRunner {
         return { assistantText, assistantThinking, didSend };
       }
 
-      // Inject failure alert when a tool keeps failing 鈥?triggers agent self-learning
+      // Inject failure alert when a tool keeps failing — triggers agent self-learning
       for (const [toolName, count] of this.turnToolFailures) {
         if (count >= 3) {
+          const bt = "`";
           input.history.push({
             role: "system",
-            content: `Tool "${toolName}" has failed ${count} times in this turn. Your current approach is not working. Options:\n1. Call \x60search_skill("<problem domain>")\x60 to search GitHub for relevant skills\n2. Call \x60get_skill("<name>")\x60 to load an existing local skill\n3. Call \x60install_skill("<name>", "<source_url>")\x60 to install a remote skill\n4. Call \x60create_skill\x60 to document a new fix pattern\n5. Try a completely different approach`,
+            content:
+              `Tool "${toolName}" has failed ${count} times in this turn. Your current approach is not working. Options:\n` +
+              `1. Call ${bt}search_skill("<problem domain>")${bt} to search GitHub for relevant skills\n` +
+              `2. Call ${bt}get_skill("<name>")${bt} to load an existing local skill\n` +
+              `3. Call ${bt}install_skill("<name>", "<source_url>")${bt} to install a remote skill\n` +
+              `4. Call ${bt}create_skill${bt} to document a new fix pattern\n` +
+              `5. Try a completely different approach`,
           });
           break;
         }
