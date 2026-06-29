@@ -6,16 +6,68 @@ import { sql } from "drizzle-orm";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const groupId = url.searchParams.get("groupId");
+  const includeSummary = url.searchParams.get("includeSummary") === "true";
+  const workspaceId = url.searchParams.get("workspaceId");
   const db = getDb();
 
-  const where = groupId
-    ? sql`WHERE group_id = ${groupId}`
-    : sql`WHERE 1=1`;
+  // Build WHERE clause
+  let whereClause = sql`WHERE 1=1`;
+  if (groupId) {
+    whereClause = sql`WHERE w.group_id = ${groupId}`;
+  }
+  if (workspaceId) {
+    whereClause = sql`WHERE g.workspace_id = ${workspaceId}`;
+  }
+
+  if (includeSummary) {
+    // Join with groups for workspaceId filter, aggregate task counts
+    const joinGroup = workspaceId
+      ? sql`JOIN groups g ON g.id = w.group_id`
+      : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT w.id, w.group_id, w.name, w.description, w.creator_id, w.status,
+             w.created_at, w.updated_at,
+             COUNT(t.id) as total_tasks,
+             COUNT(t.id) FILTER (WHERE t.status IN ('completed', 'reviewed')) as completed_tasks,
+             COUNT(t.id) FILTER (WHERE t.status = 'failed') as failed_tasks,
+             COUNT(t.id) FILTER (WHERE t.status = 'pending') as pending_tasks,
+             COUNT(t.id) FILTER (WHERE t.status = 'in_progress') as in_progress_tasks
+      FROM workflows w
+      ${joinGroup}
+      LEFT JOIN tasks t ON t.workflow_id = w.id
+      ${whereClause}
+      GROUP BY w.id
+      ORDER BY w.updated_at DESC
+    `);
+
+    const workflows = ((rows as unknown as Array<Record<string, unknown> | null>) ?? []).filter((w): w is Record<string, unknown> => w !== null).map((w) => ({
+      ...w,
+      taskSummary: {
+        total: Number(w.total_tasks) || 0,
+        completed: Number(w.completed_tasks) || 0,
+        failed: Number(w.failed_tasks) || 0,
+        pending: Number(w.pending_tasks) || 0,
+        inProgress: Number(w.in_progress_tasks) || 0,
+      },
+    }));
+
+    return Response.json({ workflows });
+  }
+
+  // Original query without summary
+  const joinGroup = workspaceId
+    ? sql`JOIN groups g ON g.id = workflows.group_id`
+    : sql``;
+
+  if (workspaceId) {
+    whereClause = sql`WHERE g.workspace_id = ${workspaceId}`;
+  }
 
   const rows = await db.execute(
-    sql`SELECT id, group_id, name, description, creator_id, status,
-               created_at, updated_at
-        FROM workflows ${where} ORDER BY updated_at DESC`
+    sql`SELECT workflows.id, workflows.group_id, workflows.name, workflows.description,
+               workflows.creator_id, workflows.status, workflows.created_at, workflows.updated_at
+        FROM workflows ${joinGroup} ${whereClause} ORDER BY workflows.updated_at DESC`
   );
   const workflows = ((rows as unknown as Array<Record<string, unknown> | null>) ?? []).filter(Boolean);
 

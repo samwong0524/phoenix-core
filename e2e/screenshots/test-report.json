@@ -1,20 +1,19 @@
 {
-  "timestamp": "2026-06-29T04:27:19.896Z",
+  "timestamp": "2026-06-29T04:53:46.942Z",
   "baseUrl": "http://localhost:3100",
-  "initialLoadTime": 1006,
-  "totalLoadTime": 4052,
+  "initialLoadTime": 1082,
+  "totalLoadTime": 4129,
   "hasMainContent": true,
   "loadingElementsCount": 0,
   "consoleErrors": [],
-  "totalApiRequests": 47,
-  "uniqueEndpoints": 9,
+  "totalApiRequests": 8,
+  "uniqueEndpoints": 8,
   "hasWorkspaceInit": true,
   "workspaceInitCalls": 1,
   "streamingConnections": 2,
   "apiEndpoints": [
     "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
     "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be/context-stream",
-    "/api/groups",
     "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
     "/api/models",
     "/api/skills",
@@ -46,217 +45,22 @@
     {
       "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
       "method": "GET",
-      "status": 200
+      "status": null
     },
     {
       "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
       "method": "GET",
-      "status": 200
+      "status": null
     },
     {
       "endpoint": "/api/ui-stream",
       "method": "GET",
-      "status": 200
+      "status": null
     },
     {
       "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be/context-stream",
       "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/agents/847b4ee1-a221-42af-8d0d-a49635d386be",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups",
-      "method": "GET",
-      "status": 200
-    },
-    {
-      "endpoint": "/api/groups/b76fa30c-b970-4982-b0f6-580af2c58091/messages",
-      "method": "GET",
-      "status": 200
+      "status": null
     }
   ]
 }
