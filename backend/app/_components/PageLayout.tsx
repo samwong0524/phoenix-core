@@ -206,7 +206,7 @@ const errorIconStyle: React.CSSProperties = {
   width: 48,
   height: 48,
   borderRadius: "50%",
-  background: "rgba(255, 59, 59, 0.15)",
+  background: "var(--red-muted)",
   color: "var(--red)",
   display: "flex",
   alignItems: "center",

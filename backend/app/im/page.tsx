@@ -139,7 +139,7 @@ function FileCard({ url, name, size }: { url: string; name: string; size?: numbe
         alignItems: "center",
         gap: 10,
         padding: "8px 12px",
-        background: "rgba(255,255,255,0.04)",
+        background: "var(--bg-card)",
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-sm)",
         textDecoration: "none",
@@ -566,13 +566,13 @@ function IMPageInner() {
   // Topo animation nodes (pixel positions for canvas overlay)
   const topoNodes = useMemo(() => {
     const agentColor = (role?: string) => {
-      if (!role || role === "human") return "#e0ebff";
-      if (role === "assistant") return "#00f0ff";
-      if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "#ff2d7b";
-      if (role === "reviewer" || role === "qa") return "#a855f7";
-      if (role === "researcher" || role === "analyst" || role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "#00ff88";
-      if (role === "creator" || role === "writer" || role === "editor" || role === "worker") return "#ffd700";
-      return "#ffd700";
+      if (!role || role === "human") return "var(--text-primary)";
+      if (role === "assistant") return "var(--cyan)";
+      if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "var(--magenta)";
+      if (role === "reviewer" || role === "qa") return "var(--purple)";
+      if (role === "researcher" || role === "analyst" || role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "var(--green)";
+      if (role === "creator" || role === "writer" || role === "editor" || role === "worker") return "var(--yellow)";
+      return "var(--yellow)";
     };
     return vizLayout.ordered.map((a) => {
       const pos = vizLayout.positions.get(a.id);
@@ -2269,8 +2269,8 @@ const renderContent = useCallback((content: string, contentType: string, message
                 position: "sticky", top: 0, zIndex: 10,
                 display: "flex", alignItems: "center", gap: 8,
                 padding: "6px 12px", fontSize: 11, fontFamily: "var(--font-mono)",
-                background: agentActivity === "thinking" ? "rgba(255,215,0,0.08)" : agentActivity === "executing" ? "rgba(0,255,255,0.08)" : "rgba(0,255,136,0.08)",
-                borderBottom: agentActivity === "thinking" ? "1px solid rgba(255,215,0,0.2)" : agentActivity === "executing" ? "1px solid rgba(0,255,255,0.2)" : "1px solid rgba(0,255,136,0.2)",
+                background: agentActivity === "thinking" ? "var(--yellow-soft)" : agentActivity === "executing" ? "var(--blue-soft)" : "var(--green-soft)",
+                borderBottom: agentActivity === "thinking" ? "1px solid var(--yellow-dim)" : agentActivity === "executing" ? "1px solid var(--cyan-dim)" : "1px solid var(--green-dim)",
                 color: agentActivity === "thinking" ? "var(--yellow)" : agentActivity === "executing" ? "var(--cyan)" : "var(--green)",
                 transition: "all 0.2s ease",
               }}>
@@ -2555,7 +2555,7 @@ const renderContent = useCallback((content: string, contentType: string, message
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            background: "rgba(0,0,0,0.6)",
+                            background: "var(--bg-overlay)",
                           }}
                         >
                           <Icon size={24} color={isHuman ? "var(--text-primary)" : "var(--text-primary)"} />

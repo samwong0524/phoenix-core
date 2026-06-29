@@ -417,7 +417,7 @@ function LocalSkillCard({
               border: "1px solid var(--green-dim)",
               borderRadius: 3,
               flexShrink: 0,
-              background: "rgba(0, 255, 136, 0.08)",
+              background: "var(--green-soft)",
             }}
           >
             ✓ auto
@@ -451,7 +451,7 @@ function LocalSkillCard({
             border: `1px solid ${skill.autoLoad ? "var(--green-dim)" : "var(--border)"}`,
             borderRadius: 4,
             cursor: "pointer",
-            background: skill.autoLoad ? "rgba(0, 255, 136, 0.08)" : "transparent",
+            background: skill.autoLoad ? "var(--green-soft)" : "transparent",
             fontFamily: "var(--font-mono)",
           }}
         >
@@ -561,7 +561,7 @@ function RemoteSkillCard({
             border: "1px solid var(--magenta)",
             borderRadius: 4,
             cursor: installing ? "wait" : "pointer",
-            background: "rgba(200, 100, 255, 0.08)",
+            background: "var(--purple-dim)",
           }}
         >
           {installing ? "Installing..." : "Install"}

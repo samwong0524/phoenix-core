@@ -11,7 +11,7 @@ type AlertProps = {
 const variantStyles: Record<AlertVariant, { bg: string; border: string; color: string }> = {
   info: { bg: "var(--blue-soft)", border: "var(--blue-muted)", color: "var(--blue-text)" },
   success: { bg: "var(--green-soft)", border: "var(--green-muted)", color: "var(--green-text)" },
-  warning: { bg: "var(--yellow-soft)", border: "var(--border-light)", color: "var(--yellow-text)" },
+  warning: { bg: "var(--yellow-soft)", border: "var(--border)", color: "var(--yellow-text)" },
   error: { bg: "var(--red-soft)", border: "var(--red-muted)", color: "var(--red-text)" },
 };
 

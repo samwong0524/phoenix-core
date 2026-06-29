@@ -18,7 +18,7 @@ test.describe('SWARM IDE Core User Flows', () => {
   });
 
   test('IM page is accessible', async ({ page }) => {
-    await page.goto(\\/im\, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/im`, { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/im/);
     await page.waitForTimeout(2000);
     const body = await page.locator('body').textContent();
@@ -26,7 +26,7 @@ test.describe('SWARM IDE Core User Flows', () => {
   });
 
   test('skills page loads with stats', async ({ page }) => {
-    await page.goto(\\/skills\, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/skills`, { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/skills/);
     // Wait for stats to load
     await page.waitForTimeout(3000);
@@ -35,7 +35,7 @@ test.describe('SWARM IDE Core User Flows', () => {
   });
 
   test('API: skill stats endpoint returns valid JSON', async ({ request }) => {
-    const res = await request.get(\\/api/skills/stats\);
+    const res = await request.get(`${BASE_URL}/api/skills/stats`);
     // Should return 200 or 500 (if DB not ready), but always valid JSON
     expect([200, 500]).toContain(res.status());
     if (res.status() === 200) {

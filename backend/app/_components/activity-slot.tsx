@@ -80,8 +80,8 @@ export default function ActivitySlot({ slotId, sessionId }: ActivitySlotProps) {
   const containerStyle: React.CSSProperties = {
     padding: '8px 12px',
     borderRadius: '8px',
-    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-    border: '1px solid #2a2a4a',
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
     cursor: config.actionUrl ? 'pointer' : 'default',
     width: config.width ? config.width + 'px' : '100%',
     height: config.height ? config.height + 'px' : undefined,
@@ -92,13 +92,13 @@ export default function ActivitySlot({ slotId, sessionId }: ActivitySlotProps) {
     <div style={containerStyle} onClick={handleClick}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: '11px', color: '#666', marginBottom: '2px' }}>{config.title}</div>
-          <div style={{ fontSize: '13px', color: '#e0e0e0' }}>{config.content}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '2px' }}>{config.title}</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{config.content}</div>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); handleDismiss(); }}
           style={{
-            background: 'none', border: 'none', color: '#666',
+            background: 'none', border: 'none', color: 'var(--text-dim)',
             cursor: 'pointer', fontSize: '14px', padding: '0 4px',
           }}
           title="关闭"

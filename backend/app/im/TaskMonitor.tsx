@@ -104,7 +104,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
           onClick={() => setShowDebug(!showDebug)}
           style={{
             ...headerDebugBtnStyle,
-            ...(showDebug ? { color: "var(--cyan)", background: "rgba(0,240,255,0.1)" } : {}),
+            ...(showDebug ? { color: "var(--cyan)", background: "var(--bg-hover)" } : {}),
           }}
           title={isZh ? "调试面板" : "Debug panel"}
         >
@@ -232,7 +232,7 @@ function DebugPanel({
             onClick={() => setTab(t)}
             style={{
               flex: 1, padding: "4px 8px", fontSize: 10, fontFamily: "var(--font-mono)",
-              background: tab === t ? "rgba(0,240,255,0.1)" : "var(--bg-card)",
+              background: tab === t ? "var(--bg-hover)" : "var(--bg-card)",
               color: tab === t ? "var(--cyan)" : "var(--text-dim)",
               border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer",
             }}

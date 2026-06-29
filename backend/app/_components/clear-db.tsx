@@ -39,7 +39,7 @@ export default function ClearDbButton() {
         {busy === "reset" ? "Resetting..." : "Reset DB + Redis"}
       </button>
       {error ? (
-        <span className="muted" style={{ color: "#fecaca", fontSize: 13 }}>
+        <span className="muted" style={{ color: "var(--red-text)", fontSize: 13 }}>
           {error}
         </span>
       ) : null}

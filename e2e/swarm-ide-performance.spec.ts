@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { writeFile } from 'fs/promises';
 
 test.describe('SWARM IDE Performance E2E Tests', () => {
-  const BASE_URL = 'http://localhost:3002';
+  const BASE_URL = 'http://localhost:3100';
   const SCREENSHOT_DIR = 'F:/swarm-ide/e2e/screenshots';
 
   test.use({

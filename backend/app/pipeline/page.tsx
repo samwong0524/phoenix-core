@@ -321,7 +321,7 @@ export default function PipelinePage() {
         {/* 429 rate limit alert */}
         {rateLimitAlert && (
           <div style={{
-            padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: '#2a1a0a',
+            padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--yellow-soft)',
             border: '1px solid var(--yellow)', fontSize: '13px', color: 'var(--yellow)',
             display: 'flex', alignItems: 'center', gap: '8px',
           }}>
@@ -339,8 +339,8 @@ export default function PipelinePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {stages.map((stage, i) => (
                 <Card key={stage.name} padding="10px 12px" borderRadius="var(--radius-sm)" className="pipeline-stage-card" style={{
-                  background: stage.status === 'running' ? 'rgba(74,222,128,0.08)' : stage.status === 'done' ? 'rgba(59,130,246,0.08)' : stage.status === 'failed' ? 'rgba(239,68,68,0.08)' : stage.status === 'review_requested' ? 'rgba(251,191,36,0.08)' : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${stage.status === 'running' ? 'rgba(74,222,128,0.3)' : stage.status === 'review_requested' ? 'rgba(251,191,36,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  background: stage.status === 'running' ? 'var(--green-soft)' : stage.status === 'done' ? 'var(--blue-soft)' : stage.status === 'failed' ? 'var(--red-soft)' : stage.status === 'review_requested' ? 'var(--yellow-soft)' : 'var(--bg-card)',
+                  border: `1px solid ${stage.status === 'running' ? 'var(--green-mid)' : stage.status === 'review_requested' ? 'var(--yellow-text)' : 'var(--border)'}`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '14px' }}>{statusIcon[stage.status]}</span>
@@ -380,8 +380,8 @@ export default function PipelinePage() {
               {agents.map(a => (
                 <div key={a.id} style={{
                   padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-                  background: a.status === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${a.status === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  background: a.status === 'error' ? 'var(--red-soft)' : 'var(--bg-card)',
+                  border: `1px solid ${a.status === 'error' ? 'var(--red-mid)' : 'var(--border)'}`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>{agentStatusIcon[a.status]}</span>
@@ -401,9 +401,9 @@ export default function PipelinePage() {
 
         <Link href="/im" className="pipeline-back-link" style={{
           display: 'block', marginTop: 'auto', padding: '8px 12px',
-          borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)',
+          borderRadius: 'var(--radius-sm)', background: 'var(--bg-hover)', color: 'var(--text-secondary)',
           textDecoration: 'none', fontSize: '13px', textAlign: 'center',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid var(--border)',
         }}>
           {t("pipeline.back_im")}
         </Link>
@@ -458,10 +458,10 @@ export default function PipelinePage() {
                 {stage.role && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>({stage.role})</span>}
               </div>
               <pre style={{
-                margin: 0, padding: '12px', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.03)',
+                margin: 0, padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-card)',
                 fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 color: 'var(--text-primary)', maxHeight: '250px', overflowY: 'auto',
-                border: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.5,
+                border: '1px solid var(--border)', lineHeight: 1.5,
               }}>
                 {stage.output.slice(0, 3000)}
               </pre>

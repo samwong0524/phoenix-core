@@ -5,11 +5,11 @@ import Link from 'next/link';
 type AgentStatus = 'idle' | 'working' | 'waiting' | 'error' | 'paused';
 
 const statusConfig: Record<AgentStatus, { icon: string; color: string; label: string }> = {
-  idle: { icon: '\u26AA', color: '#888', label: '\u7A7A\u95F2' },
-  working: { icon: '\u{1F504}', color: '#4a4', label: '\u8FD0\u884C\u4E2D' },
-  waiting: { icon: '\u23F8', color: '#cc0', label: '\u7B49\u5F85\u4E2D' },
-  error: { icon: '\u274C', color: '#f44', label: '\u51FA\u9519' },
-  paused: { icon: '\u23F9', color: '#fa0', label: '\u5DF2\u6682\u505C' },
+  idle: { icon: '\u26AA', color: 'var(--text-dim)', label: '\u7A7A\u95F2' },
+  working: { icon: '\u{1F504}', color: 'var(--green)', label: '\u8FD0\u884C\u4E2D' },
+  waiting: { icon: '\u23F8', color: 'var(--yellow)', label: '\u7B49\u5F85\u4E2D' },
+  error: { icon: '\u274C', color: 'var(--red)', label: '\u51FA\u9519' },
+  paused: { icon: '\u23F9', color: 'var(--yellow)', label: '\u5DF2\u6682\u505C' },
 };
 
 interface AgentStatusCardProps {
@@ -35,8 +35,8 @@ export default function AgentStatusCard({ status, agentName, currentStage, elaps
       gap: '8px',
       padding: '6px 12px',
       borderRadius: '8px',
-      background: '#1a1a1a',
-      border: '1px solid #333',
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
       textDecoration: 'none',
       cursor: 'pointer',
     }}>
@@ -47,10 +47,10 @@ export default function AgentStatusCard({ status, agentName, currentStage, elaps
           {config.label}
         </div>
         {currentStage && (
-          <div style={{ fontSize: '11px', color: '#888' }}>{currentStage}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{currentStage}</div>
         )}
         {elapsedSeconds > 0 && status === 'working' && (
-          <div style={{ fontSize: '11px', color: '#666' }}>{formatElapsed(elapsedSeconds)}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{formatElapsed(elapsedSeconds)}</div>
         )}
       </div>
     </Link>

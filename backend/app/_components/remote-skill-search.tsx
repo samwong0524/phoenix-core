@@ -210,7 +210,7 @@ function RemoteSkillCard({
             border: "1px solid var(--green-dim)",
             borderRadius: 4,
             cursor: installing ? "wait" : "pointer",
-            background: "rgba(0, 255, 136, 0.08)",
+            background: "var(--green-soft)",
           }}
         >
           {installing ? "安装中..." : "安装"}

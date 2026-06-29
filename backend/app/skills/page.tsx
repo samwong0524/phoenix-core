@@ -185,7 +185,7 @@ export default function SkillsPage() {
       )}
 
       {/* Header */}
-      <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+      <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <PageHeader
             title={t("skills.title")}
@@ -201,7 +201,7 @@ export default function SkillsPage() {
         maxWidth: 1200, margin: "0 auto",
         padding: "0 32px",
         display: "flex", gap: 0,
-        borderBottom: "1px solid var(--border-subtle)",
+        borderBottom: "1px solid var(--border)",
       }}>
         {tabs.map(tab => (
           <button
@@ -222,7 +222,7 @@ export default function SkillsPage() {
             {tab.badge && (
               <span style={{
                 fontSize: 11, padding: "1px 6px", borderRadius: 9999,
-                background: "var(--surface-2)", color: "var(--text-dim)",
+                background: "var(--bg-hover)", color: "var(--text-dim)",
               }}>{tab.badge}</span>
             )}
           </button>
@@ -281,7 +281,7 @@ function InstalledTab({ skills, onDelete, t }: { skills: SkillEntry[]; onDelete:
         paddingRight: 8,
       }}>
       {skills.map(s => (
-        <Card key={s.name} hoverable hoverBorderColor="var(--green-mid)" padding={16} borderRadius="var(--radius-md)" style={{ background: "var(--surface-0)", borderColor: "var(--border-subtle)" }}>
+        <Card key={s.name} hoverable hoverBorderColor="var(--green-mid)" padding={16} borderRadius="var(--radius-md)" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{s.name}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -367,20 +367,20 @@ function StatsTab({ data, t }: { data: SkillStatsData; t: (key: string, params?:
       ) : (
         <div style={{
           borderRadius: "var(--radius-md)", overflow: "hidden",
-          border: "1px solid var(--border-subtle)",
+          border: "1px solid var(--border)",
         }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: "var(--surface-05)" }}>
+              <tr style={{ background: "var(--bg-card)" }}>
                 {[t("skills.col_skill"), t("skills.col_calls"), t("skills.col_success"), t("skills.col_agents"), t("skills.col_last")].map(h => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", borderBottom: "1px solid var(--border-subtle)" }}>{h}</th>
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", borderBottom: "1px solid var(--border)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {data.perSkill.map((s, i) => (
                 <tr key={s.skillName} style={{
-                  background: i % 2 === 0 ? "transparent" : "var(--surface-hairline)",
+                  background: i % 2 === 0 ? "transparent" : "var(--bg-hover)",
                   borderBottom: "1px solid var(--border-hairline)",
                 }}>
                   <td style={{ padding: "10px 14px", fontWeight: 500, color: "var(--text-primary)" }}>{s.skillName}</td>
@@ -431,14 +431,14 @@ function MarketplaceTab({
           placeholder={t("skills.search_placeholder")}
           style={{
             flex: 1, padding: "10px 14px",
-            background: "var(--surface-1)",
-            border: "1px solid var(--border-input)",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
             borderRadius: "var(--radius-md)", color: "var(--text-primary)", fontSize: 13,
             outline: "none",
             transition: "border-color 0.2s",
           }}
           onFocus={e => { e.target.style.borderColor = "var(--green-vivid)"; }}
-          onBlur={e => { e.target.style.borderColor = "var(--border-input)"; }}
+          onBlur={e => { e.target.style.borderColor = "var(--border)"; }}
         />
         <button
           onClick={onSearch}
@@ -469,12 +469,12 @@ function MarketplaceTab({
       {results.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
           {results.map(r => (
-            <Card key={r.name + r.source} hoverable padding={16} borderRadius="var(--radius-md)" style={{ background: "var(--surface-0)", borderColor: "var(--border-subtle)" }}>
+            <Card key={r.name + r.source} hoverable padding={16} borderRadius="var(--radius-md)" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--purple-text)", flex: 1 }}>{r.name}</div>
                 <span style={{
                   fontSize: 10, padding: "2px 6px", borderRadius: 4,
-                  background: "var(--surface-15)", color: "var(--text-secondary)",
+                  background: "var(--bg-hover)", color: "var(--text-secondary)",
                 }}>{r.source}</span>
               </div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 12 }}>
@@ -493,7 +493,7 @@ function MarketplaceTab({
                   style={{
                     marginLeft: "auto",
                     padding: "4px 12px", borderRadius: "var(--radius-sm)",
-                    background: installing === r.name ? "var(--surface-15)" : "var(--green-soft)",
+                    background: installing === r.name ? "var(--bg-hover)" : "var(--green-soft)",
                     border: "1px solid var(--green-muted)",
                     color: installing === r.name ? "var(--text-secondary)" : "var(--green-text)",
                     cursor: installing === r.name ? "wait" : "pointer",
@@ -521,8 +521,8 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
     <div style={{
       padding: 16,
       borderRadius: "var(--radius-md)",
-      background: "var(--surface-0)",
-      border: "1px solid var(--border-subtle)",
+      background: "var(--bg-card)",
+      border: "1px solid var(--border)",
       borderLeft: `3px solid ${accent}`,
     }}>
       <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
