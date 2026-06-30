@@ -304,8 +304,8 @@ export default function SkillsList() {
         </div>
 
         {remoteError && (
-          <div className="toast" style={{ marginBottom: 12 }}>
-            <div className="mono">{remoteError}</div>
+          <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: "var(--radius-sm)", background: "var(--red-soft)", border: "1px solid var(--red-muted)", color: "var(--red-text)", fontSize: 13 }}>
+            {remoteError}
           </div>
         )}
 

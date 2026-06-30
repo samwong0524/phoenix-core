@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Globe, Palette, Cpu, Info, Check } from "lucide-react";
+import { Globe, Palette, Cpu, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { corporateVariants } from "@/lib/motion";
 import { useI18n } from "@/lib/i18n/context";
+import { toast } from "@/components/ui";
 import { PageLayout } from "../_components/PageLayout";
 import { ROUTES } from "../_components/routes";
 
@@ -34,7 +35,6 @@ function applyTheme(theme: Theme) {
 export default function SettingsPage() {
   const { locale, setLocale, t } = useI18n();
   const [theme, setThemeState] = useState<Theme>("system");
-  const [toast, setToast] = useState(false);
 
   useEffect(() => {
     const saved = getCookie("swarm-theme") as Theme | null;
@@ -43,27 +43,22 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const showToast = useCallback(() => {
-    setToast(true);
-    setTimeout(() => setToast(false), 2000);
-  }, []);
-
   const handleThemeChange = useCallback(
     (next: Theme) => {
       setThemeState(next);
       setCookie("swarm-theme", next);
       applyTheme(next);
-      showToast();
+      toast.success(t("settings.saved"));
     },
-    [showToast],
+    [t],
   );
 
   const handleLocaleChange = useCallback(
     (next: "zh" | "en") => {
       setLocale(next);
-      showToast();
+      toast.success(t("settings.saved"));
     },
-    [setLocale, showToast],
+    [setLocale, t],
   );
 
   const themes: { value: Theme; label: string }[] = [
@@ -79,37 +74,6 @@ export default function SettingsPage() {
 
   return (
     <PageLayout title={t("settings.title")} backHref={ROUTES.CHAT}>
-      {/* Toast */}
-      {toast && (
-        <motion.div
-          role="status"
-          aria-live="polite"
-          initial={{ opacity: 0, x: 16 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 16 }}
-          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-          style={{
-            position: "fixed",
-            top: 16,
-            right: 16,
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 16px",
-            borderRadius: "var(--radius-sm)",
-            background: "rgba(0, 200, 120, 0.15)",
-            border: "1px solid rgba(0, 200, 120, 0.3)",
-            color: "#00c878",
-            fontSize: 13,
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          <Check size={14} aria-hidden="true" />
-          {t("settings.saved")}
-        </motion.div>
-      )}
-
       <motion.div
         variants={corporateVariants.staggerContainer}
         initial="hidden"

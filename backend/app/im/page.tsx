@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Briefcase, Code2, Network, User } from "lucide-react";
 import { ErrorBoundary } from "../_components/error-boundary";
+import { toast } from "@/components/ui";
 import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { useTopoNodes } from "./useTopoNodes";
@@ -167,6 +168,14 @@ function IMPageInner() {
       .then((data) => setSkillList(data.skills ?? data ?? []))
       .catch(() => {});
   }, []);
+
+  // Show error as unified toast
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      setError(null);
+    }
+  }, [error, setError]);
 
   useUiStream(
     session,
@@ -860,8 +869,6 @@ function IMPageInner() {
 
           </div>
         </div>
-
-        {error ? <div className="toast" role="alert">{error}</div> : null}
 
         {/* Skill suggestion chips (A-05) — non-intrusive hints above the input */}
         {skillSuggestions.length > 0 && (

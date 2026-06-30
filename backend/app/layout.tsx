@@ -6,6 +6,7 @@ import { QuickPickHost } from "./_components/quickpick-host";
 import { AuthGuard } from "./_components/auth-guard";
 import { ConfirmProvider } from "./_components/confirm-dialog";
 import { AppLayout } from "./_components/app-layout";
+import { ToastContainer } from "@/components/ui";
 
 export const metadata = {
   title: "SWARM IDE",
@@ -55,6 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <AppLayout>
                 {children}
               </AppLayout>
+              <ToastContainer />
             </AuthGuard>
           </ConfirmProvider>
           <RegisterSW />

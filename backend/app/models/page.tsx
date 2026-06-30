@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { corporateVariants } from "@/lib/motion";
 import { useI18n } from "@/lib/i18n/context";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, toast } from "@/components/ui";
 import { PageLayout } from "../_components/PageLayout";
 import { ROUTES } from "../_components/routes";
 
@@ -34,7 +34,6 @@ export default function ModelsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchConfig = useCallback(async () => {
@@ -55,7 +54,6 @@ export default function ModelsPage() {
   const save = async () => {
     if (!config) return;
     setSaving(true);
-    setSaved(false);
     try {
       await fetch("/api/settings/provider", {
         method: "POST",
@@ -67,10 +65,9 @@ export default function ModelsPage() {
           model: config.model,
         }),
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast.success(t("models.saved"));
     } catch (e) {
-      console.error("Failed to save config", e);
+      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -103,37 +100,6 @@ export default function ModelsPage() {
       error={error}
       onRetry={fetchConfig}
     >
-      {/* Toast */}
-      <AnimatePresence>
-        {saved && (
-          <motion.div
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
-            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-            style={{
-              position: "fixed",
-              top: 16,
-              right: 16,
-              zIndex: 1000,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
-              borderRadius: "var(--radius-sm)",
-              background: "rgba(0, 200, 120, 0.15)",
-              border: "1px solid rgba(0, 200, 120, 0.3)",
-              color: "#00c878",
-              fontSize: 13,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            <CheckCircle2 size={14} />
-            {t("models.saved")}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <motion.div
         variants={corporateVariants.staggerContainer}
         initial="hidden"

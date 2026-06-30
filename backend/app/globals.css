@@ -323,7 +323,7 @@ textarea {
 @media (max-width: 768px) {
   .app {
     grid-template-columns: 1fr;
-    overflow: auto;
+    overflow: hidden;
   }
   .panel-left {
     display: none;
@@ -331,6 +331,11 @@ textarea {
   .panel-right,
   .right-section {
     display: none;
+  }
+  /* Hide the global app-layout hamburger on mobile —
+     IMShell provides its own drawer toggle */
+  [data-slot="global-nav"] {
+    display: none !important;
   }
 }
 
@@ -967,16 +972,6 @@ textarea {
   margin: 0;
   white-space: pre-wrap;
   font-family: inherit;
-}
-
-.toast {
-  border: 1px solid var(--red);
-  background: rgba(255, 59, 59, 0.1);
-  color: var(--text-primary);
-  border-radius: var(--radius-lg);
-  padding: 10px 12px;
-  margin: 12px 12px 0;
-  font-size: 13px;
 }
 
 /* ===== DESIGN SYSTEM ===== */

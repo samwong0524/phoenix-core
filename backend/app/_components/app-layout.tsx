@@ -38,6 +38,7 @@ export const AppLayout = memo(function AppLayout({
       <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--bg-void)" }}>
         {/* Mobile hamburger toggle */}
         <button
+          data-slot="global-nav"
           onClick={() => setDrawerOpen(!drawerOpen)}
           style={{
             position: "fixed",

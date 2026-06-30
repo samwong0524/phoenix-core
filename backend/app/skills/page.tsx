@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/context";
-import { EmptyState, Loading, Card, PageHeader, Alert } from "@/components/ui";
+import { EmptyState, Loading, Card, PageHeader, toast } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +68,6 @@ export default function SkillsPage() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
   // Initial data load
   useEffect(() => {
@@ -82,17 +80,6 @@ export default function SkillsPage() {
     Promise.all([fetchStats, fetchSkills])
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
-
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const flash = useCallback((type: "ok" | "err", msg: string) => {
-    setToast({ type, msg });
   }, []);
 
   const handleSearch = async () => {
@@ -124,17 +111,17 @@ export default function SkillsPage() {
       });
       const json = await res.json();
       if (json.ok) {
-        flash("ok", t("skills.install_ok", { name }));
+        toast.success(t("skills.install_ok", { name }));
         // Optimistic: append to local list without full reload
         setSkills(prev => {
           if (prev.some(s => s.name === name)) return prev;
           return [...prev, { name, description: searchResults.find(r => r.name === name)?.description ?? "", autoLoad: false, roles: [] }];
         });
       } else {
-        flash("err", t("skills.install_fail", { error: json.error }));
+        toast.error(t("skills.install_fail", { error: json.error }));
       }
     } catch {
-      flash("err", t("skills.install_fail_generic"));
+      toast.error(t("skills.install_fail_generic"));
     } finally {
       setInstalling(null);
     }
@@ -149,13 +136,13 @@ export default function SkillsPage() {
       });
       const json = await res.json();
       if (json.ok) {
-        flash("ok", t("skills.uninstall_ok", { name }));
+        toast.success(t("skills.uninstall_ok", { name }));
         setSkills(prev => prev.filter(s => s.name !== name));
       } else {
-        flash("err", t("skills.uninstall_fail", { error: json.error }));
+        toast.error(t("skills.uninstall_fail", { error: json.error }));
       }
     } catch {
-      flash("err", t("skills.uninstall_fail_generic"));
+      toast.error(t("skills.uninstall_fail_generic"));
     }
   };
 
@@ -171,19 +158,6 @@ export default function SkillsPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-void)", color: "var(--text-primary)" }}>
-      {/* Toast */}
-      {toast && (
-        <Alert
-          variant={toast.type === "ok" ? "success" : "error"}
-          style={{
-            position: "fixed", top: 20, right: 20, zIndex: "var(--z-overlay)",
-            fontWeight: 500, animation: "slideIn 0.2s ease-out",
-          }}
-        >
-          {toast.type === "ok" ? "✓" : "✗"} {toast.msg}
-        </Alert>
-      )}
-
       {/* Header */}
       <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
