@@ -1,0 +1,173 @@
+{
+  "skill": "extract",
+  "generated_at": "2026-06-30T23:15:00+08:00",
+  "project_name": "Phoenix-Core",
+  "meta": {
+    "mode_resolved_by": "auto",
+    "mode": "internal",
+    "target": "F:\\swarm-ide\\backend\\",
+    "target_framework": ["tailwind", "w3c-tokens", "css-vars"],
+    "sparkdesign_context": "absent",
+    "fallback_applied": ["no-sparkdesign-baseline"],
+    "internal_scan": {
+      "framework": "next",
+      "ui_libraries": ["framer-motion", "lucide-react", "@xyflow/react"],
+      "css_engine": "globals.css + CSS variables + inline React.CSSProperties",
+      "css_in_js_engine": "none",
+      "css_in_js_files_parsed": 0,
+      "config_sources": ["package.json", "app/globals.css", "src/lib/motion.ts"],
+      "tailwind_config_found": false,
+      "shadcn_config_found": false,
+      "theme_ts_found": false
+    },
+    "ask_answers": {
+      "deliverable_choice": "A",
+      "confirmed_at": "2026-06-30T23:10:00+08:00"
+    }
+  },
+  "tokens": {
+    "color": {
+      "count": 82,
+      "categories": {
+        "background_surface": 5,
+        "border": 3,
+        "text": 3,
+        "semantic_accent": 2,
+        "semantic_status": 4,
+        "gradient_stop": 6,
+        "component_specific": 12,
+        "overlay_shadow": 4,
+        "light_mode_override": 43
+      },
+      "key_tokens": [
+        {"name": "--bg-void", "value": "#050a14", "role": "background.base"},
+        {"name": "--bg-panel", "value": "#0a1020", "role": "background.surface.1"},
+        {"name": "--bg-card", "value": "#0f172a", "role": "background.surface.2"},
+        {"name": "--bg-elevated", "value": "#152040", "role": "background.surface.3"},
+        {"name": "--bg-overlay", "value": "rgba(5,10,20,0.85)", "role": "background.overlay"},
+        {"name": "--color-primary", "value": "#38bdf8", "role": "accent.primary"},
+        {"name": "--color-secondary", "value": "#ec4899", "role": "accent.secondary"},
+        {"name": "--text-primary", "value": "#e2e8f0", "role": "text.primary"},
+        {"name": "--text-secondary", "value": "rgba(148,163,184,0.85)", "role": "text.secondary"},
+        {"name": "--text-dim", "value": "rgba(120,150,190,0.5)", "role": "text.dim"}
+      ]
+    },
+    "typography": {
+      "count": 2,
+      "families": [
+        {"name": "Exo 2", "role": "display+body", "weights": [300, 400, 500, 600, 700], "source": "Google Fonts"},
+        {"name": "JetBrains Mono", "role": "monospace", "weights": [400, 500], "source": "Google Fonts"}
+      ],
+      "base_size": "13px",
+      "scale": ["10px", "11px", "12px", "13px", "14px", "16px", "18px", "20px", "24px", "28px", "32px"]
+    },
+    "spacing": {
+      "count": 7,
+      "anchor": "4px",
+      "tokens": [
+        {"name": "--space-1", "value": "4px"},
+        {"name": "--space-2", "value": "8px"},
+        {"name": "--space-3", "value": "12px"},
+        {"name": "--space-4", "value": "16px"},
+        {"name": "--space-5", "value": "24px"},
+        {"name": "--space-6", "value": "32px"},
+        {"name": "--space-7", "value": "48px"}
+      ]
+    },
+    "radius": {
+      "count": 4,
+      "tokens": [
+        {"name": "--radius-sm", "value": "6px", "applied_to": ["input", "badge", "small-button"]},
+        {"name": "--radius-md", "value": "10px", "applied_to": ["card", "button", "panel"]},
+        {"name": "--radius-lg", "value": "16px", "applied_to": ["modal", "large-card"]},
+        {"name": "--radius-full", "value": "9999px", "applied_to": ["avatar", "pill", "dot"]}
+      ]
+    },
+    "shadow": {
+      "count": 3,
+      "tokens": [
+        {"name": "--shadow-glow-sm", "value": "0 0 8px rgba(56,189,248,0.15)", "elevation": 1},
+        {"name": "--shadow-glow-md", "value": "0 0 16px rgba(56,189,248,0.2)", "elevation": 2},
+        {"name": "--shadow-glow-lg", "value": "0 4px 32px rgba(56,189,248,0.25)", "elevation": 3}
+      ]
+    },
+    "motion": {
+      "count": 3,
+      "personality": "Corporate",
+      "signature_easing": "cubic-bezier(0.2, 0, 0, 1)",
+      "durations": [
+        {"name": "--duration-fast", "value": "150ms", "usage": "hover, micro-interactions"},
+        {"name": "--duration-normal", "value": "250ms", "usage": "page transitions, panel slides"},
+        {"name": "--duration-slow", "value": "400ms", "usage": "modals, complex animations"}
+      ],
+      "variants_in_motion_ts": ["fadeSlideUp", "stepTransition", "modalOverlay", "modalPanel", "staggerContainer", "staggerItem"]
+    },
+    "breakpoint": {
+      "count": 4,
+      "tokens": [
+        {"name": "--bp-sm", "value": "640px"},
+        {"name": "--bp-md", "value": "768px"},
+        {"name": "--bp-lg", "value": "1024px"},
+        {"name": "--bp-xl", "value": "1280px"}
+      ]
+    },
+    "z_index": {
+      "count": 9,
+      "layers": [
+        {"name": "--z-base", "value": 0},
+        {"name": "--z-dropdown", "value": 10},
+        {"name": "--z-sticky", "value": 20},
+        {"name": "--z-sidebar", "value": 30},
+        {"name": "--z-panel", "value": 40},
+        {"name": "--z-overlay", "value": 50},
+        {"name": "--z-modal", "value": 100},
+        {"name": "--z-toast", "value": 200},
+        {"name": "--z-tooltip", "value": 300}
+      ]
+    },
+    "icon_set": {
+      "library": "lucide-react",
+      "version": "^0.469.0",
+      "style": "outlined",
+      "default_size": "16px"
+    },
+    "gradient": {
+      "count": 3,
+      "tokens": [
+        {"name": "--gradient-primary", "value": "linear-gradient(135deg, #38bdf8, #818cf8)"},
+        {"name": "--gradient-accent", "value": "linear-gradient(135deg, #ec4899, #8b5cf6)"},
+        {"name": "--gradient-surface", "value": "linear-gradient(180deg, #0a1020, #050a14)"}
+      ]
+    },
+    "state": {
+      "count": 4,
+      "tokens": [
+        {"name": "--green", "value": "#22c55e", "state": "success/online"},
+        {"name": "--yellow", "value": "#eab308", "state": "warning/busy"},
+        {"name": "--red", "value": "#ef4444", "state": "error/offline"},
+        {"name": "--cyan", "value": "#38bdf8", "state": "active/focus"}
+      ]
+    }
+  },
+  "sparkdesign_diff": {
+    "match_method": "naming-only",
+    "matched": [],
+    "semantic_match": [],
+    "project_specific": [
+      {"token": "All 82 color tokens", "reason": "No SparkDesign baseline available for comparison"},
+      {"token": "All spacing/radius/shadow tokens", "reason": "No SparkDesign baseline available for comparison"}
+    ],
+    "proposed_increment": []
+  },
+  "handoff_hint": "# Design Context\nPhoenix-Core design language extracted via /extract (internal mode).\n- Full design.md: spark-output/extract/phoenix-core/phoenix-core-design-language.md\n- Token JSON: spark-output/extract/phoenix-core/phoenix-core-design-tokens.json\n\nWhen generating UI components, all color/spacing/radius/shadow must be selected from these tokens. Use CSS variables (var(--bg-void), var(--color-primary), etc.) — do not invent new values.",
+  "artifacts": {
+    "design_md": "spark-output/extract/phoenix-core/phoenix-core-design-language.md",
+    "tokens_json": "spark-output/extract/phoenix-core/phoenix-core-design-tokens.json"
+  },
+  "chain": {
+    "schema": "v0.5.3",
+    "reads_consumed": ["flow-web", "check"],
+    "reads_missing": ["qa", "board"],
+    "downstream_ready": ["brief", "board", "bench", "flow-web", "flow-mobile"]
+  }
+}

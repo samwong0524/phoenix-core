@@ -1,0 +1,97 @@
+{
+  "skill": "metric",
+  "generated_at": "2026-06-30T23:00:00+08:00",
+  "project_name": "Phoenix-Core",
+  "analytics_baseline": {
+    "tool": "self-hosted (PostHog or console.log fallback)",
+    "existing_events_count": 0,
+    "coverage_estimate": "partial"
+  },
+  "north_star_metric": {
+    "name": "移动端核心页面可用率",
+    "formula": "成功完成至少1项核心操作的移动端session / 移动端总session",
+    "target": "≥ 80%",
+    "timeframe": "上线后 30 天",
+    "business_alignment": "brief.business_goal[0]: 核心页面移动端可用率 > 80%",
+    "why_this_one": "改版核心赌注是移动端可用性。可用率是最直接的行为指标，比PV/留存/满意度更领先"
+  },
+  "driver_metrics": [
+    {
+      "name": "首次Agent交互完成时间中位数",
+      "formula": "median(first_message_sent.ts - login_success.ts)",
+      "target": "≤ 5 分钟",
+      "timeframe": "60 天",
+      "events_needed": ["login_success", "im_page_loaded", "first_message_sent", "agent_response_received"],
+      "instrumentation_status": "missing",
+      "related_story": "story-1, story-5"
+    },
+    {
+      "name": "Blocker级问题修复完成率",
+      "formula": "已修复Blocker数 / 7 × 100%",
+      "target": "100% (7/7)",
+      "timeframe": "上线前 30 天",
+      "events_needed": ["engineering_tracking (GitHub PR linked to audit finding)"],
+      "instrumentation_status": "partial",
+      "related_story": "story-1/2/3/4/6"
+    },
+    {
+      "name": "统一Toast覆盖率",
+      "formula": "使用统一Toast的catch块数 / 全部catch块数 × 100%",
+      "target": "100%",
+      "timeframe": "60 天",
+      "events_needed": ["toast_displayed", "toast_retry_clicked"],
+      "instrumentation_status": "missing",
+      "related_story": "story-6"
+    },
+    {
+      "name": "触摸目标合规率",
+      "formula": "≥44px可交互元素数 / 总可交互元素数 × 100%",
+      "target": "≥ 95%",
+      "timeframe": "30 天",
+      "events_needed": ["touch_target_audit (automated script)"],
+      "instrumentation_status": "missing",
+      "related_story": "story-1/2/3"
+    }
+  ],
+  "counter_metrics": [
+    {
+      "name": "桌面端任务完成率",
+      "what_to_prevent": "为移动端简化而砍桌面端高级功能",
+      "threshold": "≥ 改版前基线（下降不超过5%）"
+    },
+    {
+      "name": "引导跳过率",
+      "what_to_prevent": "强制引导拉激活但破坏可控体验",
+      "threshold": "≤ 60%"
+    },
+    {
+      "name": "SSE连接中断频率",
+      "what_to_prevent": "响应式改造引入SSE不稳定",
+      "threshold": "≤ 改版前基线"
+    },
+    {
+      "name": "首屏加载时长P95",
+      "what_to_prevent": "响应式CSS/JS增加导致性能退化",
+      "threshold": "≤ 3秒 (mobile 4G)"
+    }
+  ],
+  "health_metrics": [
+    {"name": "JS错误率", "threshold": "≤ 0.5% session", "alert_when": "单日新增 > 10"},
+    {"name": "API请求失败率", "threshold": "≤ 2%", "alert_when": "1小时 > 5%"},
+    {"name": "SSE重连成功率", "threshold": "≥ 95%", "alert_when": "< 80% 持续5分钟"},
+    {"name": "触摸事件响应延迟", "threshold": "≤ 100ms", "alert_when": "P95 > 300ms"},
+    {"name": "构建成功率", "threshold": "100%", "alert_when": "连续2次失败"}
+  ],
+  "instrumentation_gaps": {
+    "must_count": 15,
+    "should_count": 5,
+    "nice_to_have_count": 4,
+    "total": 24
+  },
+  "dashboard": {
+    "primary_view": ["移动端可用率(NSM)", "首次交互时间", "Blocker修复进度", "Toast覆盖率", "桌面端任务完成率(Counter)", "SSE重连成功率(Health)"],
+    "drill_down_dimensions": ["viewport (mobile/tablet/desktop)", "user_type (first_time/returning)", "page", "week_trend"],
+    "review_cadence": "daily (头2周) → weekly",
+    "owner_role": "前端工程师(埋点) + PM(解读决策)"
+  }
+}

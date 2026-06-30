@@ -1,0 +1,234 @@
+{
+  "skill": "retro",
+  "generated_at": "2026-06-30T23:30:00+08:00",
+  "project_name": "Phoenix-Core",
+  "project_summary": {
+    "project_type": "redesign",
+    "started_at": "2026-06-01",
+    "delivered_at": null,
+    "planned_duration": "8 weeks",
+    "actual_duration": "4 weeks (design phase only, not launched)",
+    "team_size": "2-3",
+    "retro_type": "design_process_retro",
+    "retro_timing": "N/A (not launched)",
+    "status": "design_complete_not_implemented",
+    "design_chain_completion": "14/14 skills",
+    "implementation_completion": "0/7 blockers fixed, 0/24 events instrumented"
+  },
+  "decision_validation": [
+    {
+      "decision": "押响应式 Web 而非原生 App",
+      "source": "pitch.direction",
+      "actual_outcome": "设计阶段 4 周完成（提前），逻辑自洽；工程未启动",
+      "verdict": "validated",
+      "lesson": "小团队短工期下减法决策正确率高"
+    },
+    {
+      "decision": "三层断点策略（mobile < 768 / tablet 768-1023 / desktop ≥ 1024）",
+      "source": "flow-web.breakpoints",
+      "actual_outcome": "与 CSS 变量体系完全对齐，flow-web 4 屏原型覆盖完整",
+      "verdict": "validated",
+      "lesson": "断点选择与已有 token 体系一致减少工程映射成本"
+    },
+    {
+      "decision": "基础设施优先：统一 Toast 先于页面级改动",
+      "source": "pitch.decisions[4]",
+      "actual_outcome": "Story 6 排在 MVP Release 第一位，PRD 有 Given/When/Then 支撑",
+      "verdict": "validated",
+      "lesson": "基础设施先行排序逻辑自洽"
+    },
+    {
+      "decision": "Workflow 移动端只做只读，编辑延后 Phase 2",
+      "source": "pitch.decisions[5]",
+      "actual_outcome": "只读方案合理，但 Phase 2 无时间承诺",
+      "verdict": "partially-validated",
+      "lesson": "延后决策应绑定最晚启动时间"
+    },
+    {
+      "decision": "Zustand temporal middleware 做 undo/redo",
+      "source": "pitch.decisions[3]",
+      "actual_outcome": "技术选型正确但 undo 是补救措施，确认弹窗才是根因修复",
+      "verdict": "partially-validated",
+      "lesson": "先修预防再修补救成本更低"
+    },
+    {
+      "decision": "8 周工期 + 渐进式翻新",
+      "source": "pitch.asks[4]",
+      "actual_outcome": "设计 4 周完成，工程未启动；风险被识别但无 mitigation",
+      "verdict": "partially-validated",
+      "lesson": "识别风险但无缓解计划 = 风险未被真正处理"
+    },
+    {
+      "decision": "设计产物可直接被工程消费（隐含假设）",
+      "source": "chain_protocol",
+      "actual_outcome": "零实现，PRD 无配套测试用例，flow-web 无可运行代码",
+      "verdict": "refuted",
+      "lesson": "设计链路完成 ≠ 工程可交付，需要工程 Ready Check"
+    }
+  ],
+  "assumption_validation": [
+    {
+      "assumption": "陈昊真的会在移动端查看和操作 Agent 任务",
+      "target_metric": "移动端 session 占比 ≥ 20%",
+      "actual_metric": null,
+      "verdict": "inconclusive",
+      "assumption_quality": "被正确识别为最关键假设，但没有低成本验证实验",
+      "next_action": "做 mobile prototype + 5 人定性测试验证"
+    },
+    {
+      "assumption": "5 分钟内新用户可完成首次 Agent 交互",
+      "target_metric": "首次交互中位数 ≤ 5 min",
+      "actual_metric": null,
+      "verdict": "inconclusive",
+      "assumption_quality": "目标基于 journey Stage 3 pain_level=5 推导，逻辑合理但未做原型验证",
+      "next_action": "做 clickable prototype + 5 人可用性测试"
+    },
+    {
+      "assumption": "82 design tokens 足以覆盖工程实现",
+      "target_metric": "工程实现时不需额外发明 color/spacing/radius 值",
+      "actual_metric": null,
+      "verdict": "inconclusive",
+      "assumption_quality": "token 提取完整但 4 套不兼容样式系统共存意味着硬编码值可能未被覆盖",
+      "next_action": "工程启动前做 hardcoded value AST scan"
+    }
+  ],
+  "what_worked": [
+    {
+      "item": "全链 14 Skill 无断裂执行",
+      "why": "chain protocol 的 context/*.json + marker 机制确保上下游数据不丢失",
+      "keep_doing": "下个项目也用 chain protocol 跑全链，Pitch 后加工程 Ready Check"
+    },
+    {
+      "item": "Audit + Check 双视角交叉验证（104 findings）",
+      "why": "两种方法论互补——audit 偏用户体验视角，check 偏实现质量视角",
+      "keep_doing": "每个改版项目跑 audit + check 双视角"
+    },
+    {
+      "item": "Metric 在设计阶段就定义了完整度量框架",
+      "why": "NSM + 4 Driver + 4 Counter + 5 Health + 24 埋点缺口，工程可按清单优先埋点",
+      "keep_doing": "metric 在 pitch 之后、工程启动之前跑"
+    },
+    {
+      "item": "Extract 提取了完整的设计语言文档（82 tokens + W3C 格式）",
+      "why": "可直接被工程消费，也可作为新项目设计基线",
+      "keep_doing": "extract 在 brief 之后尽早跑"
+    }
+  ],
+  "what_didnt": [
+    {
+      "item": "设计→工程断层：14 Skill 产出零实现",
+      "root_cause": "chain protocol 终点是 extract/retro，没有工程启动节点",
+      "avoid_next_time": "Pitch 后增加工程 Ready Check 步骤"
+    },
+    {
+      "item": "核心假设未设计验证实验",
+      "root_cause": "chain protocol 中没有假设验证 Skill",
+      "avoid_next_time": "Brief 后对每个 critical_assumption 设计 ≤ 2 天最小验证实验"
+    },
+    {
+      "item": "Motion-Apply 3/7 路径依赖未创建页面",
+      "root_cause": "motion-plan 没检查目标元素是否存在",
+      "avoid_next_time": "motion-plan 增加目标存在性检查"
+    },
+    {
+      "item": "没有做 QA 和 Board",
+      "root_cause": "qa 需要实现才能跑，board 因已有设计体系跳过",
+      "avoid_next_time": "board deliberate skip 合理；qa 必须在实现后补跑"
+    },
+    {
+      "item": "104 findings 没有修复进度追踪",
+      "root_cause": "findings 停留在 JSON 文件，没有与 Linear/Jira/GitHub Issues 打通",
+      "avoid_next_time": "audit/check 完成后自动导出 Blocker+Major 为工程 tickets"
+    }
+  ],
+  "surprises": [
+    {
+      "surprise": "4 套不兼容样式系统共存（globals.css / Tailwind / inline hex / inline CSS var）",
+      "learning": "设计 token 体系与现实之间存在严重规范-现实差距，统一样式系统可能比响应式本身工作量更大",
+      "next_action": "工程第一步做样式系统统一 sprint"
+    },
+    {
+      "surprise": "用户对项目的自我评估：没测试过、不知道是否达标、不确定功能完善",
+      "learning": "设计链路解决的是设计什么的问题，但用户真正关心的是能不能用。14 Skill 全跑完 ≠ 项目 ready",
+      "next_action": "Pitch 后强制进入实现 sprint，至少做可运行 vertical slice"
+    },
+    {
+      "surprise": "IM 页面 1060 行代码的隐形地雷",
+      "learning": "设计层面的 IM 三栏响应式决策，工程层面意味着对巨型文件做组件拆分+响应式改造——两个独立高风险操作被合并",
+      "next_action": "Story 1 拆成组件拆分（不涉及响应式）+ 响应式改造两步"
+    }
+  ],
+  "skill_usage": [
+    {"skill": "Audit", "used": true, "value": "high", "suggestion": "增加 export_to_issues 步骤"},
+    {"skill": "Check", "used": true, "value": "high", "suggestion": "增加去重步骤引用 audit findings"},
+    {"skill": "Motion-Plan", "used": true, "value": "medium", "suggestion": "增加目标存在性检查"},
+    {"skill": "Motion-Apply", "used": true, "value": "medium", "suggestion": "与 motion-plan 联动仅实施已存在目标"},
+    {"skill": "Brief", "used": true, "value": "high", "suggestion": "增加标准验证实验字段"},
+    {"skill": "Journey", "used": true, "value": "high", "suggestion": "增加已有解决方案列"},
+    {"skill": "Stories", "used": true, "value": "high", "suggestion": "增加故事复杂度评估超限自动拆分"},
+    {"skill": "Sitemap", "used": true, "value": "medium", "suggestion": "简单 IA 可用 quick-mode"},
+    {"skill": "Flow-Web", "used": true, "value": "high", "suggestion": "考虑输出可运行 React 组件骨架"},
+    {"skill": "Edge", "used": true, "value": "high", "suggestion": "增加实现优先级排序"},
+    {"skill": "PRD", "used": true, "value": "high", "suggestion": "增加工程消费确认签字栏"},
+    {"skill": "Pitch", "used": true, "value": "high", "suggestion": "增加决策结果回填机制"},
+    {"skill": "Metric", "used": true, "value": "high", "suggestion": "增加埋点 sprint plan 输出"},
+    {"skill": "Extract", "used": true, "value": "high", "suggestion": "增加硬编码值 diff 输出"},
+    {"skill": "Scope", "used": false, "value": "n/a", "suggestion": "有 PRD 场景不需要"},
+    {"skill": "Frame", "used": false, "value": "n/a", "suggestion": "改版项目从 Audit 入口合理"},
+    {"skill": "Probe", "used": false, "value": "missed", "suggestion": "最大盲区——无用户真实声音"},
+    {"skill": "Bench", "used": false, "value": "missed", "suggestion": "竞品窗口无数据支撑"},
+    {"skill": "Signal", "used": false, "value": "n/a", "suggestion": "无反馈数据可分析"},
+    {"skill": "Board", "used": false, "value": "n/a", "suggestion": "deliberate skip 合理"},
+    {"skill": "Flow-Mobile", "used": false, "value": "n/a", "suggestion": "IM 移动端由 flow-web 覆盖"},
+    {"skill": "Chart", "used": false, "value": "n/a", "suggestion": "无可视化需求"},
+    {"skill": "Avatar", "used": false, "value": "n/a", "suggestion": "无头像需求"},
+    {"skill": "Poster", "used": false, "value": "n/a", "suggestion": "无营销图需求"},
+    {"skill": "Access", "used": false, "value": "missed", "suggestion": "工程实现后应补跑"},
+    {"skill": "Test", "used": false, "value": "n/a", "suggestion": "时机未到"},
+    {"skill": "QA", "used": false, "value": "n/a", "suggestion": "工程实现后应补跑"},
+    {"skill": "Retro", "used": true, "value": "current", "suggestion": "本次执行"}
+  ],
+  "recommendations": [
+    {
+      "audience": "self",
+      "recommendation": "Pitch 之后强制进入 2-3 天实现验证 sprint",
+      "rationale": "14 Skill 全跑完但零实现，设计产物价值需通过工程交付兑现"
+    },
+    {
+      "audience": "self",
+      "recommendation": "Stories 阶段对目标文件做复杂度预评估（wc -l > 500 行自动标记拆分）",
+      "rationale": "Story 1 负载过重因未评估 1060 行 IM 文件"
+    },
+    {
+      "audience": "team",
+      "recommendation": "建立设计→工程 handoff ceremony",
+      "rationale": "chain protocol 在设计侧完整但 handoff 到工程侧缺少明确责任转移"
+    },
+    {
+      "audience": "team",
+      "recommendation": "audit + check findings 自动导出为工程 backlog",
+      "rationale": "104 findings 停留在 JSON 文件没有进入工程追踪系统"
+    },
+    {
+      "audience": "next-project",
+      "recommendation": "改版项目必须跑 Probe 或 Signal",
+      "rationale": "本项目缺少用户真实声音，所有 pain points 是设计师推断的"
+    },
+    {
+      "audience": "next-project",
+      "recommendation": "先验证核心假设再投入全链设计",
+      "rationale": "核心赌注（移动端有使用场景）应用 ≤ 2 天 prototype 提前验证"
+    },
+    {
+      "audience": "organization",
+      "recommendation": "Pitch Ask 决策结果应归档为设计决策案例库",
+      "rationale": "5 个 Asks 要求本周/下周决策但无回填机制"
+    }
+  ],
+  "chain": {
+    "schema": "v0.5.3",
+    "reads_consumed": ["audit", "check", "motion-plan", "motion-apply", "brief", "journey", "stories", "sitemap", "flow-web", "edge", "prd", "pitch", "metric", "extract"],
+    "reads_count": 14,
+    "downstream_ready": []
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "Phoenix-Core Design Tokens — extracted from globals.css + motion.ts",
+  "color": {
+    "background": {
+      "void": { "$value": "#0f172a", "$type": "color", "$extensions": { "light": "#f8fafc" } },
+      "panel": { "$value": "rgba(30, 41, 59, 0.92)", "$type": "color", "$extensions": { "light": "rgba(255, 255, 255, 0.92)" } },
+      "card": { "$value": "rgba(51, 65, 85, 0.6)", "$type": "color", "$extensions": { "light": "rgba(255, 255, 255, 0.8)" } },
+      "elevated": { "$value": "rgba(51, 65, 85, 0.95)", "$type": "color", "$extensions": { "light": "rgba(255, 255, 255, 0.98)" } },
+      "overlay": { "$value": "rgba(0, 0, 0, 0.6)", "$type": "color", "$extensions": { "light": "rgba(0, 0, 0, 0.4)" } },
+      "code": { "$value": "rgba(15, 23, 42, 0.9)", "$type": "color", "$extensions": { "light": "rgba(248, 250, 252, 0.9)" } },
+      "hover": { "$value": "rgba(148, 163, 184, 0.08)", "$type": "color", "$extensions": { "light": "rgba(56, 189, 248, 0.06)" } }
+    },
+    "primary": {
+      "DEFAULT": { "$value": "#38bdf8", "$type": "color", "$extensions": { "light": "#0284c7", "aliases": ["--cyan", "--accent-cyan"] } },
+      "dim": { "$value": "rgba(56, 189, 248, 0.3)", "$type": "color", "$extensions": { "light": "rgba(2, 132, 199, 0.2)" } },
+      "glow": { "$value": "rgba(56, 189, 248, 0.15)", "$type": "color" },
+      "soft": { "$value": "rgba(56, 189, 248, 0.1)", "$type": "color" }
+    },
+    "secondary": {
+      "DEFAULT": { "$value": "#ec4899", "$type": "color", "$extensions": { "light": "#db2777", "aliases": ["--magenta"] } },
+      "dim": { "$value": "rgba(236, 72, 153, 0.3)", "$type": "color" }
+    },
+    "agent": {
+      "purple": { "$value": "#a855f7", "$type": "color" },
+      "purple-dim": { "$value": "rgba(168, 85, 247, 0.3)", "$type": "color" }
+    },
+    "semantic": {
+      "success": { "$value": "#10b981", "$type": "color", "$extensions": { "light": "#059669", "aliases": ["--green"] } },
+      "warning": { "$value": "#f59e0b", "$type": "color", "$extensions": { "light": "#d97706", "aliases": ["--yellow"] } },
+      "error": { "$value": "#ef4444", "$type": "color", "$extensions": { "light": "#dc2626", "aliases": ["--red"] } },
+      "info": { "$value": "#38bdf8", "$type": "color", "$extensions": { "note": "inherits --color-primary" } }
+    },
+    "text": {
+      "primary": { "$value": "rgba(226, 232, 240, 0.95)", "$type": "color", "$extensions": { "light": "rgba(15, 23, 42, 0.92)" } },
+      "secondary": { "$value": "rgba(203, 213, 225, 0.8)", "$type": "color", "$extensions": { "light": "rgba(51, 65, 85, 0.8)" } },
+      "dim": { "$value": "rgba(148, 163, 184, 0.65)", "$type": "color", "$extensions": { "light": "rgba(100, 116, 139, 0.65)" } }
+    },
+    "border": {
+      "DEFAULT": { "$value": "rgba(148, 163, 184, 0.15)", "$type": "color", "$extensions": { "light": "rgba(0, 0, 0, 0.1)" } },
+      "bright": { "$value": "rgba(148, 163, 184, 0.3)", "$type": "color", "$extensions": { "light": "rgba(56, 189, 248, 0.25)" } },
+      "hairline": { "$value": "rgba(255, 255, 255, 0.04)", "$type": "color", "$extensions": { "light": "rgba(0, 0, 0, 0.05)" } }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "display": { "$value": "\"Exo 2\", sans-serif", "$type": "fontFamily" },
+      "body": { "$value": "\"Exo 2\", sans-serif", "$type": "fontFamily" },
+      "mono": { "$value": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, monospace", "$type": "fontFamily" }
+    },
+    "fontSize": {
+      "base": { "$value": "13px", "$type": "dimension" },
+      "xs": { "$value": "11px", "$type": "dimension" },
+      "sm": { "$value": "12px", "$type": "dimension" },
+      "md": { "$value": "14px", "$type": "dimension" },
+      "lg": { "$value": "16px", "$type": "dimension" },
+      "xl": { "$value": "20px", "$type": "dimension" }
+    },
+    "lineHeight": {
+      "base": { "$value": "1.5", "$type": "number" }
+    }
+  },
+  "spacing": {
+    "1": { "$value": "4px", "$type": "dimension" },
+    "2": { "$value": "8px", "$type": "dimension" },
+    "3": { "$value": "12px", "$type": "dimension" },
+    "4": { "$value": "16px", "$type": "dimension" },
+    "5": { "$value": "24px", "$type": "dimension" },
+    "6": { "$value": "32px", "$type": "dimension" },
+    "7": { "$value": "48px", "$type": "dimension" }
+  },
+  "borderRadius": {
+    "sm": { "$value": "6px", "$type": "dimension" },
+    "md": { "$value": "10px", "$type": "dimension" },
+    "lg": { "$value": "14px", "$type": "dimension" },
+    "full": { "$value": "999px", "$type": "dimension" }
+  },
+  "shadow": {
+    "glow-sm": { "$value": "0 1px 3px rgba(0, 0, 0, 0.2)", "$type": "shadow", "$extensions": { "light": "0 1px 3px rgba(0, 0, 0, 0.08)" } },
+    "glow-md": { "$value": "0 4px 12px rgba(0, 0, 0, 0.25)", "$type": "shadow", "$extensions": { "light": "0 4px 12px rgba(0, 0, 0, 0.1)" } },
+    "glow-lg": { "$value": "0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2)", "$type": "shadow", "$extensions": { "light": "0 8px 24px rgba(0, 0, 0, 0.12)" } }
+  },
+  "motion": {
+    "easing": {
+      "standard": { "$value": "cubic-bezier(0.2, 0, 0, 1)", "$type": "cubicBezier" },
+      "exit": { "$value": "cubic-bezier(0.4, 0, 1, 1)", "$type": "cubicBezier" }
+    },
+    "duration": {
+      "quick": { "$value": "200ms", "$type": "duration" },
+      "standard": { "$value": "300ms", "$type": "duration" },
+      "slow": { "$value": "400ms", "$type": "duration" }
+    }
+  },
+  "breakpoint": {
+    "sm": { "$value": "640px", "$type": "dimension" },
+    "md": { "$value": "768px", "$type": "dimension" },
+    "lg": { "$value": "1024px", "$type": "dimension" },
+    "xl": { "$value": "1280px", "$type": "dimension" }
+  },
+  "zIndex": {
+    "bg": { "$value": 0, "$type": "number" },
+    "content": { "$value": 1, "$type": "number" },
+    "raised": { "$value": 2, "$type": "number" },
+    "active": { "$value": 3, "$type": "number" },
+    "sticky": { "$value": 10, "$type": "number" },
+    "dropdown": { "$value": 20, "$type": "number" },
+    "toast": { "$value": 40, "$type": "number" },
+    "overlay": { "$value": 50, "$type": "number" },
+    "modal": { "$value": 100, "$type": "number" }
+  },
+  "iconSet": {
+    "library": "lucide-react",
+    "version": "^0.469.0"
+  },
+  "gradient": null,
+  "state": {
+    "hover": { "background": "var(--bg-hover)" },
+    "focus": { "outline": "2px solid var(--color-primary)", "outlineOffset": "2px" },
+    "disabled": { "opacity": 0.5, "cursor": "not-allowed" },
+    "active": { "scale": 0.97 }
+  }
+}
