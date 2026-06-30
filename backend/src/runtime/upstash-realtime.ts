@@ -53,6 +53,10 @@ export async function getRedisClient(): Promise<RedisClient> {
   return cachedPromise;
 }
 
+export function getRedisClientSync(): RedisClient | null {
+  return cachedClient?.isOpen ? cachedClient : null;
+}
+
 async function createSubscriber(): Promise<RedisClient> {
   const client = createClient({
     url: getRedisUrl(),

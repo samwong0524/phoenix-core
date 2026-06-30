@@ -2,9 +2,12 @@ export const runtime = "nodejs";
 
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { isAuthEnabled, requireSession, AuthError, getSession } from "@/lib/auth";
+import { requireWorkspaceRole, RbacError } from "@/lib/rbac";
+import { checkRateLimit, RATE_LIMITS, withRateLimitHeaders, rateLimitExceededResponse } from "@/lib/rate-limiter";
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   const { workspaceId } = await params;
@@ -14,6 +17,22 @@ export async function DELETE(
   }
 
   try {
+    // Rate limiting: per-user API limit
+    const session = await getSession(req);
+    const userId = session?.id ?? "anonymous";
+    const limit = checkRateLimit(`user:${userId}:api`, RATE_LIMITS.api);
+    if (!limit.allowed) {
+      return rateLimitExceededResponse(limit);
+    }
+
+    // Auth + RBAC: require owner role to delete a workspace
+    if (isAuthEnabled()) {
+      if (!session) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      await requireWorkspaceRole(session, workspaceId, "owner");
+    }
+
     const db = getDb();
 
     // Collect all groups in this workspace
@@ -94,6 +113,10 @@ export async function DELETE(
       await tx.execute(
         sql`DELETE FROM memories WHERE workspace_id = ${workspaceId}`
       );
+      // workspace_members (cascade should handle this, but be explicit)
+      await tx.execute(
+        sql`DELETE FROM workspace_members WHERE workspace_id = ${workspaceId}`
+      );
     });
 
     // Delete workspace (all dependent rows already removed in transaction)
@@ -101,8 +124,14 @@ export async function DELETE(
       sql`DELETE FROM workspaces WHERE id = ${workspaceId}`
     );
 
-    return Response.json({ ok: true, workspaceId });
+    return withRateLimitHeaders(Response.json({ ok: true, workspaceId }), limit);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return Response.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof RbacError) {
+      return Response.json({ error: e.message }, { status: e.status });
+    }
     return Response.json(
       {
         error: "Failed to delete workspace",

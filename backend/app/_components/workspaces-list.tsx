@@ -4,17 +4,24 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/context";
 import { Button, EmptyState } from "@/components/ui";
+import { useConfirm } from "./confirm-dialog";
+import { chatUrl } from "./routes";
 
 type Workspace = { id: string; name: string; createdAt: string };
 
 export default function WorkspacesList({ workspaces }: { workspaces: Workspace[] }) {
   const { t } = useI18n();
   const router = useRouter();
+  const confirm = useConfirm();
 
   async function onDelete(id: string, name: string) {
-    if (!confirm(t("workspace.delete_confirm", { name }))) {
-      return;
-    }
+    const ok = await confirm({
+      title: t("workspace.delete_tooltip", { name }),
+      message: `Workspace "${name}" and all its data (agents, groups, messages, workflows) will be permanently deleted.`,
+      confirmLabel: t("common.delete"),
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -45,7 +52,7 @@ export default function WorkspacesList({ workspaces }: { workspaces: Workspace[]
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
           >
             <Link
-              href={`/im?workspaceId=${encodeURIComponent(w.id)}`}
+              href={chatUrl({ workspaceId: w.id })}
               style={{ textDecoration: "none", flex: 1, minWidth: 0 }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>

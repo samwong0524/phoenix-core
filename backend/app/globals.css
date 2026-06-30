@@ -5,69 +5,78 @@
 :root {
   color-scheme: dark;
 
-  /* PHOENIX CORE — Background layers */
-  --bg-void: #050a14;
-  --bg-panel: rgba(10, 17, 40, 0.88);
-  --bg-card: rgba(15, 25, 55, 0.7);
+  /* ─── Background layers (neutral slate, was blue-tinted) ─── */
+  --bg-void: #0f172a;
+  --bg-panel: rgba(30, 41, 59, 0.92);
+  --bg-card: rgba(51, 65, 85, 0.6);
+  --bg-elevated: rgba(51, 65, 85, 0.95);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-code: rgba(15, 23, 42, 0.9);
+  --bg-hover: rgba(148, 163, 184, 0.08);
 
-  /* PHOENIX CORE — Accent colors */
-  --cyan: #00f0ff;
-  --cyan-dim: rgba(0, 240, 255, 0.3);
-  --cyan-glow: rgba(0, 240, 255, 0.15);
-  --magenta: #ff2d7b;
-  --magenta-dim: rgba(255, 45, 123, 0.3);
+  /* ─── Primary accent (sky blue, was neon cyan) ─── */
+  --color-primary: #38bdf8;
+  --color-primary-dim: rgba(56, 189, 248, 0.3);
+  --color-primary-glow: rgba(56, 189, 248, 0.15);
+  --color-primary-soft: rgba(56, 189, 248, 0.1);
+  --cyan: var(--color-primary);
+  --cyan-dim: var(--color-primary-dim);
+  --cyan-glow: var(--color-primary-glow);
+  --cyan-soft: var(--color-primary-soft);
+  --accent-cyan: var(--color-primary);
+
+  /* ─── Secondary accent (pink, was neon magenta) ─── */
+  --color-secondary: #ec4899;
+  --color-secondary-dim: rgba(236, 72, 153, 0.3);
+  --magenta: var(--color-secondary);
+  --magenta-dim: var(--color-secondary-dim);
+
+  /* ─── Agent / special (purple, kept) ─── */
   --purple: #a855f7;
   --purple-dim: rgba(168, 85, 247, 0.3);
-  --green: #00ff88;
-  --green-dim: rgba(0, 255, 136, 0.3);
-  --yellow: #ffd700;
-  --yellow-dim: rgba(255, 215, 0, 0.3);
-  --red: #ff3b3b;
-  --red-dim: rgba(255, 59, 59, 0.3);
 
-  /* PHOENIX CORE — Text (contrast-fixed for WCAG AA ≥4.5:1 on --bg-void) */
-  --text-primary: rgba(220, 235, 255, 0.95);
-  --text-secondary: rgba(180, 200, 230, 0.8);
-  --text-dim: rgba(140, 170, 210, 0.65);
+  /* ─── Semantic colors (desaturated) ─── */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: var(--color-primary);
+  --green: var(--color-success);
+  --green-dim: rgba(16, 185, 129, 0.3);
+  --yellow: var(--color-warning);
+  --yellow-dim: rgba(245, 158, 11, 0.3);
+  --red: var(--color-error);
+  --red-dim: rgba(239, 68, 68, 0.3);
 
-  /* PHOENIX CORE — Semantic colors */
-  --color-success: var(--green);
-  --color-warning: var(--yellow);
-  --color-error: var(--red);
-  --color-info: var(--cyan);
+  /* ─── Text (neutral slate, was blue-tinted) ─── */
+  --text-primary: rgba(226, 232, 240, 0.95);
+  --text-secondary: rgba(203, 213, 225, 0.8);
+  --text-dim: rgba(148, 163, 184, 0.65);
 
-  /* PHOENIX CORE — Borders */
-  --border: rgba(0, 240, 255, 0.12);
-  --border-bright: rgba(0, 240, 255, 0.3);
-
-  /* PHOENIX CORE — 4-step surface gradient (Linear-inspired) */
-  --bg-elevated: rgba(20, 30, 65, 0.95);
-  --bg-overlay: rgba(0, 0, 0, 0.6);
-  --bg-code: rgba(5, 10, 20, 0.9);
-
-  /* PHOENIX CORE — Borders (3 levels) */
+  /* ─── Borders (neutral, was cyan-tinted) ─── */
+  --border: rgba(148, 163, 184, 0.15);
+  --border-bright: rgba(148, 163, 184, 0.3);
   --border-hairline: rgba(255, 255, 255, 0.04);
 
-  /* PHOENIX CORE — Semantic color variants (Tailwind-palette for UI states) */
-  --green-soft: rgba(34, 197, 94, 0.1);
-  --green-muted: rgba(34, 197, 94, 0.2);
-  --green-mid: rgba(34, 197, 94, 0.3);
-  --green-vivid: rgba(34, 197, 94, 0.4);
+  /* ─── Semantic color variants (Tailwind-palette for UI states) ─── */
+  --green-soft: rgba(16, 185, 129, 0.1);
+  --green-muted: rgba(16, 185, 129, 0.2);
+  --green-mid: rgba(16, 185, 129, 0.3);
+  --green-vivid: rgba(16, 185, 129, 0.4);
   --green-text: #4ade80;
   --red-soft: rgba(239, 68, 68, 0.08);
   --red-muted: rgba(239, 68, 68, 0.15);
   --red-text: #f87171;
-  --blue-soft: rgba(59, 130, 246, 0.08);
-  --blue-muted: rgba(59, 130, 246, 0.15);
+  --blue-soft: rgba(56, 189, 248, 0.08);
+  --blue-muted: rgba(56, 189, 248, 0.15);
   --blue-text: #93c5fd;
   --blue-link: #60a5fa;
   --slate-soft: rgba(148, 163, 184, 0.08);
   --slate-muted: rgba(148, 163, 184, 0.12);
-  --yellow-soft: rgba(250, 204, 21, 0.1);
+  --yellow-soft: rgba(245, 158, 11, 0.1);
   --yellow-text: #facc15;
   --purple-text: #c084fc;
 
-  /* PHOENIX CORE — Beam label colors (viz message beams) */
+  /* ─── Beam label colors (viz message beams) ─── */
   --beam-create-text: #bfdbfe;
   --beam-create-border: rgba(59, 130, 246, 0.5);
   --beam-create-bg: rgba(30, 58, 138, 0.6);
@@ -75,7 +84,7 @@
   --beam-msg-border: rgba(82, 82, 91, 0.5);
   --beam-msg-bg: rgba(9, 9, 11, 0.7);
 
-  /* PHOENIX CORE — Spacing (4px base) */
+  /* ─── Spacing (4px base) ─── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -84,18 +93,18 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  /* PHOENIX CORE — Border radius */
+  /* ─── Border radius ─── */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-full: 999px;
 
-  /* PHOENIX CORE — Shadow glow system */
-  --shadow-glow-sm: 0 0 8px var(--cyan-glow);
-  --shadow-glow-md: 0 0 20px var(--cyan-glow);
-  --shadow-glow-lg: 0 0 40px var(--cyan-glow), 0 0 20px var(--cyan-glow);
+  /* ─── Shadow system (neutral, was neon cyan glow) ─── */
+  --shadow-glow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-glow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-glow-lg: 0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
 
-  /* PHOENIX CORE — Z-index layers */
+  /* ─── Z-index layers ─── */
   --z-bg: 0;
   --z-content: 1;
   --z-raised: 2;
@@ -106,24 +115,21 @@
   --z-overlay: 50;
   --z-modal: 100;
 
-  /* PHOENIX CORE — Responsive breakpoints (reference) */
+  /* ─── Responsive breakpoints (reference) ─── */
   --bp-sm: 640px;
   --bp-md: 768px;
   --bp-lg: 1024px;
   --bp-xl: 1280px;
 
-  /* PHOENIX CORE — Misc */
-  --bg-hover: rgba(0, 240, 255, 0.05);
-
-  /* PHOENIX CORE — Fonts */
+  /* ─── Fonts ─── */
   --font-display: "Orbitron", monospace;
   --font-body: "Exo 2", sans-serif;
   --font-mono: "JetBrains Mono", "ui-monospace", "SFMono-Regular", monospace;
 
-  /* Keep HSL variables for Tailwind compat */
-  --background: 222.2 84% 4.9%;
+  /* ─── Tailwind compat HSL ─── */
+  --background: 222.2 47% 11%;
   --foreground: 210 40% 98%;
-  --border-hsl: 217.2 32.6% 17.5%;
+  --border-hsl: 215 16% 47%;
 }
 
 /* ===== LIGHT MODE ===== */
@@ -132,48 +138,46 @@
     color-scheme: light;
 
     /* Backgrounds */
-    --bg-void: #f5f7fa;
+    --bg-void: #f8fafc;
     --bg-panel: rgba(255, 255, 255, 0.92);
     --bg-card: rgba(255, 255, 255, 0.8);
     --bg-elevated: rgba(255, 255, 255, 0.98);
     --bg-overlay: rgba(0, 0, 0, 0.4);
-    --bg-code: rgba(245, 247, 250, 0.9);
-    --bg-hover: rgba(0, 120, 200, 0.06);
+    --bg-code: rgba(248, 250, 252, 0.9);
+    --bg-hover: rgba(56, 189, 248, 0.06);
 
     /* Text — dark on light */
     --text-primary: rgba(15, 23, 42, 0.92);
     --text-secondary: rgba(51, 65, 85, 0.8);
     --text-dim: rgba(100, 116, 139, 0.65);
 
-    /* Accent colors — slightly darker for contrast on white */
-    --cyan: #0891b2;
-    --cyan-dim: rgba(8, 145, 178, 0.2);
-    --cyan-glow: rgba(8, 145, 178, 0.1);
-    --magenta: #db2777;
-    --magenta-dim: rgba(219, 39, 119, 0.2);
-    --purple: #7c3aed;
-    --purple-dim: rgba(124, 58, 237, 0.2);
-    --green: #059669;
-    --green-dim: rgba(5, 150, 105, 0.2);
-    --yellow: #d97706;
-    --yellow-dim: rgba(217, 119, 6, 0.2);
-    --red: #dc2626;
-    --red-dim: rgba(220, 38, 38, 0.2);
+    /* Accent — darker for contrast on white */
+    --color-primary: #0284c7;
+    --color-primary-dim: rgba(2, 132, 199, 0.2);
+    --color-primary-glow: rgba(2, 132, 199, 0.1);
+    --color-primary-soft: rgba(2, 132, 199, 0.08);
+    --color-secondary: #db2777;
+    --color-secondary-dim: rgba(219, 39, 119, 0.2);
+
+    /* Semantic — adjusted for light bg */
+    --color-success: #059669;
+    --color-warning: #d97706;
+    --color-error: #dc2626;
 
     /* Borders */
     --border: rgba(0, 0, 0, 0.1);
-    --border-bright: rgba(0, 120, 200, 0.25);
+    --border-bright: rgba(56, 189, 248, 0.25);
     --border-hairline: rgba(0, 0, 0, 0.05);
 
-    /* Semantic colors — adjusted for light bg */
+    /* Semantic text — adjusted for light bg */
     --green-text: #059669;
     --red-text: #dc2626;
-    --blue-text: #2563eb;
-    --blue-link: #2563eb;
+    --blue-text: #0284c7;
+    --blue-link: #0284c7;
     --yellow-text: #d97706;
     --purple-text: #7c3aed;
 
-    /* Shadows — softer for light mode */
+    /* Shadows — neutral for light mode */
     --shadow-glow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
     --shadow-glow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
     --shadow-glow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -294,7 +298,7 @@ textarea {
   height: 100vh;
   width: 100vw;
   display: grid;
-  grid-template-columns: 260px 1fr 280px;
+  grid-template-columns: 220px 1fr 280px;
   position: relative;
   z-index: var(--z-content);
   background: var(--bg-void);
@@ -304,14 +308,14 @@ textarea {
 /* Large desktop: wider sidebar */
 @media (min-width: 1280px) {
   .app {
-    grid-template-columns: 300px 1fr 300px;
+    grid-template-columns: 240px 1fr 300px;
   }
 }
 
 /* Tablet: sidebar narrows */
 @media (max-width: 1024px) {
   .app {
-    grid-template-columns: 200px 1fr 260px;
+    grid-template-columns: 180px 1fr 240px;
   }
 }
 
@@ -324,6 +328,7 @@ textarea {
   .panel-left {
     display: none;
   }
+  .panel-right,
   .right-section {
     display: none;
   }
@@ -2304,6 +2309,19 @@ select:focus-visible,
 .chat-model:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 1px;
+}
+
+/* Screen reader only — visually hidden but accessible (WCAG) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* ===== PHOENIX CORE — CORPORATE MOTION SYSTEM ===== */

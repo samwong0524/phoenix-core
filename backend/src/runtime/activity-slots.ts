@@ -1,5 +1,6 @@
 ﻿import { getDb } from '@/db';
 import { sql } from 'drizzle-orm';
+import { ROUTES } from '@/app/_components/routes';
 
 export type SlotId =
   | 'app.header.reward'
@@ -25,8 +26,8 @@ const DEFAULT_SLOTS: SlotConfig[] = [
   { id: 'app.header.reward', title: '奖励中心', content: '每日登录获取积分', actionUrl: '/rewards', frequency: 'session', width: 200, height: 40, enabled: true },
   { id: 'app.campaign.notice', title: '活动通知', content: '新功能上线，快来体验！', actionUrl: '/campaigns', frequency: 'remember', width: 300, height: 48, enabled: true },
   { id: 'chat.input.feature-tip-carousel', title: '功能提示', content: '尝试使用 dispatch_pipeline 进行多阶段任务执行', frequency: 'session', enabled: true },
-  { id: 'page.skills.banner', title: '技能推荐', content: '探索更多专业技能，提升工作效率', actionUrl: '/skills', frequency: 'none', enabled: true },
-  { id: 'page.plugins.banner', title: '插件推荐', content: '安装插件扩展 Agent 能力边界', actionUrl: '/skills', frequency: 'none', enabled: true },
+  { id: 'page.skills.banner', title: '技能推荐', content: '探索更多专业技能，提升工作效率', actionUrl: ROUTES.SKILLS, frequency: 'none', enabled: true },
+  { id: 'page.plugins.banner', title: '插件推荐', content: '安装插件扩展 Agent 能力边界', actionUrl: ROUTES.SKILLS, frequency: 'none', enabled: true },
   { id: 'page.connectors.banner', title: '连接器管理', content: '连接微信、飞书、钉钉等 IM 平台', actionUrl: '/settings', frequency: 'none', enabled: true },
 ];
 

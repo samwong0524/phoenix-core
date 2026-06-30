@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "node:fs";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { invalidateSkillCache } from "@/runtime/skill-loader";
 
 const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
 
@@ -191,6 +192,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   await fs.rm(skillDir, { recursive: true, force: true });
+  invalidateSkillCache();
   return NextResponse.json({ ok: true, deleted: skillName });
 }
 
@@ -224,6 +226,7 @@ export async function PATCH(req: NextRequest) {
   const newContent = `---\n${newFrontmatter}\n---\n${match[2]}`;
 
   await fs.writeFile(skillPath, newContent, "utf-8");
+  invalidateSkillCache();
   return NextResponse.json({ ok: true, name: skillName, autoLoad });
 }
 

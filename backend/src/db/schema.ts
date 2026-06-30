@@ -8,15 +8,45 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 
+// ─── Auth: Users ──────────────────────────────────────
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  name: text("name"),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("member"), // admin | member | viewer
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  emailIdx: index("users_email_idx").on(t.email),
+}));
+
+// ─── Workspaces ───────────────────────────────────────
+
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey(),
   name: text("name").notNull(),
+  ownerId: uuid("owner_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
+
+// ─── Workspace Members (RBAC) ─────────────────────────
+
+export const workspaceMembers = pgTable("workspace_members", {
+  id: uuid("id").primaryKey(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("member"), // owner | admin | member | viewer
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniqueMember: uniqueIndex("workspace_members_unique_idx").on(t.workspaceId, t.userId),
+  userIdx: index("workspace_members_user_idx").on(t.userId),
+}));
 
 export const agents = pgTable("agents", {
   id: uuid("id").primaryKey(),

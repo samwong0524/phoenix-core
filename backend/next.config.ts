@@ -4,6 +4,15 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   turbopack: {},
   outputFileTracingRoot: __dirname,
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/对话",
+        permanent: true,
+      },
+    ];
+  },
   webpack: (config) => {
     // Prevent webpack from watching uploaded files that trigger a full page reload
     const newPatterns = [

@@ -141,6 +141,20 @@ export type UIEvent =
       at: number;
       event: "llm.429";
       data: { agentId: string; workspaceId: string; retryAfter: number };
+    }
+  | {
+      id: number;
+      at: number;
+      event: "ui.skill.suggestion";
+      data: {
+        workspaceId: string;
+        agentId: string;
+        groupId: string;
+        skillName: string;
+        confidence: number;
+        reason: string;
+        triggerPattern: string;
+      };
     };
 
 type Listener = (evt: UIEvent) => void;

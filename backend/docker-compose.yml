@@ -1,28 +1,104 @@
 services:
+  # ─── PostgreSQL ─────────────────────────────────────
   postgres:
     image: postgres:17-alpine
     container_name: agent-wechat-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agent_wechat
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_wechat}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - agent_wechat_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d agent_wechat"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent_wechat}"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  # ─── Redis ──────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: agent-wechat-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - agent_wechat_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ─── Phoenix-Core App ───────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "3100"
+    deploy:
+      replicas: 2
+    environment:
+      # Database (internal docker network)
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-agent_wechat}
+      # Redis (internal docker network)
+      REDIS_URL: redis://redis:6379
+      # LLM configuration (from .env)
+      LLM_PROVIDER: ${LLM_PROVIDER:-glm}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      GLM_API_KEYS: ${GLM_API_KEYS:-}
+      GLM_BASE_URL: ${GLM_BASE_URL:-}
+      GLM_MODEL: ${GLM_MODEL:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_API_KEYS: ${OPENROUTER_API_KEYS:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_API_KEYS: ${ANTHROPIC_API_KEYS:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # Admin (optional)
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      # Node environment
+      NODE_ENV: production
+    volumes:
+      # Persist uploaded files across container restarts
+      - agent_wechat_uploads:/app/public/uploads
+      # Persist skills (hot-reload when files change)
+      - ./skills:/app/skills:ro
+      # Persist MCP config
+      - ./mcp.json:/app/mcp.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Nginx Load Balancer ─────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: agent-wechat-nginx
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   agent_wechat_pg:
   agent_wechat_redis:
+  agent_wechat_uploads:

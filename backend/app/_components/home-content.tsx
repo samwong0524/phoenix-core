@@ -6,6 +6,7 @@ import { useI18n, LanguageSwitcher } from "@/lib/i18n/context";
 import { Card, PageHeader, Alert } from "@/components/ui";
 import WorkspacesList from "./workspaces-list";
 import TemplateGallery from "./template-gallery";
+import { ROUTES, templatesUrl } from "./routes";
 
 type HomePageContentProps = {
   workspaces: Array<{ id: string; name: string; createdAt: string }>;
@@ -72,13 +73,13 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
             marginBottom: 24,
           }}
         >
-          <NavCard href="/im" title={t("home.im_title")} desc={t("home.im_desc")} />
-          <NavCard href="/workflow" title="Workflow" desc="Visual pipeline editor" />
-          <NavCard href="/history" title="History" desc="Workflow execution history" />
-          <NavCard href="/workflow/templates" title="Templates" desc="Reusable workflow templates" />
-          <NavCard href="/graph" title={t("home.graph_title")} desc={t("home.graph_desc")} />
-          <NavCard href="/skills" title={t("home.skills_title")} desc={t("home.skills_desc")} />
-          <NavCard href="/models" title={t("home.models_title")} desc={t("home.models_desc")} />
+          <NavCard href={ROUTES.CHAT} title={t("home.im_title")} desc={t("home.im_desc")} />
+          <NavCard href={ROUTES.WORKFLOW} title="Workflow" desc="Visual pipeline editor" />
+          <NavCard href={ROUTES.HISTORY} title="History" desc="Workflow execution history" />
+          <NavCard href={ROUTES.TEMPLATES} title="Templates" desc="Reusable workflow templates" />
+          <NavCard href={ROUTES.GRAPH} title={t("home.graph_title")} desc={t("home.graph_desc")} />
+          <NavCard href={ROUTES.SKILLS} title={t("home.skills_title")} desc={t("home.skills_desc")} />
+          <NavCard href={ROUTES.MODELS} title={t("home.models_title")} desc={t("home.models_desc")} />
         </div>
 
         {/* Workspaces */}

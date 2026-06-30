@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useI18n } from "@/lib/i18n/context";
 import { Card, Button, Input } from "@/components/ui";
 import { listTemplates, type WorkspaceTemplate } from "@/lib/templates";
+import { chatUrl } from "./routes";
 
 type WorkspaceDefaults = {
   workspaceId: string;
@@ -46,7 +47,7 @@ export default function TemplateGallery() {
       const text = await res.text();
       if (!res.ok) throw new Error(`${res.status} ${res.statusText} ${text}`);
       const data = JSON.parse(text) as WorkspaceDefaults;
-      window.location.href = `/im?workspaceId=${encodeURIComponent(data.workspaceId)}`;
+      window.location.href = chatUrl({ workspaceId: data.workspaceId });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

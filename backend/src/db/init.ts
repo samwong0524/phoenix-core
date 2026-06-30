@@ -2,12 +2,54 @@ import { getSql } from "./client";
 
 export async function ensureSchema() {
   const sql = getSql();
+
+  // ─── Auth: Users ──────────────────────────────────
+  await sql/* sql */ `
+    create table if not exists users (
+      id uuid primary key,
+      email varchar(255) not null,
+      name text,
+      password_hash text not null,
+      role text not null default 'member',
+      created_at timestamptz not null
+    );
+  `;
+  await sql/* sql */ `
+    create index if not exists users_email_idx on users (email);
+  `;
+
   await sql/* sql */ `
     create table if not exists workspaces (
       id uuid primary key,
       name text not null,
+      owner_id uuid references users(id),
       created_at timestamptz not null
     );
+  `;
+
+  // Add owner_id column for existing databases that already have the workspaces table
+  await sql/* sql */ `
+    alter table workspaces add column if not exists owner_id uuid references users(id);
+  `;
+
+  await sql/* sql */ `
+    create table if not exists workspace_members (
+      id uuid primary key,
+      workspace_id uuid not null references workspaces(id) on delete cascade,
+      user_id uuid not null references users(id) on delete cascade,
+      role text not null default 'member',
+      created_at timestamptz not null
+    );
+  `;
+
+  await sql/* sql */ `
+    create unique index if not exists workspace_members_unique_idx
+    on workspace_members (workspace_id, user_id);
+  `;
+
+  await sql/* sql */ `
+    create index if not exists workspace_members_user_idx
+    on workspace_members (user_id);
   `;
 
   await sql/* sql */ `
@@ -119,6 +161,25 @@ export async function ensureSchema() {
       id uuid primary key,
       workspace_id uuid not null,
       data jsonb not null,
+      created_at timestamptz not null
+    );
+  `;
+
+  // ─── Agent Decisions (audit trail for bash sandbox & other actions) ──
+  await sql/* sql */ `
+    create table if not exists agent_decisions (
+      id uuid primary key,
+      agent_id uuid not null,
+      group_id uuid,
+      workspace_id uuid,
+      decision_type text not null,
+      target_type text,
+      target_id uuid,
+      input_summary text,
+      output_summary text,
+      human_feedback text,
+      success boolean,
+      confidence double precision,
       created_at timestamptz not null
     );
   `;

@@ -36,6 +36,9 @@
       "@/runtime/*": [
         "src/runtime/*"
       ],
+      "@/stores/*": [
+        "src/stores/*"
+      ],
       "@/app/*": [
         "app/*"
       ]
@@ -58,6 +61,7 @@
     "node_modules",
     "hermes-agent",
     "_*.ts",
-    "tests"
+    "tests",
+    "e2e"
   ]
 }

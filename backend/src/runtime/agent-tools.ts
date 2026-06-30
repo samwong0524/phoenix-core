@@ -360,6 +360,23 @@ export const AGENT_TOOLS_EXECUTION = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "read_file",
+      description: "[Read] Read a file or a section of a file. More efficient than bash cat for large files. Returns the file content with line numbers.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "File path (relative to workspace root or absolute)" },
+          offset: { type: "number", description: "Start line number (1-indexed, default 1)" },
+          limit: { type: "number", description: "Maximum number of lines to read (default 200, max 1000)" },
+        },
+        required: ["path"],
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -708,6 +725,9 @@ export const TOOL_AVAILABILITY: Record<string, ToolCheck> = {
 
   // Shell execution: honor DISABLE_SHELL env var
   bash: (ctx) => ctx.shellEnabled,
+
+  // File reading: always available (more efficient than bash cat)
+  read_file: () => true,
 };
 
 export async function getAgentTools(context?: ToolContext) {

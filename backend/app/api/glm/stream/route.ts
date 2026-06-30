@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { GLMStreamAssembler, parseSSEJsonLines } from "@/lib/glm-stream";
 import { OpenAIStreamAssembler } from "@/lib/openai-stream";
+import { getSession } from "@/lib/auth";
+import { checkRateLimit, RATE_LIMITS, rateLimitExceededResponse } from "@/lib/rate-limiter";
 
 type LlmProvider = "glm" | "openrouter";
 
@@ -47,7 +49,20 @@ export async function POST(req: Request) {
     messages: Array<{ role: string; content: string; tool_calls?: unknown; reasoning_content?: string }>;
     tools?: unknown[];
     thinking?: unknown;
+    workspaceId?: string;
   };
+
+  // LLM rate limiting: per-user and per-workspace
+  const session = await getSession(req);
+  const userId = session?.id ?? "anonymous";
+  const userLimit = checkRateLimit(`user:${userId}:llm`, RATE_LIMITS.llm);
+  if (!userLimit.allowed) return rateLimitExceededResponse(userLimit);
+
+  // Also enforce per-workspace LLM limit if workspaceId is provided
+  if (body.workspaceId) {
+    const wsLimit = checkRateLimit(`workspace:${body.workspaceId}:llm`, RATE_LIMITS.llm);
+    if (!wsLimit.allowed) return rateLimitExceededResponse(wsLimit);
+  }
 
   const provider = getProvider(body.provider);
   const encoder = new TextEncoder();

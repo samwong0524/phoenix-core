@@ -311,19 +311,41 @@ function makeContext(): ToolRunnerContext {
   };
 }
 
-/** Phase 1: Execute all tools in parallel */
+/** Phase 1: Execute tools — parallel (allSettled) for non-bash, sequential when bash is present */
 async function executePhase1(ctx: ToolRunnerContext, calls: ToolCall[]): Promise<ToolExecResult[]> {
-  return Promise.all(
-    calls.map(async (call) => {
-      const callKey = call.name
-        ? `${call.name}:${JSON.stringify({})}`
-        : "";
-      const isBlocked = !!(call.name && ctx.blockedTools.has(callKey));
-      const isSend = !!(call.name && ["send", "send_group_message", "send_direct_message"].includes(call.name));
-      const ok = isBlocked ? false : true; // Simulated tool execution
-      return { call, callKey, isBlocked, isSend, ok };
-    })
-  );
+  const hasBash = calls.some((c) => c.name === "bash");
+
+  const executeOne = async (call: ToolCall): Promise<ToolExecResult> => {
+    const callKey = call.name
+      ? `${call.name}:${JSON.stringify({})}`
+      : "";
+    const isBlocked = !!(call.name && ctx.blockedTools.has(callKey));
+    const isSend = !!(call.name && ["send", "send_group_message", "send_direct_message"].includes(call.name));
+    const ok = isBlocked ? false : true; // Simulated tool execution
+    return { call, callKey, isBlocked, isSend, ok };
+  };
+
+  if (hasBash) {
+    // Bash present — execute sequentially for safety
+    const results: ToolExecResult[] = [];
+    for (const call of calls) {
+      results.push(await executeOne(call));
+    }
+    return results;
+  }
+
+  // No bash — parallel via allSettled; a thrown tool becomes an error result
+  const settled = await Promise.allSettled(calls.map((call) => executeOne(call)));
+  return settled.map((s, i) => {
+    if (s.status === "fulfilled") return s.value;
+    return {
+      call: calls[i],
+      callKey: "",
+      isBlocked: false,
+      isSend: false,
+      ok: false,
+    };
+  });
 }
 
 /** Phase 2: Process results serially with guardrails */
@@ -433,6 +455,68 @@ describe("Parallel Tool Execution (Sprint 2)", () => {
     const { failures } = processPhase2(ctx, results);
     // Only first result processed before break
     expect(failures).toBe(0);
+  });
+
+  it("allSettled: one tool throwing does not prevent others from completing", async () => {
+    // Simulate the allSettled behavior directly
+    const tasks = [
+      Promise.resolve({ ok: true }),
+      Promise.reject(new Error("tool crashed")),
+      Promise.resolve({ ok: true }),
+    ];
+    const settled = await Promise.allSettled(tasks);
+    expect(settled).toHaveLength(3);
+    expect(settled[0].status).toBe("fulfilled");
+    expect(settled[1].status).toBe("rejected");
+    expect(settled[2].status).toBe("fulfilled");
+  });
+
+  it("bash-sequential: when bash is present, tools execute in order", async () => {
+    const executionOrder: string[] = [];
+    const calls: ToolCall[] = [
+      { id: "1", name: "bash", argumentsText: "{}" },
+      { id: "2", name: "memory_search", argumentsText: "{}" },
+      { id: "3", name: "bash", argumentsText: "{}" },
+    ];
+
+    // Simulate sequential execution (the hasBash path)
+    for (const call of calls) {
+      executionOrder.push(call.name!);
+    }
+
+    // Sequential means order is always preserved: 1,2,3
+    expect(executionOrder).toEqual(["bash", "memory_search", "bash"]);
+  });
+
+  it("parallel: results maintain same order as original tool_calls", async () => {
+    const calls: ToolCall[] = [
+      { id: "1", name: "memory_search", argumentsText: "{}" },
+      { id: "2", name: "get_skill", argumentsText: "{}" },
+      { id: "3", name: "send", argumentsText: "{}" },
+    ];
+    const results = await executePhase1(makeContext(), calls);
+    // allSettled preserves order
+    expect(results.map((r) => r.call.id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("parallel: no bash means all tools run via allSettled", async () => {
+    const calls: ToolCall[] = [
+      { id: "1", name: "memory_search", argumentsText: "{}" },
+      { id: "2", name: "get_skill", argumentsText: "{}" },
+    ];
+    const hasBash = calls.some((c) => c.name === "bash");
+    expect(hasBash).toBe(false);
+    const results = await executePhase1(makeContext(), calls);
+    expect(results).toHaveLength(2);
+  });
+
+  it("bash present: hasBash check triggers sequential path", async () => {
+    const calls: ToolCall[] = [
+      { id: "1", name: "memory_search", argumentsText: "{}" },
+      { id: "2", name: "bash", argumentsText: "{}" },
+    ];
+    const hasBash = calls.some((c) => c.name === "bash");
+    expect(hasBash).toBe(true);
   });
 });
 

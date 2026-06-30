@@ -3,6 +3,9 @@ export const runtime = "nodejs";
 import { store } from "@/lib/storage";
 import { getAgentRuntime } from "@/runtime/agent-runtime";
 import { getWorkspaceUIBus } from "@/runtime/ui-bus";
+import { isAuthEnabled, getSession, AuthError } from "@/lib/auth";
+import { requireWorkspaceRole, RbacError } from "@/lib/rbac";
+import { checkRateLimit, RATE_LIMITS, withRateLimitHeaders, rateLimitExceededResponse } from "@/lib/rate-limiter";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -13,13 +16,31 @@ export async function GET(req: Request) {
     return Response.json({ error: "Missing workspaceId" }, { status: 400 });
   }
 
-  if (meta) {
-    const agents = await store.listAgentsMeta({ workspaceId });
-    return Response.json({ agents });
-  }
+  try {
+    // Rate limiting
+    const session = await getSession(req);
+    const userId = session?.id ?? "anonymous";
+    const limit = checkRateLimit(`user:${userId}:api`, RATE_LIMITS.api);
+    if (!limit.allowed) return rateLimitExceededResponse(limit);
 
-  const agents = await store.listAgents({ workspaceId });
-  return Response.json({ agents });
+    // Workspace isolation
+    if (isAuthEnabled()) {
+      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      await requireWorkspaceRole(session, workspaceId, "viewer");
+    }
+
+    if (meta) {
+      const agents = await store.listAgentsMeta({ workspaceId });
+      return withRateLimitHeaders(Response.json({ agents }), limit);
+    }
+
+    const agents = await store.listAgents({ workspaceId });
+    return withRateLimitHeaders(Response.json({ agents }), limit);
+  } catch (e) {
+    if (e instanceof AuthError) return Response.json({ error: e.message }, { status: e.status });
+    if (e instanceof RbacError) return Response.json({ error: e.message }, { status: e.status });
+    return Response.json({ error: "Failed to list agents", message: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -46,13 +67,49 @@ export async function POST(req: Request) {
     return Response.json({ error: "Missing role" }, { status: 400 });
   }
 
-  const runtime = getAgentRuntime();
-  await runtime.bootstrap(workspaceId);
-  const { humanAgentId } = await store.ensureWorkspaceDefaults({ workspaceId });
+  try {
+    // Rate limiting
+    const session = await getSession(req);
+    const userId = session?.id ?? "anonymous";
+    const limit = checkRateLimit(`user:${userId}:api`, RATE_LIMITS.api);
+    if (!limit.allowed) return rateLimitExceededResponse(limit);
 
-  if (body?.groupId) {
+    // Workspace isolation
+    if (isAuthEnabled()) {
+      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      await requireWorkspaceRole(session, workspaceId, "member");
+    }
+
+    const runtime = getAgentRuntime();
+    await runtime.bootstrap(workspaceId);
+    const { humanAgentId } = await store.ensureWorkspaceDefaults({ workspaceId });
+
+    if (body?.groupId) {
+      const created = await store.createSubAgentWithP2P({ workspaceId, creatorId, role });
+      await store.addGroupMembers({ groupId: body.groupId, userIds: [created.agentId] });
+      runtime.ensureRunner(created.agentId);
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.agent.created",
+        data: { workspaceId, agent: { id: created.agentId, role, parentId: creatorId } },
+      });
+      getWorkspaceUIBus().emit(workspaceId, {
+        event: "ui.group.created",
+        data: {
+          workspaceId,
+          group: { id: created.groupId, name: role, memberIds: [humanAgentId, created.agentId] },
+        },
+      });
+
+      return withRateLimitHeaders(
+        Response.json(
+          { agentId: created.agentId, groupId: body.groupId, createdAt: created.createdAt },
+          { status: 201 }
+        ),
+        limit
+      );
+    }
+
     const created = await store.createSubAgentWithP2P({ workspaceId, creatorId, role });
-    await store.addGroupMembers({ groupId: body.groupId, userIds: [created.agentId] });
     runtime.ensureRunner(created.agentId);
     getWorkspaceUIBus().emit(workspaceId, {
       event: "ui.agent.created",
@@ -60,28 +117,13 @@ export async function POST(req: Request) {
     });
     getWorkspaceUIBus().emit(workspaceId, {
       event: "ui.group.created",
-      data: {
-        workspaceId,
-        group: { id: created.groupId, name: role, memberIds: [humanAgentId, created.agentId] },
-      },
+      data: { workspaceId, group: { id: created.groupId, name: role, memberIds: [humanAgentId, created.agentId] } },
     });
 
-    return Response.json(
-      { agentId: created.agentId, groupId: body.groupId, createdAt: created.createdAt },
-      { status: 201 }
-    );
+    return withRateLimitHeaders(Response.json(created, { status: 201 }), limit);
+  } catch (e) {
+    if (e instanceof AuthError) return Response.json({ error: e.message }, { status: e.status });
+    if (e instanceof RbacError) return Response.json({ error: e.message }, { status: e.status });
+    return Response.json({ error: "Failed to create agent", message: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
-
-  const created = await store.createSubAgentWithP2P({ workspaceId, creatorId, role });
-  runtime.ensureRunner(created.agentId);
-  getWorkspaceUIBus().emit(workspaceId, {
-    event: "ui.agent.created",
-    data: { workspaceId, agent: { id: created.agentId, role, parentId: creatorId } },
-  });
-  getWorkspaceUIBus().emit(workspaceId, {
-    event: "ui.group.created",
-    data: { workspaceId, group: { id: created.groupId, name: role, memberIds: [humanAgentId, created.agentId] } },
-  });
-
-  return Response.json(created, { status: 201 });
 }

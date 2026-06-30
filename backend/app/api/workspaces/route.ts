@@ -2,12 +2,29 @@ export const runtime = "nodejs";
 
 import { store } from "@/lib/storage";
 import { getTemplate } from "@/lib/templates";
+import { isAuthEnabled, requireSession, getSession, AuthError } from "@/lib/auth";
+import { addWorkspaceMember } from "@/lib/rbac";
+import { checkRateLimit, RATE_LIMITS, withRateLimitHeaders, rateLimitExceededResponse } from "@/lib/rate-limiter";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // Rate limiting
+    const session = await getSession(req);
+    const userId = session?.id ?? "anonymous";
+    const limit = checkRateLimit(`user:${userId}:api`, RATE_LIMITS.api);
+    if (!limit.allowed) return rateLimitExceededResponse(limit);
+
+    // Auth check: require login when auth is enabled
+    if (isAuthEnabled()) {
+      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const workspaces = await store.listWorkspaces();
-    return Response.json({ workspaces });
+    return withRateLimitHeaders(Response.json({ workspaces }), limit);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return Response.json({ error: e.message }, { status: e.status });
+    }
     return Response.json(
       {
         error: "Database not ready",
@@ -21,6 +38,17 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    // Rate limiting
+    const session = await getSession(req);
+    const userId = session?.id ?? "anonymous";
+    const limit = checkRateLimit(`user:${userId}:api`, RATE_LIMITS.api);
+    if (!limit.allowed) return rateLimitExceededResponse(limit);
+
+    // Auth check: require login when auth is enabled
+    if (isAuthEnabled()) {
+      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = (await req.json().catch(() => null)) as {
       name?: string;
       templateId?: string;
@@ -28,6 +56,8 @@ export async function POST(req: Request) {
 
     const name = body?.name ?? "Default Workspace";
     const templateId = body?.templateId;
+
+    let result: { workspaceId: string; [key: string]: unknown };
 
     // Template-based creation
     if (templateId && templateId !== "blank") {
@@ -44,18 +74,26 @@ export async function POST(req: Request) {
       const localeMatch = cookieHeader.match(/swarm-locale=(zh|en)/);
       const locale = (localeMatch?.[1] as "zh" | "en") ?? "zh";
 
-      const result = await store.createWorkspaceFromTemplate({
+      result = await store.createWorkspaceFromTemplate({
         template,
         name,
         locale,
       });
-      return Response.json(result, { status: 201 });
+    } else {
+      // Default: blank workspace (backward compatible)
+      result = await store.createWorkspaceWithDefaults({ name });
     }
 
-    // Default: blank workspace (backward compatible)
-    const result = await store.createWorkspaceWithDefaults({ name });
-    return Response.json(result, { status: 201 });
+    // Auto-seed the creator as workspace owner in workspace_members
+    if (session) {
+      await addWorkspaceMember(result.workspaceId, session.id, "owner");
+    }
+
+    return withRateLimitHeaders(Response.json(result, { status: 201 }), limit);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return Response.json({ error: e.message }, { status: e.status });
+    }
     return Response.json(
       {
         error: "Failed to create workspace",

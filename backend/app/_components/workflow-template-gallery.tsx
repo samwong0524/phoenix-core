@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui";
+import { ROUTES, workflowUrl } from "./routes";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ export default function WorkflowTemplateGallery() {
       });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const data = await res.json();
-      router.push(`/workflow?workspaceId=${encodeURIComponent(workspaceId)}&workflowId=${data.workflow.id}`);
+      router.push(workflowUrl({ workspaceId, workflowId: data.workflow.id }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -253,7 +254,7 @@ export default function WorkflowTemplateGallery() {
             Reusable workflow blueprints. Pick a template to get started.
           </p>
         </div>
-        <Link href={`/workflow${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`}>
+        <Link href={workflowUrl(workspaceId ? { workspaceId } : undefined)}>
           <Button variant="ghost">Back to Editor</Button>
         </Link>
       </div>

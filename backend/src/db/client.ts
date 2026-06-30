@@ -17,6 +17,13 @@ export function getSql() {
     );
   }
 
-  cachedSql = postgres(databaseUrl, { max: 10 });
+  cachedSql = postgres(databaseUrl, {
+    max: 20,
+    idle_timeout: 30,
+    connect_timeout: 10,
+    connection: {
+      application_name: "phoenix-core",
+    },
+  });
   return cachedSql;
 }

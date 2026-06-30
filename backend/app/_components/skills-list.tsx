@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "./confirm-dialog";
 
 type LocalSkill = {
   type: "local";
@@ -51,6 +52,7 @@ const CATEGORIES: { key: string; label: string; icon: string; match: (s: Skill) 
 
 export default function SkillsList() {
   const router = useRouter();
+  const confirm = useConfirm();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -82,7 +84,13 @@ export default function SkillsList() {
   }, [loadSkills]);
 
   async function onDelete(name: string) {
-    if (!confirm(`Delete skill "${name}"?\n\nThis will remove it for all agents.`)) return;
+    const ok = await confirm({
+      title: `Delete Skill "${name}"`,
+      message: `This will remove the skill "${name}" for all agents. This action cannot be undone.`,
+      confirmLabel: "Delete Skill",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/skills?name=${encodeURIComponent(name)}`, { method: "DELETE" });
       const data = await res.json();

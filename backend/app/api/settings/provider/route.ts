@@ -2,6 +2,19 @@
 
 import { getSetting, setSetting } from "@/lib/settings";
 
+/**
+ * Simple admin token check.
+ * When ADMIN_TOKEN env var is set, POST requests must include
+ * Authorization: Bearer <token> header.
+ * When not set, all requests are allowed (dev mode).
+ */
+function checkAdminAuth(req: Request): boolean {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) return true; // No token configured = dev mode, allow all
+  const auth = req.headers.get("authorization") ?? "";
+  return auth === `Bearer ${token}`;
+}
+
 export async function GET() {
   const config = {
     llmProvider: getSetting("llm_provider") ?? process.env.LLM_PROVIDER ?? "freellmapi",
@@ -18,6 +31,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!checkAdminAuth(req)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await req.json()) as {
     llmProvider?: string;
     baseUrl?: string;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { ROUTES, chatUrl } from './routes';
 
 // ── Types ──
 interface QuickPickItem {
@@ -41,13 +42,13 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
 
   // Static navigation + action commands
   const staticItems: QuickPickItem[] = useMemo(() => [
-    { id: 'nav-im', label: 'Agent 对话', description: '进入 IM 聊天界面', icon: '💬', category: '导航', action: () => { window.location.href = '/im'; } },
-    { id: 'nav-graph', label: '通信拓扑图', description: '查看 Agent 通信关系', icon: '🔗', category: '导航', action: () => { window.location.href = '/graph'; } },
-    { id: 'nav-skills', label: '技能市场', description: '浏览和管理技能', icon: '⚡', category: '导航', action: () => { window.location.href = '/skills'; } },
-    { id: 'nav-models', label: '模型配置', description: '配置 LLM 模型和 API Key', icon: '🤖', category: '导航', action: () => { window.location.href = '/models'; } },
-    { id: 'nav-pipeline', label: '流水线监控', description: '查看工作流执行进度', icon: '🔄', category: '导航', action: () => { window.location.href = '/pipeline'; } },
-    { id: 'nav-observability', label: '可观测性面板', description: '系统指标和成本监控', icon: '📊', category: '导航', action: () => { window.location.href = '/observability'; } },
-    { id: 'nav-home', label: '返回首页', description: '工作区列表和总览', icon: '🏠', category: '导航', action: () => { window.location.href = '/'; } },
+    { id: 'nav-im', label: 'Agent 对话', description: '进入 IM 聊天界面', icon: '💬', category: '导航', action: () => { window.location.href = ROUTES.CHAT; } },
+    { id: 'nav-graph', label: '通信拓扑图', description: '查看 Agent 通信关系', icon: '🔗', category: '导航', action: () => { window.location.href = ROUTES.GRAPH; } },
+    { id: 'nav-skills', label: '技能市场', description: '浏览和管理技能', icon: '⚡', category: '导航', action: () => { window.location.href = ROUTES.SKILLS; } },
+    { id: 'nav-models', label: '模型配置', description: '配置 LLM 模型和 API Key', icon: '🤖', category: '导航', action: () => { window.location.href = ROUTES.MODELS; } },
+    { id: 'nav-pipeline', label: '流水线监控', description: '查看工作流执行进度', icon: '🔄', category: '导航', action: () => { window.location.href = ROUTES.PIPELINE; } },
+    { id: 'nav-observability', label: '可观测性面板', description: '系统指标和成本监控', icon: '📊', category: '导航', action: () => { window.location.href = ROUTES.MONITOR; } },
+    { id: 'nav-home', label: '返回首页', description: '工作区列表和总览', icon: '🏠', category: '导航', action: () => { window.location.href = ROUTES.HOME; } },
     { id: 'action-create', label: '创建 Agent', description: '输入角色名创建新 Agent', icon: '➕', category: '操作', action: () => { setCreateMode(true); } },
   ], []);
 
@@ -88,7 +89,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
               description: `${g.memberCount ?? '?'} 成员`,
               icon: '👥',
               category: '群组',
-              action: () => { window.location.href = `/im?group=${g.id}`; },
+              action: () => { window.location.href = chatUrl({ group: g.id }); },
             });
           }
         }
@@ -104,7 +105,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
               description: a.status ? `状态: ${a.status}` : undefined,
               icon: '🤖',
               category: 'Agent',
-              action: () => { window.location.href = `/im?agent=${a.id}`; },
+              action: () => { window.location.href = chatUrl({ agent: a.id }); },
             });
           }
         }
@@ -119,7 +120,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
               description: s.description,
               icon: '⚡',
               category: '技能',
-              action: () => { window.location.href = `/skills?highlight=${s.name}`; },
+              action: () => { window.location.href = `${ROUTES.SKILLS}?highlight=${s.name}`; },
             });
           }
         }
@@ -168,7 +169,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
       if (res.ok) {
         const data = await res.json();
         onClose();
-        window.location.href = `/im?group=${data.groupId}`;
+        window.location.href = chatUrl({ group: data.groupId });
       }
     } catch (err) {
       console.warn('[QuickPick] create agent failed:', err);
