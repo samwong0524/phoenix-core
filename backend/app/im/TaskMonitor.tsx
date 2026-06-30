@@ -33,6 +33,7 @@ type TaskMonitorProps = {
   vizEvents: VizEventItem[];
   streamAgentId: string | null;
   contentStream: string;
+  reasoningStream?: string;
   toolStream: string;
   agentError: string | null;
   llmHistory?: string;
@@ -81,7 +82,7 @@ function CollapsibleSection({
 export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
   const {
     agents, agentStatusById, groups, activeGroupId,
-    vizEvents, streamAgentId, contentStream, toolStream,
+    vizEvents, streamAgentId, contentStream, reasoningStream, toolStream,
     agentError, llmHistory = "", locale = "zh",
     todoItems, artifacts, usedSkills,
   } = props;
@@ -96,7 +97,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
   );
 
   return (
-    <div style={monitorStyle}>
+    <div className="panel-right" style={monitorStyle}>
       {/* Header */}
       <div style={headerStyle}>
         <span style={headerTitleStyle}>{isZh ? "任务监控" : "Task Monitor"}</span>
@@ -184,6 +185,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
               vizEvents={vizEvents}
               llmHistory={llmHistory}
               contentStream={contentStream}
+              reasoningStream={reasoningStream}
               toolStream={toolStream}
               agentError={agentError}
               streamAgentId={streamAgentId}
@@ -218,15 +220,15 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
 // ─── Debug Panel (original tabs) ────────────────────────────
 
 function DebugPanel({
-  vizEvents, llmHistory, contentStream, toolStream, agentError, streamAgentId, locale,
+  vizEvents, llmHistory, contentStream, reasoningStream, toolStream, agentError, streamAgentId, locale,
 }: Omit<TaskMonitorProps, "agents" | "agentStatusById" | "groups" | "activeGroupId" | "todoItems" | "artifacts" | "usedSkills">) {
-  const [tab, setTab] = useState<"trace" | "events" | "raw">("trace");
+  const [tab, setTab] = useState<"trace" | "events" | "reasoning" | "raw">("trace");
   const isZh = locale === "zh";
 
   return (
     <div>
       <div style={{ display: "flex", gap: 2, marginBottom: 6 }}>
-        {(["trace", "events", "raw"] as const).map((t) => (
+        {(["trace", "events", "reasoning", "raw"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -237,7 +239,7 @@ function DebugPanel({
               border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer",
             }}
           >
-            {t === "trace" ? "Trace" : t === "events" ? (isZh ? "事件" : "Events") : "Raw"}
+            {t === "trace" ? "Trace" : t === "events" ? (isZh ? "事件" : "Events") : t === "reasoning" ? (isZh ? "思考" : "Think") : "Raw"}
           </button>
         ))}
       </div>
@@ -250,6 +252,11 @@ function DebugPanel({
             </div>
           ))}
         </div>
+      )}
+      {tab === "reasoning" && (
+        <pre style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-secondary)", maxHeight: 200, overflow: "auto", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          {reasoningStream || "—"}
+        </pre>
       )}
       {tab === "raw" && (
         <pre style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-secondary)", maxHeight: 200, overflow: "auto", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>

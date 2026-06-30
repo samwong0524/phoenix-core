@@ -18,10 +18,16 @@
     "back_home": "← Back to Home"
   },
   "home": {
-    "title": "PHOENIX CORE",
+    "title": "SWARM IDE",
     "subtitle": "Agent Wechat",
     "im_title": "IM Chat",
     "im_desc": "Real-time conversations with agents, group workflows",
+    "workflow_title": "Workflow",
+    "workflow_desc": "Visual pipeline editor",
+    "history_title": "History",
+    "history_desc": "Workflow execution history",
+    "templates_title": "Templates",
+    "templates_desc": "Reusable workflow templates",
     "graph_title": "Graph",
     "graph_desc": "View agent relationship network",
     "skills_title": "Skills",

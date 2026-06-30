@@ -40,28 +40,12 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
         {/* Navigation Cards */}
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--cyan)",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            fontFamily: "var(--font-display)",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--text-secondary)",
             marginBottom: 12,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
           }}
         >
-          <span
-            style={{
-              display: "inline-block",
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "var(--cyan)",
-              boxShadow: "0 0 6px var(--cyan)",
-            }}
-          />
           {t("nav.quick_nav")}
         </div>
 
@@ -74,9 +58,9 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
           }}
         >
           <NavCard href={ROUTES.CHAT} title={t("home.im_title")} desc={t("home.im_desc")} />
-          <NavCard href={ROUTES.WORKFLOW} title="Workflow" desc="Visual pipeline editor" />
-          <NavCard href={ROUTES.HISTORY} title="History" desc="Workflow execution history" />
-          <NavCard href={ROUTES.TEMPLATES} title="Templates" desc="Reusable workflow templates" />
+          <NavCard href={ROUTES.WORKFLOW} title={t("home.workflow_title")} desc={t("home.workflow_desc")} />
+          <NavCard href={ROUTES.HISTORY} title={t("home.history_title")} desc={t("home.history_desc")} />
+          <NavCard href={ROUTES.TEMPLATES} title={t("home.templates_title")} desc={t("home.templates_desc")} />
           <NavCard href={ROUTES.GRAPH} title={t("home.graph_title")} desc={t("home.graph_desc")} />
           <NavCard href={ROUTES.SKILLS} title={t("home.skills_title")} desc={t("home.skills_desc")} />
           <NavCard href={ROUTES.MODELS} title={t("home.models_title")} desc={t("home.models_desc")} />

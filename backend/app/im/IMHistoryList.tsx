@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 function cx(...classes: Array<string | false | undefined | null>): string {
   return classes.filter(Boolean).join(" ");
 }
@@ -21,7 +23,7 @@ function roleToCssClass(role: string): string {
   return "system";
 }
 
-export function IMHistoryList({
+export const IMHistoryList = memo(function IMHistoryList({
   entries,
   historyRole,
   summarizeHistoryEntry,
@@ -51,4 +53,4 @@ export function IMHistoryList({
       )}
     </>
   );
-}
+});

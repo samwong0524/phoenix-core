@@ -6,7 +6,7 @@
  */
 
 /** VizEvent shape (defined in page.tsx, re-declared here to avoid circular import) */
-type VizEventKind = "agent" | "message" | "llm" | "tool" | "db";
+type VizEventKind = "agent" | "message" | "llm" | "tool" | "db" | "skill";
 
 type Locale = "zh" | "en";
 
@@ -107,6 +107,17 @@ export function translateEvent(
       return {
         text: isZh ? `数据更新: ${evt.label.replace("DB ", "")}` : `Data: ${evt.label.replace("DB ", "")}`,
         icon: "💾",
+      };
+    }
+
+    case "skill": {
+      // label pattern: "skill.suggestion: skill-name"
+      const skillName = evt.label.replace("skill.suggestion:", "").replace("skill.suggestion: ", "").trim();
+      return {
+        text: isZh
+          ? `建议使用技能: ${skillName}`
+          : `Skill suggested: ${skillName}`,
+        icon: "💡",
       };
     }
 

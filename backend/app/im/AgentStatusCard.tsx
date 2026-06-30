@@ -1,6 +1,8 @@
 ﻿'use client';
 
+import { memo } from 'react';
 import Link from 'next/link';
+import { ROUTES } from "@/app/_components/routes";
 
 type AgentStatus = 'idle' | 'working' | 'waiting' | 'error' | 'paused';
 
@@ -25,11 +27,11 @@ function formatElapsed(seconds: number): string {
   return m + '\u5206' + s.toString().padStart(2, '0') + '\u79D2';
 }
 
-export default function AgentStatusCard({ status, agentName, currentStage, elapsedSeconds = 0 }: AgentStatusCardProps) {
+export default memo(function AgentStatusCard({ status, agentName, currentStage, elapsedSeconds = 0 }: AgentStatusCardProps) {
   const config = statusConfig[status];
 
   return (
-    <Link href="/pipeline" style={{
+    <Link href={ROUTES.PIPELINE} style={{
       display: 'inline-flex',
       alignItems: 'center',
       gap: '8px',
@@ -40,7 +42,8 @@ export default function AgentStatusCard({ status, agentName, currentStage, elaps
       textDecoration: 'none',
       cursor: 'pointer',
     }}>
-      <span style={{ fontSize: '14px' }}>{config.icon}</span>
+      <span style={{ fontSize: '14px' }} aria-hidden="true">{config.icon}</span>
+      <span className="sr-only">{config.label}</span>
       <div>
         <div style={{ fontSize: '12px', color: config.color, fontWeight: 500 }}>
           {agentName && <span>{agentName} \u00B7 </span>}
@@ -55,4 +58,4 @@ export default function AgentStatusCard({ status, agentName, currentStage, elaps
       </div>
     </Link>
   );
-}
+});

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { ErrorBoundary } from "../../_components/error-boundary";
+import { ErrorBoundary } from "../_components/error-boundary";
 
-export default function ObservabilityError({
+export default function HistoryError({
   error,
   reset,
 }: {
@@ -11,12 +11,12 @@ export default function ObservabilityError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Observability Route Error]", error);
+    console.error("[History Route Error]", error);
   }, [error]);
 
   return (
-    <ErrorBoundary name="Observability" fallback={<RouteErrorCard name="Observability" error={error} reset={reset} />}>
-      <RouteErrorCard name="Observability" error={error} reset={reset} />
+    <ErrorBoundary name="History" fallback={<RouteErrorCard name="History" error={error} reset={reset} />}>
+      <RouteErrorCard name="History" error={error} reset={reset} />
     </ErrorBoundary>
   );
 }

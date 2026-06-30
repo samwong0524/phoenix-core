@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/context";
 import { Card, Loading } from "@/components/ui";
+import { ROUTES } from "@/app/_components/routes";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -498,7 +499,7 @@ function HistoryContent() {
           gap: 12,
         }}
       >
-        <Link href="/" style={{ fontSize: 12, color: "var(--text-dim)", textDecoration: "none" }}>
+        <Link href={ROUTES.HOME} style={{ fontSize: 12, color: "var(--text-dim)", textDecoration: "none" }}>
           ← Home
         </Link>
         <div

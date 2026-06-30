@@ -51,7 +51,7 @@ export type UiStreamEvent = {
 
 export type VizEvent = {
   id: string;
-  kind: "agent" | "message" | "llm" | "tool" | "db";
+  kind: "agent" | "message" | "llm" | "tool" | "db" | "skill";
   label: string;
   at: number;
 };

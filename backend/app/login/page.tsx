@@ -272,7 +272,7 @@ export default function LoginPage() {
       <div style={containerStyle}>
         {/* Logo */}
         <div style={logoStyle}>
-          <h1 style={logoTitleStyle}>PHOENIX</h1>
+          <h1 style={logoTitleStyle}>SWARM IDE</h1>
           <p style={logoSubtitleStyle}>多智能体协作平台</p>
         </div>
 

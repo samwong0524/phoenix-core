@@ -18,10 +18,16 @@
     "back_home": "← 返回首页"
   },
   "home": {
-    "title": "PHOENIX CORE",
+    "title": "SWARM IDE",
     "subtitle": "Agent Wechat",
     "im_title": "IM 聊天",
     "im_desc": "与 Agent 实时对话，创建群组工作流",
+    "workflow_title": "工作流",
+    "workflow_desc": "可视化流程编辑器",
+    "history_title": "执行历史",
+    "history_desc": "工作流执行记录",
+    "templates_title": "模板库",
+    "templates_desc": "可复用的工作流模板",
     "graph_title": "图谱",
     "graph_desc": "查看 Agent 关系网络",
     "skills_title": "技能管理",

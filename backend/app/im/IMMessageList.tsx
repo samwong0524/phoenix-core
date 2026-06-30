@@ -1,6 +1,7 @@
-﻿import { memo } from "react";
+import { memo, useRef } from "react";
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { Virtuoso } from "react-virtuoso";
 import { fadeSlideUp, getReducedVariant } from "@/lib/motion";
 
 type Message = {
@@ -59,6 +60,7 @@ const MessageItem = memo(function MessageItem({
   fmtTime,
   renderContent,
   cx,
+  isNew,
 }: {
   m: Message;
   humanAgentId?: string | null;
@@ -66,6 +68,7 @@ const MessageItem = memo(function MessageItem({
   fmtTime: (iso: string) => string;
   renderContent: (content: string, contentType: string, message?: Message) => ReactNode;
   cx: (...classes: Array<string | false | undefined | null>) => string;
+  isNew: boolean;
 }) {
   const isMe = m.senderId === humanAgentId;
   const senderRole = getAgentRole(m.senderId, agentRoleById, isMe);
@@ -84,7 +87,7 @@ const MessageItem = memo(function MessageItem({
         isSystem && 'system-msg',
       )}
       variants={variants}
-      initial="hidden"
+      initial={isNew ? "hidden" : false}
       animate="visible"
     >
       <div className='msg-sender'>
@@ -112,19 +115,40 @@ export const IMMessageList = memo(function IMMessageList({
   renderContent,
   cx,
 }: IMMessageListProps) {
+  // Track which messages were already present on the previous render
+  // so we only animate truly new messages (not all messages on mount)
+  const prevIdsRef = useRef<Set<string>>(new Set());
+
+  const currentIds = new Set(messages.map((m) => m.id));
+  const newIds = new Set<string>();
+  for (const id of currentIds) {
+    if (!prevIdsRef.current.has(id)) {
+      newIds.add(id);
+    }
+  }
+  // Update ref after computing new ids (use microtask to avoid mutating during render)
+  Promise.resolve().then(() => {
+    prevIdsRef.current = currentIds;
+  });
+
   return (
-    <>
-      {messages.map((m) => (
+    <Virtuoso
+      data={messages}
+      style={{ height: "100%" }}
+      followOutput="smooth"
+      initialTopMostItemIndex={Math.max(0, messages.length - 1)}
+      increaseViewportBy={{ top: 600, bottom: 600 }}
+      itemContent={(index, m) => (
         <MessageItem
-          key={m.id}
           m={m}
           humanAgentId={humanAgentId}
           agentRoleById={agentRoleById}
           fmtTime={fmtTime}
           renderContent={renderContent}
           cx={cx}
+          isNew={newIds.has(m.id)}
         />
-      ))}
-    </>
+      )}
+    />
   );
 });

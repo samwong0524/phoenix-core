@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n/context";
 import { Card, Loading, EmptyState, PageHeader, Alert } from "@/components/ui";
+import { ROUTES } from "@/app/_components/routes";
 
 type UUID = string;
 
@@ -82,7 +83,7 @@ export default function GraphPage() {
           message={t("graph.no_session")}
           hint={t("graph.no_session_hint")}
           action={
-            <Link className="btn btn-primary" href="/im">
+            <Link className="btn btn-primary" href={ROUTES.CHAT}>
               {t("graph.open_im")}
             </Link>
           }
@@ -101,7 +102,7 @@ export default function GraphPage() {
         title={t("graph.title")}
         subtitle={t("graph.subtitle")}
         actions={
-          <Link className="btn" href="/im">
+          <Link className="btn" href={ROUTES.CHAT}>
             {t("graph.back_im")}
           </Link>
         }

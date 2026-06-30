@@ -15,6 +15,7 @@ import type {
   WorkspaceDefaults,
 } from "./types";
 import { loadSession, saveSession, api } from "./helpers";
+import { ROUTES } from "@/app/_components/routes";
 
 /**
  * useImState — manages all IM state, API calls, SSE connections, and actions.
@@ -310,7 +311,7 @@ export function useImState(workspaceOverrideId: string | null) {
     setError(null); setAgentError(null); setStatus("boot");
     const created = await api<WorkspaceDefaults>(`/api/workspaces`, { method: "POST", body: JSON.stringify({ name: name?.trim() || "New Workspace" }) });
     saveSession(created); setSession(created); setActiveGroupId(created.defaultGroupId); setStatus("idle");
-    window.history.replaceState(null, "", "/im");
+    window.history.replaceState(null, "", ROUTES.CHAT);
     void refreshAgents(created); return created;
   }, [refreshAgents]);
 

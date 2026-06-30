@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useI18n } from "@/lib/i18n/context";
 import { Button, Card } from "@/components/ui";
+import { ROUTES } from "@/app/_components/routes";
 
 type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'review_requested';
 type AgentStatus = 'idle' | 'working' | 'waiting' | 'error' | 'paused';
@@ -399,7 +400,7 @@ export default function PipelinePage() {
           </div>
         )}
 
-        <Link href="/im" className="pipeline-back-link" style={{
+        <Link href={ROUTES.CHAT} className="pipeline-back-link" style={{
           display: 'block', marginTop: 'auto', padding: '8px 12px',
           borderRadius: 'var(--radius-sm)', background: 'var(--bg-hover)', color: 'var(--text-secondary)',
           textDecoration: 'none', fontSize: '13px', textAlign: 'center',

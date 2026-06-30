@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { ErrorBoundary } from "../../_components/error-boundary";
+import { ErrorBoundary } from "../_components/error-boundary";
 
-export default function SkillsError({
+export default function ModelsError({
   error,
   reset,
 }: {
@@ -11,12 +11,12 @@ export default function SkillsError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Skills Route Error]", error);
+    console.error("[Models Route Error]", error);
   }, [error]);
 
   return (
-    <ErrorBoundary name="Skills" fallback={<RouteErrorCard name="Skills" error={error} reset={reset} />}>
-      <RouteErrorCard name="Skills" error={error} reset={reset} />
+    <ErrorBoundary name="Models" fallback={<RouteErrorCard name="Models" error={error} reset={reset} />}>
+      <RouteErrorCard name="Models" error={error} reset={reset} />
     </ErrorBoundary>
   );
 }

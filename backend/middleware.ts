@@ -2,7 +2,7 @@
  * Next.js Middleware — Phoenix-Core Auth
  *
  * Protects all /api/* routes when AUTH_SECRET is set.
- * Exempts: /api/auth/*, /api/health, /api/admin/init-db, /api/admin/clear-db
+ * Exempts: /api/auth/*, /api/health
  *
  * When AUTH_SECRET is NOT set (dev mode), all requests pass through.
  */
@@ -16,50 +16,8 @@ const PUBLIC_API_PREFIXES = [
   "/api/health",
 ];
 
-// Admin-only routes (require admin role — checked in route handlers, not here)
-// Middleware only checks for valid token presence
-
-/**
- * Old English route → new Chinese route 301 redirect map.
- * Entries are checked in order; first match wins.
- * Each key is a prefix — both the exact path and any sub-path redirect
- * to the corresponding new path (with sub-path appended).
- */
-const REDIRECT_MAP: Record<string, string> = {
-  "/im":                "/对话",
-  "/workflow/templates": "/编排/模板",
-  "/workflow":          "/编排/工作流",
-  "/pipeline":          "/编排/流水线",
-  "/graph":             "/编排/拓扑",
-  "/observability":     "/运维/监控",
-  "/history":           "/运维/历史",
-  "/models":            "/运维/模型",
-  "/skills":            "/配置/技能",
-  "/login":             "/登录",
-  "/test":              "/测试",
-};
-
-// Sorted keys (longest first) so that e.g. /workflow/templates matches before /workflow
-const REDIRECT_KEYS = Object.keys(REDIRECT_MAP).sort(
-  (a, b) => b.length - a.length,
-);
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // ── 301 redirects from old English routes to new Chinese routes ──────────
-  for (const oldPrefix of REDIRECT_KEYS) {
-    if (pathname === oldPrefix || pathname.startsWith(oldPrefix + "/")) {
-      const newBase = REDIRECT_MAP[oldPrefix];
-      const suffix = pathname.slice(oldPrefix.length); // "" or "/..."
-      const target = new URL(newBase + suffix, request.url);
-      // Preserve query string
-      target.search = request.nextUrl.search;
-      return NextResponse.redirect(target, 301);
-    }
-  }
-
-  // ── API auth logic (unchanged) ───────────────────────────────────────────
 
   // Only protect /api/* routes
   if (!pathname.startsWith("/api/")) {
@@ -87,16 +45,13 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Let the route handler verify the token (it has DB access for user lookup)
-  // Middleware just checks cookie presence to avoid DB calls in middleware
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     /*
-     * Old English routes (301-redirected to new Chinese routes)
-     * + all /api/* paths.
+     * All /api/* paths.
      *
      * Excludes:
      * - _next/static (static files)
@@ -104,15 +59,5 @@ export const config = {
      * - favicon.ico
      */
     "/api/:path*",
-    "/im/:path*",
-    "/workflow/:path*",
-    "/pipeline/:path*",
-    "/graph/:path*",
-    "/observability/:path*",
-    "/history/:path*",
-    "/models/:path*",
-    "/skills/:path*",
-    "/login",
-    "/test/:path*",
   ],
 };

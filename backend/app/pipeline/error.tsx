@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { ErrorBoundary } from "../../_components/error-boundary";
+import { ErrorBoundary } from "../_components/error-boundary";
 
-export default function GraphError({
+export default function PipelineError({
   error,
   reset,
 }: {
@@ -11,12 +11,12 @@ export default function GraphError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Graph Route Error]", error);
+    console.error("[Pipeline Route Error]", error);
   }, [error]);
 
   return (
-    <ErrorBoundary name="Graph" fallback={<RouteErrorCard name="Graph" error={error} reset={reset} />}>
-      <RouteErrorCard name="Graph" error={error} reset={reset} />
+    <ErrorBoundary name="Pipeline" fallback={<RouteErrorCard name="Pipeline" error={error} reset={reset} />}>
+      <RouteErrorCard name="Pipeline" error={error} reset={reset} />
     </ErrorBoundary>
   );
 }

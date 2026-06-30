@@ -122,7 +122,7 @@
   --bp-xl: 1280px;
 
   /* ─── Fonts ─── */
-  --font-display: "Orbitron", monospace;
+  --font-display: "Exo 2", sans-serif;
   --font-body: "Exo 2", sans-serif;
   --font-mono: "JetBrains Mono", "ui-monospace", "SFMono-Regular", monospace;
 
@@ -209,7 +209,7 @@ body {
   line-height: 1.5;
 }
 
-/* Thin cyan scrollbar matching PHOENIX CORE design */
+/* Thin cyan scrollbar matching design system */
 ::-webkit-scrollbar {
   width: 4px;
 }
@@ -979,7 +979,7 @@ textarea {
   font-size: 13px;
 }
 
-/* ===== PHOENIX CORE — DESIGN SYSTEM ===== */
+/* ===== DESIGN SYSTEM ===== */
 
 /* --text-dim is in :root above */
 
@@ -1177,7 +1177,7 @@ textarea {
   50% { opacity: 0.7; transform: scale(1.3); }
 }
 
-/* Badge (PHOENIX style) */
+/* Badge */
 .badge.phoenix {
   min-width: 18px;
   height: 18px;
@@ -2324,7 +2324,7 @@ select:focus-visible,
   border-width: 0;
 }
 
-/* ===== PHOENIX CORE — CORPORATE MOTION SYSTEM ===== */
+/* ===== CORPORATE MOTION SYSTEM ===== */
 /* Source: motion-plan.json (Corporate personality, DASHBOARD scene) */
 /* Signature easing: cubic-bezier(0.2, 0, 0, 1) — Material Design 3 */
 

@@ -1,20 +1,34 @@
 ﻿"use client";
 
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Briefcase, ChevronDown, ChevronLeft, ChevronRight, Code2, Network, User } from "lucide-react";
+import { Brain, Briefcase, ChevronDown, ChevronLeft, ChevronRight, Code2, Network, User } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { createCodePlugin } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
+import { useConfirm } from "../_components/confirm-dialog";
+import { ErrorBoundary } from "../_components/error-boundary";
 import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { IMHistoryList } from "./IMHistoryList";
-import { TopoAnimCanvas } from "./TopoAnimCanvas";
-import { TaskMonitor } from "./TaskMonitor";
 import { useI18n } from "@/lib/i18n/context";
 import { detectAtTrigger } from "@/lib/skill-utils";
+import { useIMStore } from "./store";
+import { ROUTES } from "@/app/_components/routes";
+
+// Dynamic imports for heavy components (code-split, no SSR needed)
+const TopoAnimCanvas = dynamic(() => import("./TopoAnimCanvas").then(m => m.TopoAnimCanvas), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-surface-2 h-32 rounded" />,
+});
+
+const TaskMonitor = dynamic(() => import("./TaskMonitor").then(m => m.TaskMonitor), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-surface-2 h-full rounded" />,
+});
 
 // Create code plugin with dark theme
 const code = createCodePlugin({
@@ -304,23 +318,50 @@ export default function IMPage() {
 function IMPageInner() {
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
+  const confirmAction = useConfirm();
   const workspaceOverrideId = searchParams.get("workspaceId");
-  const [session, setSession] = useState<WorkspaceDefaults | null>(() => null);
-  const [tokenLimit, setTokenLimit] = useState<number>(100000);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [agents, setAgents] = useState<AgentMeta[]>([]);
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState<"boot" | "groups" | "messages" | "send" | "idle">("boot");
-  const [error, setError] = useState<string | null>(null);
-  const [stoppingAgents, setStoppingAgents] = useState(false);
+    const {
+    // Session slice
+    session, tokenLimit, groups, agents, activeGroupId, availableModels, selectedModel,
+    // Messages slice
+    messages, contentStream, reasoningStream, toolStream, llmHistory,
+    // UI slice
+    status, error, draft, reasoningExpanded, agentActivity, agentActivityTool,
+    agentError, uploading, answeredQuestions, stoppingAgents,
+    vizEvents, vizBeams, vizSize, vizScale, vizOffset, vizIsPanning,
+    vizDebug, vizEventsCollapsed, rightPanels, midSplitRatio, midStackHeight,
+    nodeOffsets, collapsedAgents, detailsCollapsed,
+    skillList, skillPopupOpen, skillFilter, skillSelectedIndex, atTriggerPos,
+    workingDir, showDirInput, dirBrowsePath, dirBrowseEntries, dirBrowseParent, dirBrowseLoading,
+    // Agent status slice
+    agentStatusById,
+    // Session actions
+    setSession, setTokenLimit, setGroups, setAgents, setActiveGroupId,
+    setAvailableModels, setSelectedModel,
+    // Messages actions
+    setMessages, setContentStream, setReasoningStream, setToolStream, setLlmHistory,
+    // UI actions
+    setStatus, setError, setDraft, setReasoningExpanded,
+    setAgentActivity, setAgentActivityTool, setAgentError,
+    setUploading, setAnsweredQuestions, setStopping,
+    setVizEvents, setVizBeams, setVizSize, setVizScale, setVizOffset, setVizIsPanning,
+    setVizDebug, setVizEventsCollapsed, setRightPanels, setMidSplitRatio, setMidStackHeight,
+    setNodeOffsets, setCollapsedAgents, setDetailsCollapsed,
+    setSkillList, setSkillPopupOpen, setSkillFilter, setSkillSelectedIndex, setAtTriggerPos,
+    setWorkingDir, setShowDirInput, setDirBrowsePath, setDirBrowseEntries,
+    setDirBrowseParent, setDirBrowseLoading,
+    // Skill suggestions (A-05)
+    skillSuggestions, addSkillSuggestion, dismissSkillSuggestion,
+    // Agent status actions
+    setAgentStatusById,
+  } = useIMStore();
 
-  const [contentStream, setContentStream] = useState("");
-  const [reasoningStream, setReasoningStream] = useState("");
-  const [toolStream, setToolStream] = useState("");
-  const [agentActivity, setAgentActivity] = useState<string | null>(null); // "thinking" | "executing" | "generating" | null
-  const [agentActivityTool, setAgentActivityTool] = useState<string>("");
+  // Round vizSize to 10px granularity to avoid vizLayout recalc on every ResizeObserver pixel
+  const vizSizeRounded = useMemo(() => ({
+    width: Math.round(vizSize.width / 10) * 10,
+    height: Math.round(vizSize.height / 10) * 10,
+  }), [vizSize.width, vizSize.height]);
+
   const activityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setActivityDebounced = useCallback((activity: string | null, tool = "") => {
     if (activityDebounceRef.current) clearTimeout(activityDebounceRef.current);
@@ -328,52 +369,7 @@ function IMPageInner() {
       setAgentActivity(activity);
       setAgentActivityTool(tool);
     }, 150);
-  }, []);
-  const [llmHistory, setLlmHistory] = useState("");
-  const [agentError, setAgentError] = useState<string | null>(null);
-  const [vizEvents, setVizEvents] = useState<VizEvent[]>([]);
-  const [vizBeams, setVizBeams] = useState<VizBeam[]>([]);
-  const [vizSize, setVizSize] = useState({ width: 640, height: 260 });
-  // Round vizSize to 10px granularity to avoid vizLayout recalc on every ResizeObserver pixel
-  const vizSizeRounded = useMemo(() => ({
-    width: Math.round(vizSize.width / 10) * 10,
-    height: Math.round(vizSize.height / 10) * 10,
-  }), [vizSize.width, vizSize.height]);
-  const [vizScale, setVizScale] = useState(0.9);
-  const [vizOffset, setVizOffset] = useState({ x: 0, y: 0 });
-  const [vizIsPanning, setVizIsPanning] = useState(false);
-
-  // Skill autocomplete state
-  const [skillList, setSkillList] = useState<Array<{ name: string; description: string }>>([]);
-  const [skillPopupOpen, setSkillPopupOpen] = useState(false);
-  const [skillFilter, setSkillFilter] = useState("");
-  const [skillSelectedIndex, setSkillSelectedIndex] = useState(0);
-  const [atTriggerPos, setAtTriggerPos] = useState(-1);
-  const [workingDir, setWorkingDir] = useState<string>(() => {
-    try { return localStorage.getItem("workingDir") ?? ""; } catch { return ""; }
-  });
-  const [showDirInput, setShowDirInput] = useState(false);
-  const [dirBrowsePath, setDirBrowsePath] = useState("");
-  const [dirBrowseEntries, setDirBrowseEntries] = useState<Array<{ name: string; fullPath: string }>>([]);
-  const [dirBrowseParent, setDirBrowseParent] = useState<string | null>(null);
-  const [dirBrowseLoading, setDirBrowseLoading] = useState(false);
-  const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set()); // position of @ in draft
-  const [agentStatusById, setAgentStatusById] = useState<Record<string, AgentStatus>>({});
-  const [vizDebug, setVizDebug] = useState<VizDebugEntry[]>([]);
-  const [vizEventsCollapsed, setVizEventsCollapsed] = useState(false);
-  const [rightPanels, setRightPanels] = useState<RightPanelState[]>([
-    { id: "history", title: "LLM history", size: 320, collapsed: false },
-    { id: "content", title: "Realtime content", size: 220, collapsed: false },
-    { id: "reasoning", title: "Realtime reasoning", size: 220, collapsed: false },
-    { id: "tools", title: "Realtime tools", size: 200, collapsed: false },
-  ]);
-  const [midSplitRatio, setMidSplitRatio] = useState(0.55);
-  const [midStackHeight, setMidStackHeight] = useState(0);
-  const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
-  const [collapsedAgents, setCollapsedAgents] = useState<Record<string, boolean>>({});
-  const [detailsCollapsed, setDetailsCollapsed] = useState<Record<string, boolean>>({});
-  const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
-  const [selectedModel, setSelectedModel] = useState("auto");
+  }, [setAgentActivity, setAgentActivityTool]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -906,7 +902,7 @@ function IMPageInner() {
     setSession(created);
     setActiveGroupId(created.defaultGroupId);
     setStatus("idle");
-    window.history.replaceState(null, "", "/im");
+    window.history.replaceState(null, "", ROUTES.CHAT);
     void refreshAgents(created);
     return created;
   }, [refreshAgents]);
@@ -1175,7 +1171,15 @@ function IMPageInner() {
   const onInterruptAllAgents = useCallback(async () => {
     if (!session || stoppingAgents) return;
 
-    setStoppingAgents(true);
+    const ok = await confirmAction({
+      title: "Interrupt All Agents",
+      message: "This will stop all running agents in this workspace. Any in-progress tasks will be interrupted and may need to be restarted.",
+      confirmLabel: "Stop All Agents",
+      variant: "warning",
+    });
+    if (!ok) return;
+
+    setStopping(true);
     setError(null);
     setAgentError(null);
 
@@ -1200,9 +1204,9 @@ function IMPageInner() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setStoppingAgents(false);
+      setStopping(false);
     }
-  }, [agents, session, stoppingAgents]);
+  }, [agents, session, stoppingAgents, confirmAction]);
 
   // --- Skill autocomplete helpers ---
   const filteredSkills = useMemo(() => {
@@ -1249,10 +1253,10 @@ function IMPageInner() {
       if (!skillPopupOpen || filteredSkills.length === 0) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSkillSelectedIndex((i) => (i + 1) % filteredSkills.length);
+        setSkillSelectedIndex((skillSelectedIndex + 1) % filteredSkills.length);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSkillSelectedIndex((i) => (i - 1 + filteredSkills.length) % filteredSkills.length);
+        setSkillSelectedIndex((skillSelectedIndex - 1 + filteredSkills.length) % filteredSkills.length);
       } else if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         selectSkill(filteredSkills[skillSelectedIndex].name);
@@ -1338,7 +1342,6 @@ function IMPageInner() {
     session,
   ]);
 
-  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function uploadFile(file: File) {
@@ -1387,6 +1390,14 @@ function IMPageInner() {
     void uploadFile(files[0]);
     e.target.value = "";
   }
+
+  // Initialize workingDir from localStorage (store defaults to "")
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("workingDir");
+      if (stored) setWorkingDir(stored);
+    } catch { /* ignore */ }
+  }, [setWorkingDir]);
 
   useEffect(() => {
     void bootstrap(workspaceOverrideId).catch((e) =>
@@ -1595,6 +1606,14 @@ function IMPageInner() {
           const table = payload.data?.table ?? "db";
           const action = payload.data?.action ?? "write";
           pushVizEvent(payload, `DB ${action}: ${table}`, "db");
+        } else if (payload.event === "ui.skill.suggestion") {
+          const skillName = (payload.data?.skillName as string) ?? "";
+          const confidence = (payload.data?.confidence as number) ?? 0;
+          const reason = (payload.data?.reason as string) ?? "";
+          const triggerPattern = (payload.data?.triggerPattern as string) ?? "";
+          if (skillName && confidence >= 0.8) {
+            addSkillSuggestion({ skillName, confidence, reason, triggerPattern });
+          }
         }
       }
 
@@ -2135,6 +2154,7 @@ const renderContent = useCallback((content: string, contentType: string, message
   return (
     <IMShell
       left={
+        <ErrorBoundary name="IM.LeftPanel">
         <aside className="panel panel-left" style={{ overflow: "hidden" }}>
         <div className="logo-bar">
           <img className="logo-icon" src="data:image/png;base64,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" alt="PHOENIX CORE" />
@@ -2198,7 +2218,7 @@ const renderContent = useCallback((content: string, contentType: string, message
             {t("im.assistant_label")} {(session?.assistantAgentId ?? "-").slice(0, 22)}…
           </div>
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-            <a href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+            <a href={ROUTES.HOME} style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
               {t("common.back_home")}
             </a>
           </div>
@@ -2237,8 +2257,10 @@ const renderContent = useCallback((content: string, contentType: string, message
           )}
         </div>
         </aside>
+        </ErrorBoundary>
       }
       mid={
+        <ErrorBoundary name="IM.ChatPanel">
         <main className="panel panel-mid">
         <div className="chat-header">
           <span className="chat-header-title">{title}</span>
@@ -2262,10 +2284,10 @@ const renderContent = useCallback((content: string, contentType: string, message
             ? `${Math.max(0, Math.round(midChatHeight))}px ${MID_SPLITTER_SIZE}px minmax(${MID_GRAPH_MIN_HEIGHT}px, 1fr)`
             : `1fr ${MID_SPLITTER_SIZE}px minmax(${MID_GRAPH_MIN_HEIGHT}px, 1fr)`
         }}>
-          <div className="chat">
+          <div className="chat" role="log" aria-live="polite" aria-label="Chat messages">
             {/* Agent activity status indicator */}
             {agentActivity && (
-              <div className="chat-agent-status" style={{
+              <div className="chat-agent-status" role="status" aria-label={agentActivity === "thinking" ? "Agent is thinking" : agentActivity === "executing" ? "Agent is executing a tool" : "Agent is generating a response"} style={{
                 position: "sticky", top: 0, zIndex: 10,
                 display: "flex", alignItems: "center", gap: 8,
                 padding: "6px 12px", fontSize: 11, fontFamily: "var(--font-mono)",
@@ -2280,6 +2302,55 @@ const renderContent = useCallback((content: string, contentType: string, message
                 <span>
                   {agentActivity === "thinking" ? "深度思考…" : agentActivity === "executing" ? `执行中 ${agentActivityTool.length > 16 ? agentActivityTool.slice(0, 14) + "…" : agentActivityTool}…` : "生成中…"}
                 </span>
+              </div>
+            )}
+            {/* Collapsible reasoning/thinking panel */}
+            {reasoningStream && (
+              <div style={{
+                margin: "4px 12px",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                background: "var(--bg-elevated)",
+                overflow: "hidden",
+              }}>
+                <button
+                  onClick={() => setReasoningExpanded(!reasoningExpanded)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    width: "100%", padding: "6px 10px",
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "var(--cyan)", fontSize: 11, fontFamily: "var(--font-mono)",
+                    fontWeight: 500, textAlign: "left",
+                  }}
+                >
+                  <Brain size={14} style={{ flexShrink: 0, color: "var(--cyan)" }} />
+                  <span style={{ flex: 1 }}>
+                    {agentActivity === "thinking" ? "Thinking…" : "Thinking"}
+                  </span>
+                  <span style={{
+                    fontSize: 10, color: "var(--text-dim)",
+                    transform: reasoningExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                    display: "inline-block",
+                  }}>▾</span>
+                </button>
+                {reasoningExpanded && (
+                  <div style={{
+                    maxHeight: 200, overflow: "auto",
+                    padding: "0 10px 8px 10px",
+                    borderTop: "1px solid var(--border)",
+                  }}>
+                    <pre style={{
+                      margin: 0, padding: "6px 0",
+                      fontSize: 11, lineHeight: 1.5,
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--text-secondary)",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    }}>
+                      {reasoningStream}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
             <IMMessageList
@@ -2602,6 +2673,71 @@ const renderContent = useCallback((content: string, contentType: string, message
 
         {error ? <div className="toast">{error}</div> : null}
 
+        {/* Skill suggestion chips (A-05) — non-intrusive hints above the input */}
+        {skillSuggestions.length > 0 && (
+          <div style={{
+            display: "flex",
+            gap: 6,
+            padding: "4px 12px",
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}>
+            {skillSuggestions.map((sug) => (
+              <div
+                key={sug.id}
+                title={sug.reason}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "2px 8px",
+                  borderRadius: 12,
+                  fontSize: 11,
+                  background: "var(--surface-2, #2a2a3a)",
+                  border: "1px solid var(--border, #3a3a4a)",
+                  color: "var(--text-secondary, #aaa)",
+                  cursor: "pointer",
+                  transition: "background 0.15s, color 0.15s",
+                  maxWidth: 260,
+                  overflow: "hidden",
+                  whiteSpace: "nowrap",
+                  textOverflow: "ellipsis",
+                }}
+                onClick={() => {
+                  const prefix = draft ? draft + " " : "";
+                  setDraft(prefix + "@" + sug.skillName + " ");
+                  dismissSkillSuggestion(sug.id);
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.background = "var(--surface-3, #3a3a5a)";
+                  (e.currentTarget as HTMLDivElement).style.color = "var(--text-primary, #ddd)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2, #2a2a3a)";
+                  (e.currentTarget as HTMLDivElement).style.color = "var(--text-secondary, #aaa)";
+                }}
+              >
+                <span style={{ opacity: 0.6, fontSize: 10 }}>💡</span>
+                <span style={{ fontWeight: 500 }}>@{sug.skillName}</span>
+                <span
+                  style={{
+                    opacity: 0.5,
+                    fontSize: 10,
+                    cursor: "pointer",
+                    marginLeft: 2,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissSkillSuggestion(sug.id);
+                  }}
+                >
+                  ✕
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="chat-input-area">
           <input
             ref={fileInputRef}
@@ -2613,6 +2749,7 @@ const renderContent = useCallback((content: string, contentType: string, message
           <button
             className="chat-attach"
             title={t("im.upload_file")}
+            aria-label={t("im.upload_file")}
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
             style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? "wait" : "pointer" }}
@@ -2625,6 +2762,7 @@ const renderContent = useCallback((content: string, contentType: string, message
             value={draft}
             onChange={handleDraftChange}
             placeholder={t("im.input_placeholder")}
+            aria-label="Message input"
             onKeyDown={(e) => {
               // Skill popup takes priority for navigation keys
               if (skillPopupOpen && filteredSkills.length > 0) {
@@ -2674,6 +2812,7 @@ const renderContent = useCallback((content: string, contentType: string, message
           <select
             className="chat-model"
             value={selectedModel}
+            aria-label="Select model"
             onChange={(e) => {
               const model = e.target.value;
               setSelectedModel(model);
@@ -2692,13 +2831,15 @@ const renderContent = useCallback((content: string, contentType: string, message
               </option>
             ))}
           </select>
-          <button className="send-btn" onClick={() => void onSend()} disabled={!draft.trim() || status === "send"}>
+          <button className="send-btn" onClick={() => void onSend()} disabled={!draft.trim() || status === "send"} aria-label="Send message">
             {t("im.send")}
           </button>
         </div>
         </main>
+        </ErrorBoundary>
       }
       right={
+        <ErrorBoundary name="IM.TaskMonitor">
         <TaskMonitor
           agents={agents}
           agentStatusById={agentStatusById}
@@ -2707,6 +2848,7 @@ const renderContent = useCallback((content: string, contentType: string, message
           vizEvents={vizEvents}
           streamAgentId={streamAgentId}
           contentStream={contentStream}
+          reasoningStream={reasoningStream}
           toolStream={toolStream}
           agentError={agentError}
           llmHistory={llmHistory}
@@ -2715,6 +2857,7 @@ const renderContent = useCallback((content: string, contentType: string, message
           artifacts={taskMonitorData.artifacts}
           usedSkills={taskMonitorData.usedSkills}
         />
+        </ErrorBoundary>
       }
     />
   );

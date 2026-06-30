@@ -7,27 +7,27 @@ export const ROUTES = {
   /** 首页（重定向到对话页） */
   HOME: "/",
   /** Agent 对话 */
-  CHAT: "/对话",
+  CHAT: "/im",
   /** 工作流编辑器 */
-  WORKFLOW: "/编排/工作流",
+  WORKFLOW: "/workflow",
   /** 工作流模板市场 */
-  TEMPLATES: "/编排/模板",
+  TEMPLATES: "/workflow/templates",
   /** 流水线编排 */
-  PIPELINE: "/编排/流水线",
+  PIPELINE: "/pipeline",
   /** Agent 通信拓扑 */
-  GRAPH: "/编排/拓扑",
+  GRAPH: "/graph",
   /** 运维监控仪表盘 */
-  MONITOR: "/运维/监控",
+  MONITOR: "/observability",
   /** 会话历史 */
-  HISTORY: "/运维/历史",
+  HISTORY: "/history",
   /** 模型管理 */
-  MODELS: "/运维/模型",
+  MODELS: "/models",
   /** 技能管理 */
-  SKILLS: "/配置/技能",
+  SKILLS: "/skills",
   /** 登录/注册 */
-  LOGIN: "/登录",
+  LOGIN: "/login",
   /** 测试页（开发用） */
-  TEST: "/测试",
+  TEST: "/test",
 } as const;
 
 /** Build a chat URL with optional query params */

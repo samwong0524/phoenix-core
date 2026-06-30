@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n/context";
 import { Button, Card, Loading } from "@/components/ui";
+import { ROUTES } from "@/app/_components/routes";
 
 // ─── Types ────────────────────────────────────────────
 interface HourlyMetric {
@@ -210,7 +211,7 @@ function ObservabilityDashboardInner() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Navigation */}
-      <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'none', marginBottom: 16 }}>
+      <Link href={ROUTES.HOME} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'none', marginBottom: 16 }}>
         {t("common.back_home")}
       </Link>
 
@@ -222,7 +223,7 @@ function ObservabilityDashboardInner() {
         <div className="flex items-center gap-3">
           <select
             value={hours}
-            onChange={(e) => window.location.href = `/observability?hours=${e.target.value}`}
+            onChange={(e) => window.location.href = `${ROUTES.MONITOR}?hours=${e.target.value}`}
             className="text-sm border rounded px-2 py-1"
             style={{ borderColor: 'var(--border)', background: 'var(--bg-panel)', color: 'var(--text-primary)' }}
           >

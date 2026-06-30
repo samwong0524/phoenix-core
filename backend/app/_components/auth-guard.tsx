@@ -61,7 +61,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       >
         <div
           className="text-sm animate-pulse"
-          style={{ color: "var(--cyan, #38bdf8)", fontFamily: "'Orbitron', sans-serif" }}
+          style={{ color: "var(--cyan, #38bdf8)" }}
         >
           SWARM IDE
         </div>

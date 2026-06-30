@@ -89,36 +89,54 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
     <aside
       role="navigation"
       aria-label="Main navigation"
-      className="flex flex-col h-full border-r transition-all duration-200"
       style={{
         width,
-        borderColor: "var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        borderRight: "1px solid var(--border)",
+        transition: "all 0.2s",
         backgroundColor: "var(--bg-panel)",
       }}
     >
       {/* Logo */}
       <div
-        className="flex items-center gap-2 px-3 h-12 border-b shrink-0"
-        style={{ borderColor: "var(--border)" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          padding: "0 var(--space-3)",
+          height: 48,
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
       >
         <div
-          className="w-7 h-7 rounded flex items-center justify-center shrink-0"
-          style={{ backgroundColor: "var(--accent-cyan)", color: "#000" }}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "var(--radius-sm)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            backgroundColor: "var(--accent-cyan)",
+            color: "#000",
+          }}
         >
           <Zap size={16} />
         </div>
         {!collapsed && (
           <span
-            className="font-bold text-sm tracking-wide"
-            style={{ color: "var(--text-primary)" }}
+            style={{ fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "var(--text-primary)" }}
           >
-            PHOENIX
+            SWARM IDE
           </span>
         )}
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 py-2 overflow-y-auto">
+      <nav style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto" }}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -131,8 +149,15 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
           return (
             <div key={item.label}>
               <div
-                className="flex items-center gap-2 px-3 py-2 mx-1 rounded cursor-pointer transition-colors"
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  padding: "var(--space-2) var(--space-3)",
+                  margin: "0 var(--space-1)",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                  transition: "color 0.15s",
                   backgroundColor:
                     active && !hasChildren
                       ? "var(--bg-card)"
@@ -148,8 +173,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
               >
                 <Link
                   href={item.href}
-                  className="flex items-center gap-2 flex-1 min-w-0"
-                  style={{ color: "inherit", textDecoration: "none" }}
+                  style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flex: 1, minWidth: 0, color: "inherit", textDecoration: "none" }}
                   aria-current={active && !hasChildren ? "page" : undefined}
                   onClick={(e) => {
                     if (hasChildren) {
@@ -159,13 +183,13 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                     }
                   }}
                 >
-                  <Icon size={18} className="shrink-0" />
+                  <Icon size={18} style={{ flexShrink: 0 }} />
                   {!collapsed && (
-                    <span className="text-sm truncate">{item.label}</span>
+                    <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
                   )}
                 </Link>
                 {!collapsed && hasChildren && (
-                  <span className="ml-auto text-xs opacity-50">
+                  <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.5 }}>
                     {expanded ? (
                       <ChevronLeft size={14} />
                     ) : (
@@ -177,7 +201,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
 
               {/* Sub-items */}
               {!collapsed && hasChildren && expanded && (
-                <div className="ml-4 mb-1">
+                <div style={{ marginLeft: 16, marginBottom: 4 }}>
                   {item.children!.map((child) => {
                     const ChildIcon = child.icon;
                     const childActive = isActive(child.href);
@@ -185,8 +209,15 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                       <Link
                         key={child.href}
                         href={child.href}
-                        className="flex items-center gap-2 px-3 py-1.5 mx-1 rounded text-sm transition-colors"
                         style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-2)",
+                          padding: "6px var(--space-3)",
+                          margin: "0 var(--space-1)",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: 13,
+                          transition: "color 0.15s",
                           backgroundColor: childActive
                             ? "var(--bg-card)"
                             : "transparent",
@@ -197,8 +228,8 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                         }}
                         aria-current={childActive ? "page" : undefined}
                       >
-                        <ChildIcon size={14} className="shrink-0" />
-                        <span className="truncate">{child.label}</span>
+                        <ChildIcon size={14} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.label}</span>
                       </Link>
                     );
                   })}
@@ -212,12 +243,23 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center justify-center h-10 border-t transition-colors shrink-0"
         style={{
-          borderColor: "var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 40,
+          borderTop: "1px solid var(--border)",
+          transition: "color 0.15s",
+          flexShrink: 0,
+          background: "transparent",
+          cursor: "pointer",
+          border: "none",
+          borderTopWidth: 1,
+          borderTopStyle: "solid",
+          borderTopColor: "var(--border)",
           color: "var(--text-secondary)",
         }}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
       >
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>

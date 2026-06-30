@@ -6,6 +6,7 @@ import Link from "next/link";
 import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
 import { useWorkflowStore, type WorkflowState } from "../_components/workflow/store";
 import { Button } from "@/components/ui";
+import { ROUTES, templatesUrl } from "@/app/_components/routes";
 
 function WorkflowEditor() {
   const searchParams = useSearchParams();
@@ -269,7 +270,7 @@ function WorkflowEditor() {
         }}
       >
         <Link
-          href="/"
+          href={ROUTES.HOME}
           style={{
             fontSize: 12,
             color: "var(--text-dim)",
@@ -303,7 +304,7 @@ function WorkflowEditor() {
           </span>
         )}
         <Link
-          href={`/workflow/templates${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`}
+          href={templatesUrl(workspaceId || undefined)}
           style={{ fontSize: 11, color: "var(--text-dim)", textDecoration: "none", fontFamily: "var(--font-mono)" }}
         >
           Templates

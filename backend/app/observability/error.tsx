@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { ErrorBoundary } from "../../_components/error-boundary";
+import { ErrorBoundary } from "../_components/error-boundary";
 
-export default function PipelineError({
+export default function ObservabilityError({
   error,
   reset,
 }: {
@@ -11,12 +11,12 @@ export default function PipelineError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Pipeline Route Error]", error);
+    console.error("[Observability Route Error]", error);
   }, [error]);
 
   return (
-    <ErrorBoundary name="Pipeline" fallback={<RouteErrorCard name="Pipeline" error={error} reset={reset} />}>
-      <RouteErrorCard name="Pipeline" error={error} reset={reset} />
+    <ErrorBoundary name="Observability" fallback={<RouteErrorCard name="Observability" error={error} reset={reset} />}>
+      <RouteErrorCard name="Observability" error={error} reset={reset} />
     </ErrorBoundary>
   );
 }
