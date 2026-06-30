@@ -24,6 +24,8 @@ export const ROUTES = {
   MODELS: "/models",
   /** 技能管理 */
   SKILLS: "/skills",
+  /** 系统设置 */
+  SETTINGS: "/settings",
   /** 登录/注册 */
   LOGIN: "/login",
   /** 测试页（开发用） */

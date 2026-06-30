@@ -57,7 +57,10 @@ const NAV_ITEMS: NavItem[] = [
     label: "配置",
     icon: Settings,
     href: ROUTES.SKILLS,
-    children: [{ label: "技能", href: ROUTES.SKILLS, icon: Settings }],
+    children: [
+      { label: "技能", href: ROUTES.SKILLS, icon: Settings },
+      { label: "设置", href: ROUTES.SETTINGS, icon: Settings },
+    ],
   },
 ];
 

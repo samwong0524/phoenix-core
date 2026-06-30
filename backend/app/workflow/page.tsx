@@ -7,9 +7,123 @@ import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
 import { useWorkflowStore, type WorkflowState } from "../_components/workflow/store";
 import { Button } from "@/components/ui";
 import { ROUTES, templatesUrl } from "@/app/_components/routes";
+import { useI18n } from "@/lib/i18n/context";
+
+/* ── Save-as-Template modal ── */
+
+function SaveAsTemplateModal({
+  workflowName,
+  workflowDescription,
+  onClose,
+  onSaved,
+}: {
+  workflowName: string;
+  workflowDescription: string;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState(workflowName);
+  const [desc, setDesc] = useState(workflowDescription);
+  const [icon, setIcon] = useState("📋");
+  const [category, setCategory] = useState("general");
+  const [saving, setSaving] = useState(false);
+
+  const toDSL = useWorkflowStore((s) => s.toDSL);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      const dsl = toDSL();
+      const res = await fetch("/api/workflow-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name || workflowName, description: desc || workflowDescription, icon, category, dsl }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      onSaved(t("workflow.saved"));
+      onClose();
+    } catch (e) {
+      onSaved(e instanceof Error ? e.message : t("workflow.save_failed"));
+    } finally {
+      setSaving(false);
+    }
+  }, [toDSL, name, desc, icon, category, workflowName, workflowDescription, onClose, onSaved, t]);
+
+  const categories = [
+    { value: "general", label: t("workflow.tpl_cat_general") },
+    { value: "research", label: t("workflow.tpl_cat_research") },
+    { value: "development", label: t("workflow.tpl_cat_development") },
+    { value: "content", label: t("workflow.tpl_cat_content") },
+    { value: "operations", label: t("workflow.tpl_cat_operations") },
+  ];
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10, fontWeight: 700, color: "var(--text-dim)",
+    textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4,
+  };
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)",
+    background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6,
+    outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }} onClick={onClose}>
+      <div
+        style={{
+          background: "var(--bg-panel)", border: "1px solid var(--border)",
+          borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+          {t("workflow.tpl_title")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label style={labelStyle}>{t("workflow.tpl_name")}</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>{t("workflow.tpl_desc")}</label>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>{t("workflow.tpl_icon")}</label>
+              <input value={icon} onChange={(e) => setIcon(e.target.value)} style={{ ...inputStyle, fontSize: 16 }} />
+            </div>
+            <div style={{ flex: 2 }}>
+              <label style={labelStyle}>{t("workflow.tpl_category")}</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+                {categories.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+            {saving ? t("workflow.tpl_saving") : t("workflow.tpl_save")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main editor ── */
 
 function WorkflowEditor() {
   const searchParams = useSearchParams();
+  const { t } = useI18n();
   const workspaceId = searchParams.get("workspaceId") || "";
   const workflowId = searchParams.get("workflowId");
 
@@ -17,15 +131,9 @@ function WorkflowEditor() {
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
-  const [tplName, setTplName] = useState("");
-  const [tplDesc, setTplDesc] = useState("");
-  const [tplIcon, setTplIcon] = useState("📋");
-  const [tplCategory, setTplCategory] = useState("general");
-  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const workflowName = useWorkflowStore((s) => s.workflowName);
   const workflowDescription = useWorkflowStore((s) => s.workflowDescription);
-  const workflowStatus = useWorkflowStore((s) => s.workflowStatus);
   const setWorkflowMeta = useWorkflowStore((s) => s.setWorkflowMeta);
   const setAvailableRoles = useWorkflowStore((s) => s.setAvailableRoles);
   const loadFromDSL = useWorkflowStore((s) => s.loadFromDSL);
@@ -87,7 +195,6 @@ function WorkflowEditor() {
           data: Record<string, unknown>;
         };
 
-        // Skip replayed history events
         if (event.data && typeof event.data === "object" && "at" in event.data) {
           const eventTime = event.data.at as number;
           if (eventTime < connectionTimeRef.current) return;
@@ -114,10 +221,11 @@ function WorkflowEditor() {
           case "pipeline.complete": {
             setRunning(false);
             const overallStatus = d.overallStatus as string;
+            const failedTasks = d.failedTasks as number;
             setMessage(
               overallStatus === "completed"
-                ? "Workflow completed successfully!"
-                : `Workflow finished with errors (${d.failedTasks} failed tasks)`
+                ? t("workflow.completed")
+                : t("workflow.finished_errors", { n: String(failedTasks) })
             );
             break;
           }
@@ -127,14 +235,12 @@ function WorkflowEditor() {
       }
     };
 
-    es.onerror = () => {
-      // EventSource will auto-reconnect
-    };
+    es.onerror = () => {};
 
     return () => {
       es.close();
     };
-  }, [workspaceId, setExecutionStatus]);
+  }, [workspaceId, setExecutionStatus, t]);
 
   // Save workflow
   async function handleSave() {
@@ -143,7 +249,6 @@ function WorkflowEditor() {
     try {
       const dsl = toDSL();
 
-      // Get group ID for this workspace
       const groupsRes = await fetch(
         `/api/groups?workspaceId=${encodeURIComponent(workspaceId)}`
       );
@@ -151,7 +256,6 @@ function WorkflowEditor() {
       const groupId = groupsData.groups?.[0]?.id;
       if (!groupId) throw new Error("No group found for workspace");
 
-      // Get human agent ID as creator
       const agentsRes = await fetch(
         `/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`
       );
@@ -163,7 +267,6 @@ function WorkflowEditor() {
       if (!creatorId) throw new Error("No human agent found");
 
       if (workflowId && useWorkflowStore.getState().workflowId) {
-        // Update existing
         const res = await fetch(
           `/api/workflows/${encodeURIComponent(workflowId)}/dsl`,
           {
@@ -176,10 +279,9 @@ function WorkflowEditor() {
             }),
           }
         );
-        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-        setMessage("Saved!");
+        if (!res.ok) throw new Error(`${res.status}`);
+        setMessage(t("workflow.saved"));
       } else {
-        // Create new
         const res = await fetch("/api/workflows", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -191,13 +293,13 @@ function WorkflowEditor() {
             dsl,
           }),
         });
-        if (!res.ok) throw new Error(`Create failed: ${res.status}`);
+        if (!res.ok) throw new Error(`${res.status}`);
         const data = await res.json();
         setWorkflowMeta({ id: data.workflowId });
-        setMessage("Created!");
+        setMessage(t("workflow.created"));
       }
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Save failed");
+      setMessage(e instanceof Error ? e.message : t("workflow.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -207,7 +309,7 @@ function WorkflowEditor() {
   async function handleRun() {
     const wfId = useWorkflowStore.getState().workflowId;
     if (!wfId) {
-      setMessage("Save the workflow first");
+      setMessage(t("workflow.save_first"));
       return;
     }
     setRunning(true);
@@ -219,39 +321,12 @@ function WorkflowEditor() {
         `/api/workflows/${encodeURIComponent(wfId)}/activate`,
         { method: "POST" }
       );
-      if (!res.ok) throw new Error(`Activate failed: ${res.status}`);
+      if (!res.ok) throw new Error(`${res.status}`);
       setWorkflowMeta({ status: "active" });
-      setMessage("Workflow activated! Watching execution...");
+      setMessage(t("workflow.activated"));
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Run failed");
+      setMessage(e instanceof Error ? e.message : t("workflow.save_failed"));
       setRunning(false);
-    }
-  }
-
-  // Save as template
-  async function handleSaveAsTemplate() {
-    setSavingTemplate(true);
-    setMessage(null);
-    try {
-      const dsl = toDSL();
-      const res = await fetch("/api/workflow-templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: tplName || workflowName,
-          description: tplDesc || workflowDescription,
-          icon: tplIcon,
-          category: tplCategory,
-          dsl,
-        }),
-      });
-      if (!res.ok) throw new Error(`Failed: ${res.status}`);
-      setMessage("Saved as template!");
-      setShowSaveAsTemplate(false);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Save template failed");
-    } finally {
-      setSavingTemplate(false);
     }
   }
 
@@ -277,7 +352,7 @@ function WorkflowEditor() {
             textDecoration: "none",
           }}
         >
-          ← Home
+          {t("common.back_home")}
         </Link>
         <div
           style={{
@@ -287,7 +362,7 @@ function WorkflowEditor() {
             fontFamily: "var(--font-display)",
           }}
         >
-          WORKFLOW EDITOR
+          {t("workflow.editor_title")}
         </div>
         <div style={{ flex: 1 }} />
         {message && (
@@ -295,7 +370,7 @@ function WorkflowEditor() {
             style={{
               fontSize: 11,
               color:
-                message.includes("failed") || message.includes("Save the")
+                message.includes("failed") || message.includes(t("workflow.save_first"))
                   ? "var(--red-text)"
                   : "var(--green)",
             }}
@@ -307,26 +382,22 @@ function WorkflowEditor() {
           href={templatesUrl(workspaceId || undefined)}
           style={{ fontSize: 11, color: "var(--text-dim)", textDecoration: "none", fontFamily: "var(--font-mono)" }}
         >
-          Templates
+          {t("workflow.templates")}
         </Link>
         <Button
           variant="ghost"
-          onClick={() => {
-            setTplName(workflowName);
-            setTplDesc(workflowDescription);
-            setShowSaveAsTemplate(true);
-          }}
+          onClick={() => setShowSaveAsTemplate(true)}
           disabled={!useWorkflowStore.getState().workflowId}
           style={{ fontSize: 11 }}
         >
-          Save as Template
+          {t("workflow.save_as_template")}
         </Button>
         <Button
           variant="primary"
           onClick={() => void handleSave()}
           disabled={saving || running}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("workflow.saving") : t("common.save")}
         </Button>
         <Button
           variant="ghost"
@@ -337,61 +408,18 @@ function WorkflowEditor() {
             animation: "pulse 1.5s ease-in-out infinite",
           } : undefined}
         >
-          {running ? "● Running..." : "Run"}
+          {running ? t("workflow.running") : t("workflow.run")}
         </Button>
       </div>
 
       {/* Save as Template dialog */}
       {showSaveAsTemplate && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999,
-          background: "rgba(0,0,0,0.6)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }} onClick={() => setShowSaveAsTemplate(false)}>
-          <div
-            style={{
-              background: "var(--bg-panel)", border: "1px solid var(--border)",
-              borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
-              Save as Template
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Name</label>
-                <input value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Description</label>
-                <textarea value={tplDesc} onChange={(e) => setTplDesc(e.target.value)} rows={2} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
-              </div>
-              <div style={{ display: "flex", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Icon</label>
-                  <input value={tplIcon} onChange={(e) => setTplIcon(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 16, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }} />
-                </div>
-                <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4 }}>Category</label>
-                  <select value={tplCategory} onChange={(e) => setTplCategory(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6, outline: "none", boxSizing: "border-box" }}>
-                    <option value="general">General</option>
-                    <option value="research">Research</option>
-                    <option value="development">Development</option>
-                    <option value="content">Content</option>
-                    <option value="operations">Operations</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
-              <Button variant="ghost" onClick={() => setShowSaveAsTemplate(false)}>Cancel</Button>
-              <Button variant="primary" onClick={() => void handleSaveAsTemplate()} disabled={savingTemplate}>
-                {savingTemplate ? "Saving..." : "Save Template"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <SaveAsTemplateModal
+          workflowName={workflowName}
+          workflowDescription={workflowDescription}
+          onClose={() => setShowSaveAsTemplate(false)}
+          onSaved={setMessage}
+        />
       )}
 
       {/* Canvas */}
@@ -403,6 +431,7 @@ function WorkflowEditor() {
 }
 
 export default function WorkflowPage() {
+  const { t } = useI18n();
   return (
     <Suspense
       fallback={
@@ -415,7 +444,7 @@ export default function WorkflowPage() {
             color: "var(--text-dim)",
           }}
         >
-          Loading workflow editor...
+          {t("workflow.loading")}
         </div>
       }
     >

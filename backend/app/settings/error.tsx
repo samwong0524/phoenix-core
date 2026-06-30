@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { ErrorBoundary } from "../_components/error-boundary";
 import { RouteErrorCard } from "../_components/route-error-card";
 
-export default function ObservabilityError({
+export default function SettingsError({
   error,
   reset,
 }: {
@@ -12,12 +12,12 @@ export default function ObservabilityError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Observability Route Error]", error);
+    console.error("[Settings Route Error]", error);
   }, [error]);
 
   return (
-    <ErrorBoundary name="Observability" fallback={<RouteErrorCard name="Observability" error={error} reset={reset} />}>
-      <RouteErrorCard name="Observability" error={error} reset={reset} />
+    <ErrorBoundary name="Settings" fallback={<RouteErrorCard name="Settings" error={error} reset={reset} />}>
+      <RouteErrorCard name="Settings" error={error} reset={reset} />
     </ErrorBoundary>
   );
 }
