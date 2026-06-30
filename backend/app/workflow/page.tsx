@@ -5,7 +5,28 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { corporateVariants } from "@/lib/motion";
-import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
+import dynamic from "next/dynamic";
+
+const WorkflowCanvas = dynamic(
+  () => import("../_components/workflow/WorkflowCanvas").then((m) => ({ default: m.default })),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--text-dim)",
+          fontSize: 13,
+        }}
+      >
+        Loading canvas...
+      </div>
+    ),
+  }
+);
 import { useWorkflowStore, type WorkflowState } from "../_components/workflow/store";
 import { Button } from "@/components/ui";
 import { ROUTES, templatesUrl } from "@/app/_components/routes";

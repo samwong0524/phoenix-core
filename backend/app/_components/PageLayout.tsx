@@ -65,12 +65,14 @@ export function PageLayout({
           )}
           <h1 style={titleStyle}>{title}</h1>
         </header>
-        <div style={skeletonContainerStyle}>
-          <div className="skeleton-shimmer" style={skeletonStyle} />
-          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "70%" }} />
-          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "85%" }} />
-          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "60%" }} />
-        </div>
+        <main aria-busy="true" aria-label={t("common.loading") || "Loading"}>
+          <div style={skeletonContainerStyle}>
+            <div className="skeleton-shimmer" style={skeletonStyle} />
+            <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "70%" }} />
+            <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "85%" }} />
+            <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "60%" }} />
+          </div>
+        </main>
       </div>
     );
   }
@@ -86,15 +88,17 @@ export function PageLayout({
           )}
           <h1 style={titleStyle}>{title}</h1>
         </header>
-        <div style={stateContainerStyle}>
-          <div style={errorIconStyle}>!</div>
-          <p style={errorTextStyle}>{error}</p>
-          {onRetry && (
-            <button onClick={onRetry} style={retryBtnStyle}>
-              {t("common.retry")}
-            </button>
-          )}
-        </div>
+        <main>
+          <div role="alert" style={stateContainerStyle}>
+            <div style={errorIconStyle} aria-hidden="true">!</div>
+            <p style={errorTextStyle}>{error}</p>
+            {onRetry && (
+              <button onClick={onRetry} style={retryBtnStyle}>
+                {t("common.retry")}
+              </button>
+            )}
+          </div>
+        </main>
       </div>
     );
   }
@@ -111,10 +115,12 @@ export function PageLayout({
           <h1 style={titleStyle}>{title}</h1>
           {actions && <div style={actionsStyle}>{actions}</div>}
         </header>
-        <div style={stateContainerStyle}>
-          <p style={emptyTextStyle}>{empty}</p>
-          {emptyHint && <p style={emptyHintStyle}>{emptyHint}</p>}
-        </div>
+        <main>
+          <div style={stateContainerStyle}>
+            <p style={emptyTextStyle}>{empty}</p>
+            {emptyHint && <p style={emptyHintStyle}>{emptyHint}</p>}
+          </div>
+        </main>
       </div>
     );
   }

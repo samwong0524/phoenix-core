@@ -90,8 +90,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
 
   return (
     <motion.aside
-      role="navigation"
-      aria-label="Main navigation"
+      aria-label="Sidebar"
       animate={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
       transition={{ duration: 0.25, ease: EASE }}
       style={{
@@ -149,7 +148,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto", overflowX: "hidden" }}>
+      <nav aria-label="Main navigation" style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto", overflowX: "hidden" }}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -162,6 +161,15 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
           return (
             <div key={item.label}>
               <motion.div
+                role={hasChildren ? "button" : undefined}
+                tabIndex={hasChildren ? 0 : undefined}
+                aria-expanded={hasChildren ? expanded : undefined}
+                onKeyDown={hasChildren ? (e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleGroup(item.label);
+                  }
+                } : undefined}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -188,7 +196,6 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                 onClick={() => {
                   if (hasChildren) toggleGroup(item.label);
                 }}
-                {...(hasChildren ? { "aria-expanded": expanded } : {})}
               >
                 <Link
                   href={item.href}

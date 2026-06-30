@@ -12,8 +12,8 @@ import { IMMessageList } from "./IMMessageList";
 import { useTopoNodes } from "./useTopoNodes";
 import { useAgentTreeLayout } from "./useAgentTreeLayout";
 import { useVizLayout } from "./useVizLayout";
-import { MarkdownContent } from "./MarkdownContent";
 import { FileCard } from "./FileCard";
+const MarkdownContent = dynamic(() => import("./MarkdownContent").then(m => ({ default: m.MarkdownContent })), { ssr: false });
 import { QuestionCard } from "./QuestionCard";
 import { statusColor } from "./colors";
 import { useAgentStream } from "./useAgentStream";
@@ -688,27 +688,38 @@ const renderContent = useCallback((content: string, contentType: string, message
         <div key={g.id} className="agent-group">
           <div
             className={cx("agent-group-header", isActive && "active")}
+            role="button"
+            tabIndex={0}
             onClick={() => setActiveGroupId(g.id)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveGroupId(g.id); } }}
           >
             {tree?.hasChildren ? (
               <span
                 className={cx("group-chevron", !isCollapsed && "open")}
+                role="button"
+                tabIndex={0}
+                aria-label={isCollapsed ? "展开" : "收起"}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleAgentCollapsed(tree.agentId);
                   toggleDetailCollapsed(g.id);
                 }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleAgentCollapsed(tree.agentId); toggleDetailCollapsed(g.id); } }}
               >▶</span>
             ) : (
               <span
                 className={cx("group-chevron", !isDetailCollapsed && "open")}
+                role="button"
+                tabIndex={0}
+                aria-label={isDetailCollapsed ? "展开详情" : "收起详情"}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleDetailCollapsed(g.id);
                 }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleDetailCollapsed(g.id); } }}
               >▶</span>
             )}
-            <span className={cx("status-dot", status)} />
+            <span className={cx("status-dot", status)} aria-label={status} />
             <span className="group-name">{getGroupLabel(g)}</span>
             {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
           </div>
@@ -736,8 +747,8 @@ const renderContent = useCallback((content: string, contentType: string, message
     const isDetailCollapsed = detailsCollapsed[g.id] ?? true;
     return (
       <div key={g.id}>
-        <div className={cx("agent-sub", isActive && "active")} onClick={() => setActiveGroupId(g.id)}>
-          <span className={cx("status-dot", status)} />
+        <div className={cx("agent-sub", isActive && "active")} role="button" tabIndex={0} onClick={() => setActiveGroupId(g.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveGroupId(g.id); } }}>
+          <span className={cx("status-dot", status)} aria-label={status} />
           <span className={cx("sub-name", isActive && "highlight")}>{getGroupLabel(g)}</span>
           {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
         </div>
@@ -812,7 +823,7 @@ const renderContent = useCallback((content: string, contentType: string, message
                 </div>
               </div>
             ) : (
-              <div onClick={openDirBrowser} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击选择工作目录">
+              <div onClick={openDirBrowser} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDirBrowser(); } }} role="button" tabIndex={0} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击选择工作目录">
                 <span style={{ fontSize: 11 }}>📁</span>
                 <span>{workingDir || "未设置（点击添加）"}</span>
               </div>
@@ -1281,7 +1292,7 @@ const renderContent = useCallback((content: string, contentType: string, message
           </div>
         </div>
 
-        {error ? <div className="toast">{error}</div> : null}
+        {error ? <div className="toast" role="alert">{error}</div> : null}
 
         {/* Skill suggestion chips (A-05) — non-intrusive hints above the input */}
         {skillSuggestions.length > 0 && (
@@ -1296,6 +1307,9 @@ const renderContent = useCallback((content: string, contentType: string, message
               <div
                 key={sug.id}
                 title={sug.reason}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const prefix = draft ? draft + " " : ""; setDraft(prefix + "@" + sug.skillName + " "); dismissSkillSuggestion(sug.id); } }}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -1327,9 +1341,12 @@ const renderContent = useCallback((content: string, contentType: string, message
                   (e.currentTarget as HTMLDivElement).style.color = "var(--text-secondary, #aaa)";
                 }}
               >
-                <span style={{ opacity: 0.6, fontSize: 10 }}>💡</span>
+                <span style={{ opacity: 0.6, fontSize: 10 }} aria-hidden="true">💡</span>
                 <span style={{ fontWeight: 500 }}>@{sug.skillName}</span>
                 <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`忽略 ${sug.skillName} 建议`}
                   style={{
                     opacity: 0.5,
                     fontSize: 10,
@@ -1340,6 +1357,7 @@ const renderContent = useCallback((content: string, contentType: string, message
                     e.stopPropagation();
                     dismissSkillSuggestion(sug.id);
                   }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); dismissSkillSuggestion(sug.id); } }}
                 >
                   ✕
                 </span>

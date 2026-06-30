@@ -82,6 +82,8 @@ export default function SettingsPage() {
       {/* Toast */}
       {toast && (
         <motion.div
+          role="status"
+          aria-live="polite"
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 16 }}
@@ -103,7 +105,7 @@ export default function SettingsPage() {
             fontFamily: "var(--font-mono)",
           }}
         >
-          <Check size={14} />
+          <Check size={14} aria-hidden="true" />
           {t("settings.saved")}
         </motion.div>
       )}
@@ -120,6 +122,7 @@ export default function SettingsPage() {
             options={locales}
             value={locale}
             onChange={(v) => handleLocaleChange(v as "zh" | "en")}
+            label={t("settings.language")}
           />
         </SettingsSection>
 
@@ -129,6 +132,7 @@ export default function SettingsPage() {
             options={themes}
             value={theme}
             onChange={(v) => handleThemeChange(v as Theme)}
+            label={t("settings.theme")}
           />
         </SettingsSection>
 
@@ -196,8 +200,8 @@ function SettingsSection({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: desc ? 6 : 12 }}>
-        <Icon size={16} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{title}</span>
+        <Icon size={16} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} aria-hidden="true" />
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>{title}</h2>
       </div>
       {desc && (
         <p
@@ -220,13 +224,35 @@ function SegmentedControl({
   options,
   value,
   onChange,
+  label,
 }: {
   options: { value: string; label: string }[];
   value: string;
   onChange: (value: string) => void;
+  label: string;
 }) {
+  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+    let nextIndex = index;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      nextIndex = (index + 1) % options.length;
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      nextIndex = (index - 1 + options.length) % options.length;
+    }
+    if (nextIndex !== index) {
+      onChange(options[nextIndex].value);
+      // Focus the newly selected button
+      const parent = (e.target as HTMLElement).parentElement;
+      const buttons = parent?.querySelectorAll<HTMLElement>('[role="radio"]');
+      buttons?.[nextIndex]?.focus();
+    }
+  };
+
   return (
     <div
+      role="radiogroup"
+      aria-label={label}
       style={{
         display: "inline-flex",
         borderRadius: "var(--radius-sm)",
@@ -234,12 +260,16 @@ function SegmentedControl({
         overflow: "hidden",
       }}
     >
-      {options.map((opt) => {
+      {options.map((opt, index) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(opt.value)}
+            onKeyDown={(e) => handleKeyDown(e, index)}
             style={{
               padding: "6px 16px",
               fontSize: 13,
