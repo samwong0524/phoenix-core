@@ -1,8 +1,8 @@
 {
-  "current_skill": "retro",
+  "current_skill": "qa",
   "workspace_path": "F:\\swarm-ide",
   "original_workspace_path": "F:\\swarm-ide",
-  "completed_skills": ["audit", "check", "motion-plan", "motion-apply", "brief", "journey", "stories", "sitemap", "flow-web", "edge", "prd", "pitch", "metric", "extract", "retro"],
-  "current_phase": "Phase C / 完成（链路终端）",
-  "updated_at": "2026-06-30T23:30:00+08:00"
+  "completed_skills": ["audit", "check", "motion-plan", "motion-apply", "brief", "journey", "stories", "sitemap", "flow-web", "flow-mobile", "edge", "prd", "pitch", "metric", "extract", "retro", "qa"],
+  "current_phase": "Phase 5 Deliver / 补全（17/28）",
+  "updated_at": "2026-06-30T23:55:00+08:00"
 }

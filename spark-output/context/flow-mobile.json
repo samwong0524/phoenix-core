@@ -1,0 +1,352 @@
+{
+  "skill": "flow-mobile",
+  "generated_at": "2026-06-30T23:50:00+08:00",
+  "project_name": "Phoenix-Core",
+  "project_type": "multi-agent swarm IDE",
+  "scenario": "AI Product",
+  "tech_stack": {
+    "framework": "Next.js 16",
+    "react": "19",
+    "styling": "CSS variables + inline styles",
+    "animation": "framer-motion 11",
+    "icons": "lucide-react"
+  },
+  "flows": [
+    {
+      "id": "flow-1",
+      "name": "Global Navigation (app-layout)",
+      "layer": "global",
+      "component": "app-layout.tsx",
+      "description": "Global nav sidebar with hamburger toggle, slide-out drawer, and auto-close on route change",
+      "trigger": "Hamburger button at z-1001, data-slot='global-nav'",
+      "mobile_behavior": {
+        "hidden_at_desktop": true,
+        "drawer_width": "220px",
+        "drawer_animation": {
+          "library": "framer-motion",
+          "type": "slide",
+          "from": "x: -220",
+          "to": "x: 0",
+          "easing": [0.2, 0, 0, 1]
+        },
+        "z_index": {
+          "hamburger": 1001,
+          "drawer": 1002,
+          "backdrop": 1001
+        },
+        "auto_close": "on route change via usePathname()",
+        "breakpoint_hidden": ">=768px (hidden via CSS media query)"
+      },
+      "desktop_behavior": {
+        "visible": true,
+        "layout": "CSS Grid sidebar column",
+        "widths": {
+          ">=1280px": "240px",
+          ">=768px": "180px"
+        }
+      },
+      "interaction_sequence": [
+        "1. User taps hamburger icon (top-left, always visible on mobile)",
+        "2. Drawer slides in from left: x -220 -> 0, ease [0.2,0,0,1]",
+        "3. Backdrop overlay appears at z-1001",
+        "4. User taps nav item -> route change detected",
+        "5. Drawer auto-closes, backdrop fades out"
+      ]
+    },
+    {
+      "id": "flow-2",
+      "name": "IM Mobile Layout (IMShell)",
+      "layer": "page-specific",
+      "component": "IMShell.tsx",
+      "description": "IM-specific 3-panel transformation: sidebar + chat + task monitor, with dual floating controls",
+      "trigger": "Viewport width < 768px activates mobile column layout",
+      "mobile_behavior": {
+        "layout": "full-viewport column (flex-direction: column, 100vw x 100vh)",
+        "panels_visible": ["chat (full-width)"],
+        "panels_hidden": ["sidebar (left)", "task-monitor (right)"],
+        "floating_buttons": [
+          {
+            "name": "hamburger",
+            "position": "top-left",
+            "z_index": 1002,
+            "action": "opens sidebar drawer (280px width)"
+          },
+          {
+            "name": "panel-toggle",
+            "position": "top-right",
+            "z_index": 1002,
+            "action": "opens BottomSheet task monitor"
+          }
+        ],
+        "drawer": {
+          "width": "280px",
+          "animation": {
+            "library": "framer-motion",
+            "type": "slide",
+            "from": "x: -280",
+            "to": "x: 0",
+            "easing": [0.2, 0, 0, 1],
+            "z_index_drawer": 1003,
+            "z_index_backdrop": 1004
+          }
+        }
+      },
+      "desktop_behavior": {
+        "layout": "CSS Grid 3-column",
+        "columns": {
+          ">=1280px": "240px 1fr 300px",
+          ">=768px": "180px 1fr 240px"
+        },
+        "panels_visible": ["sidebar", "chat", "task-monitor"],
+        "floating_buttons": "hidden"
+      },
+      "interaction_sequence": [
+        "1. IM page loads on mobile viewport",
+        "2. Layout renders as single column: chat fills full width",
+        "3. Two floating buttons appear: hamburger (top-left), panel-toggle (top-right)",
+        "4a. Tap hamburger -> sidebar drawer slides in (280px, framer-motion)",
+        "4b. Tap panel-toggle -> BottomSheet rises from bottom (task monitor)",
+        "5. Chat remains accessible; drawer/sheet overlays do not push content"
+      ]
+    },
+    {
+      "id": "flow-3",
+      "name": "Bottom Sheet Task Monitor",
+      "layer": "component",
+      "component": "BottomSheet",
+      "description": "Spring-animated bottom sheet for right-panel content (task monitor) on mobile, with drag-to-dismiss and multiple close mechanisms",
+      "trigger": "Panel-toggle floating button tap on IM mobile layout",
+      "animation": {
+        "type": "spring",
+        "damping": 30,
+        "stiffness": 300,
+        "direction": "bottom-up",
+        "max_height": "70vh"
+      },
+      "dismiss_mechanisms": [
+        {
+          "name": "drag-to-dismiss",
+          "threshold_distance": "80px",
+          "threshold_velocity": "500px/s",
+          "behavior": "sheet slides down and closes"
+        },
+        {
+          "name": "backdrop-click",
+          "behavior": "sheet closes, backdrop fades"
+        },
+        {
+          "name": "escape-key",
+          "behavior": "sheet closes immediately"
+        },
+        {
+          "name": "opacity-fade",
+          "behavior": "sheet content opacity transitions with drag progress"
+        }
+      ],
+      "body_scroll_lock": true,
+      "interaction_sequence": [
+        "1. User taps panel-toggle button (top-right)",
+        "2. Backdrop overlay fades in",
+        "3. Body scroll locks (overflow: hidden)",
+        "4. BottomSheet springs up from bottom: damping 30, stiffness 300",
+        "5. Sheet content visible at maxHeight 70vh",
+        "6. User interacts with task monitor content inside sheet",
+        "7a. Drag down > 80px -> sheet dismisses with spring",
+        "7b. Drag with velocity > 500px/s -> sheet dismisses",
+        "7c. Tap backdrop -> sheet dismisses",
+        "7d. Press Escape -> sheet dismisses",
+        "8. Body scroll unlocks"
+      ]
+    },
+    {
+      "id": "flow-4",
+      "name": "Page-Level Mobile Adaptations",
+      "layer": "page-coverage",
+      "description": "Per-page mobile readiness assessment across all 10 application pages",
+      "pages": [
+        {
+          "route": "/im",
+          "name": "IM Chat",
+          "status": "fully_adapted",
+          "mechanism": "IMShell 3-panel -> single-column with drawer + BottomSheet",
+          "notes": "Primary mobile experience; dual floating controls, full-width chat"
+        },
+        {
+          "route": "/workflow",
+          "name": "Workflow Editor",
+          "status": "not_adapted",
+          "mechanism": "DAG canvas editor (min-width: 780px)",
+          "notes": "P0 priority: planned read-only mobile view; @xyflow requires significant viewport",
+          "gap": "No mobile layout exists; page is unusable below 780px"
+        },
+        {
+          "route": "/pipeline",
+          "name": "Pipeline",
+          "status": "not_adapted",
+          "mechanism": "Not yet addressed",
+          "notes": "No responsive implementation started",
+          "gap": "Unknown mobile viability"
+        },
+        {
+          "route": "/skills",
+          "name": "Skills",
+          "status": "fully_adapted",
+          "mechanism": "Single-column card grid",
+          "notes": "Naturally responsive; card layout reflows to single column on narrow viewports"
+        },
+        {
+          "route": "/models",
+          "name": "Models",
+          "status": "fully_adapted",
+          "mechanism": "Form-based layout",
+          "notes": "Naturally responsive; form fields stack vertically on mobile"
+        },
+        {
+          "route": "/observability",
+          "name": "Observability",
+          "status": "partially_adapted",
+          "mechanism": "Chart-based dashboard",
+          "notes": "Needs chart resizing and layout adaptation for small screens",
+          "gap": "Charts may overflow or become unreadable on mobile"
+        },
+        {
+          "route": "/graph",
+          "name": "Graph",
+          "status": "not_adapted",
+          "mechanism": "@xyflow canvas",
+          "notes": "Needs mobile adaptation for interactive graph canvas",
+          "gap": "Canvas interaction model not designed for touch"
+        },
+        {
+          "route": "/settings",
+          "name": "Settings",
+          "status": "fully_adapted",
+          "mechanism": "Simple form layout",
+          "notes": "Naturally responsive; settings forms stack on mobile"
+        },
+        {
+          "route": "/login",
+          "name": "Login",
+          "status": "fully_adapted",
+          "mechanism": "Simple centered form",
+          "notes": "Naturally responsive; centered login card works at all widths"
+        }
+      ]
+    }
+  ],
+  "responsive_patterns": {
+    "breakpoints": [
+      {
+        "name": "desktop-xl",
+        "min_width": "1280px",
+        "grid": "240px 1fr 300px",
+        "behavior": "Full 3-column layout with generous sidebar and right panel"
+      },
+      {
+        "name": "desktop",
+        "min_width": "768px",
+        "max_width": "1024px",
+        "grid": "180px 1fr 240px",
+        "behavior": "Compact 3-column layout with narrower panels"
+      },
+      {
+        "name": "tablet",
+        "min_width": "769px",
+        "max_width": "1024px",
+        "grid": "180px 1fr 240px",
+        "behavior": "Same as desktop; tablet landscape treated as desktop"
+      },
+      {
+        "name": "mobile",
+        "max_width": "768px",
+        "grid": "1fr",
+        "behavior": "Single column; overflow hidden; panel-left and panel-right hidden; global-nav hidden; IMShell takes over with floating controls"
+      },
+      {
+        "name": "mobile-compact",
+        "max_width": "640px",
+        "behavior": "Compact chat header, messages, and input; font-size reduced to 13px"
+      }
+    ],
+    "sidebar_behavior": "Desktop: persistent grid column. Mobile (< 768px): hidden, accessible via hamburger button triggering framer-motion slide drawer (220px global / 280px IM)",
+    "right_panel_behavior": "Desktop: persistent grid column. Mobile (< 768px): hidden, accessible via panel-toggle button triggering BottomSheet (maxHeight 70vh, spring animation)",
+    "touch_targets": "Floating buttons positioned at top-left (hamburger) and top-right (panel-toggle) with z-index >= 1002 to ensure tap accessibility above all content layers",
+    "animation_specs": {
+      "drawer_slide": {
+        "library": "framer-motion",
+        "property": "x",
+        "easing": [0.2, 0, 0, 1],
+        "description": "Custom cubic-bezier with fast start and gentle deceleration"
+      },
+      "bottom_sheet_spring": {
+        "library": "framer-motion",
+        "type": "spring",
+        "damping": 30,
+        "stiffness": 300,
+        "description": "Tight spring for responsive sheet movement without excessive bounce"
+      },
+      "drag_dismiss": {
+        "distance_threshold": "80px",
+        "velocity_threshold": "500px/s",
+        "description": "Dual-threshold dismiss: either sufficient drag distance or fast flick"
+      }
+    },
+    "z_index_layers": {
+      "global_nav_hamburger": 1001,
+      "global_nav_backdrop": 1001,
+      "global_nav_drawer": 1002,
+      "im_floating_buttons": 1002,
+      "im_sidebar_backdrop": 1004,
+      "im_sidebar_drawer": 1003,
+      "bottom_sheet": "above backdrop, within sheet container",
+      "toast_container": "mounted in root layout, highest layer"
+    },
+    "hooks": [
+      {
+        "name": "useIsMobile",
+        "source": "@/lib/use-media-query",
+        "query": "max-width: 768px",
+        "usage": "Conditional rendering of mobile-specific UI elements"
+      },
+      {
+        "name": "useIsTablet",
+        "source": "@/lib/use-media-query",
+        "query": "max-width: 1024px",
+        "usage": "Tablet-specific layout adjustments"
+      },
+      {
+        "name": "useIsDesktop",
+        "source": "@/lib/use-media-query",
+        "query": "min-width: 1025px",
+        "usage": "Desktop-only feature gating"
+      }
+    ],
+    "toast_system": {
+      "api": "toast.success() / toast.error() / toast.warning() / toast.info()",
+      "pattern": "Unified pub-sub",
+      "container": "ToastContainer mounted in root layout",
+      "mobile_behavior": "Toast overlays work identically on mobile and desktop"
+    }
+  },
+  "mobile_page_coverage": {
+    "fully_adapted": [
+      { "route": "/im", "name": "IM Chat", "mechanism": "IMShell drawer + BottomSheet" },
+      { "route": "/skills", "name": "Skills", "mechanism": "Natural card grid reflow" },
+      { "route": "/models", "name": "Models", "mechanism": "Natural form stacking" },
+      { "route": "/settings", "name": "Settings", "mechanism": "Natural form stacking" },
+      { "route": "/login", "name": "Login", "mechanism": "Natural centered form" }
+    ],
+    "partially_adapted": [
+      { "route": "/observability", "name": "Observability", "gap": "Chart dashboard needs resize/layout adaptation" }
+    ],
+    "not_adapted": [
+      { "route": "/workflow", "name": "Workflow Editor", "gap": "DAG canvas requires min 780px; P0 read-only mode planned" },
+      { "route": "/pipeline", "name": "Pipeline", "gap": "No responsive work started" },
+      { "route": "/graph", "name": "Graph", "gap": "@xyflow canvas needs touch interaction model" }
+    ]
+  },
+  "output_files": [
+    "F:\\swarm-ide\\spark-output\\flow-mobile\\phoenix-core-mobile-flow.md",
+    "F:\\swarm-ide\\spark-output\\context\\flow-mobile.json"
+  ]
+}

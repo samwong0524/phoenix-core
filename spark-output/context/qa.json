@@ -1,0 +1,346 @@
+{
+  "skill": "qa",
+  "generated_at": "2026-06-30T23:55:00+08:00",
+  "project_name": "Phoenix-Core",
+  "target": "Frontend app/ + src/components/ + src/lib/",
+  "review_mode": "C (checklist-based)",
+  "deviations": [
+    {
+      "id": "QA-R01",
+      "dimension": "responsive",
+      "severity": "major",
+      "design_source": "flow-web.json > responsive_patterns > sidebar_behavior; brief.json > strategy: CSS Grid minmax + breakpoint strategy",
+      "implementation": "app/pipeline/page.tsx uses fixed 3-column layout: width 300px + flex:1 + width 420px. No media queries, no useIsMobile hook.",
+      "delta": "Pipeline page overflows on screens <1020px. Design requires responsive breakpoints at 768/1024px with vertical stacking on mobile.",
+      "suggestion": "Add useIsMobile() hook to pipeline page. On mobile: single-column layout with collapsible panels. On tablet: 2-column (list + detail). Reference IMShell.tsx pattern.",
+      "location": "app/pipeline/page.tsx (lines 310-447)",
+      "relates_to_check_finding": "F-027"
+    },
+    {
+      "id": "QA-R02",
+      "dimension": "responsive",
+      "severity": "major",
+      "design_source": "flow-web.json > responsive_patterns > breakpoints; brief.json > mobile available rate > 80%",
+      "implementation": "app/graph/page.tsx uses fixed flex layout with no responsive breakpoints. Stats cards use inline grid with no wrapping.",
+      "delta": "Graph page not usable on mobile/tablet. Design requires adaptation at 768px and 1024px breakpoints.",
+      "suggestion": "Add media query or useIsMobile() for graph page. On mobile: stack stats cards vertically, simplify topology view to list mode.",
+      "location": "app/graph/page.tsx",
+      "relates_to_check_finding": "F-025"
+    },
+    {
+      "id": "QA-R03",
+      "dimension": "responsive",
+      "severity": "major",
+      "design_source": "stories.json > story-3: Workflow mobile read-only with bottom sheet; edge.json > Workflow Canvas (Mobile Read-only)",
+      "implementation": "app/workflow/page.tsx has no responsive handling. WorkflowCanvas minimum width ~780px. No mobile read-only mode.",
+      "delta": "Story-3 acceptance criteria not met: no read-only overview, no bottom sheet for node config, no pinch zoom. Implementation not started.",
+      "suggestion": "Phase 1 (P0): Add mobile read-only mode with thumbnail view. Phase 2: BottomSheet for node properties. Use existing BottomSheet component from src/components/ui.",
+      "location": "app/workflow/page.tsx, app/_components/workflow/WorkflowCanvas.tsx",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-R04",
+      "dimension": "responsive",
+      "severity": "major",
+      "design_source": "flow-web.json > IMShell floating buttons; brief.json > touch targets >= 44px; stories.json > story-1 AC3, story-2 AC4",
+      "implementation": "IMShell.tsx floating nav buttons are 36x36px (width: 36, height: 36). App-layout hamburger button also 36x36px.",
+      "delta": "Touch targets are 36px, design requires minimum 44px on tablet and 48px on mobile. Violates brief.json quantitative criteria and story-1/story-2 acceptance criteria.",
+      "suggestion": "Increase floating button size to 44px minimum (48px preferred for mobile). Update floatBtn() factory in IMShell.tsx and app-layout.tsx hamburger button.",
+      "location": "app/im/IMShell.tsx (lines 18-30), app/_components/app-layout.tsx (lines 43-58)",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-R05",
+      "dimension": "responsive",
+      "severity": "minor",
+      "design_source": "flow-web.json > responsive_patterns > right_panel_behavior: bottom sheet (60vh); stories.json > story-3 AC2: bottom sheet max 60% height",
+      "implementation": "IMShell.tsx BottomSheet maxHeight='70vh'.",
+      "delta": "BottomSheet is 70vh but design specifies 60vh. 10vh overshoot reduces visible chat area on mobile.",
+      "suggestion": "Change maxHeight from '70vh' to '60vh' in IMShell.tsx BottomSheet props.",
+      "location": "app/im/IMShell.tsx (line 132)",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-R06",
+      "dimension": "responsive",
+      "severity": "minor",
+      "design_source": "flow-web.json > responsive_patterns > sidebar_behavior: Desktop 220px | Tablet 280px drawer | Mobile 85vw drawer",
+      "implementation": "App-layout drawer uses GlobalSidebar component (fixed width from sidebar CSS). IMShell drawer uses 280px fixed. No 85vw mobile variant.",
+      "delta": "Two separate drawer implementations with different widths. Mobile drawer not using 85vw as specified in flow-web.json.",
+      "suggestion": "Unify drawer width strategy. Consider 85vw max-width: 280px for mobile drawer in IMShell.",
+      "location": "app/im/IMShell.tsx (line 15), app/_components/app-layout.tsx",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-C01",
+      "dimension": "color",
+      "severity": "major",
+      "design_source": "extract.json > tokens.color: 82 CSS variable tokens; check.json F-003: unify style systems",
+      "implementation": "app/page.tsx (Home) still uses extensive inline CSSProperties. Pipeline page uses 100% inline styles. Skills page uses inline styles. Only IM and Models pages primarily use CSS variables through globals.css classes.",
+      "delta": "3 of 4 style systems identified in F-003 still coexist: (1) globals.css classes, (2) inline style + CSS vars, (3) Tailwind utilities (observability). Full unification not achieved.",
+      "suggestion": "Migrate page.tsx inline styles to PageLayout/Card/NavCard CSS classes. Migrate pipeline inline styles to dedicated CSS classes or use shared UI components.",
+      "location": "app/page.tsx, app/pipeline/page.tsx, app/observability/page.tsx (Tailwind)",
+      "relates_to_check_finding": "F-003, F-016, F-017"
+    },
+    {
+      "id": "QA-C02",
+      "dimension": "color",
+      "severity": "minor",
+      "design_source": "extract.json > tokens.color.key_tokens: --bg-void: #050a14",
+      "implementation": "globals.css :root --bg-void changed to #0f172a (from original #050a14 in extract.json). --bg-panel changed from #0a1020 to rgba(30,41,59,0.92).",
+      "delta": "Color token values were intentionally redesigned (slate-based instead of blue-tinted) during Phase 4. The extract.json baseline is outdated. No functional issue, but documentation drift.",
+      "suggestion": "Update extract.json to reflect current color values. Or regenerate extract after QA cycle.",
+      "location": "app/globals.css (lines 9-14)",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-T01",
+      "dimension": "typography",
+      "severity": "major",
+      "design_source": "check.json F-006: heading hierarchy; WCAG 1.3.1 Info and Relationships",
+      "implementation": "Most pages use <h1> from PageLayout but section headings use <div> or styled <span>. Observability page uses h1 then jumps to h3 (skipping h2). Settings page uses <h2> for sections (correct).",
+      "delta": "Heading hierarchy still flat in most pages. Observability has h1->h3 skip. Design requires semantic h1>h2>h3 nesting.",
+      "suggestion": "Replace <div> section titles with <h2> in page.tsx, pipeline/page.tsx. Fix observability h3 to h2. Ensure all subsection headings use <h3> under parent <h2>.",
+      "location": "app/page.tsx, app/pipeline/page.tsx, app/observability/page.tsx (lines 282-313)",
+      "relates_to_check_finding": "F-006"
+    },
+    {
+      "id": "QA-T02",
+      "dimension": "typography",
+      "severity": "minor",
+      "design_source": "extract.json > tokens.typography.base_size: 13px, scale starts at 10px; check.json F-007: min 11px",
+      "implementation": "globals.css defines font scale. Pipeline page uses 11px for timestamps. CSS classes like .stat-label may still use small sizes.",
+      "delta": "Most small font instances now >= 11px. Some 10px instances may remain in status labels. Minor as the 10px floor was in extract.json design tokens.",
+      "suggestion": "Audit remaining < 11px font sizes. Ensure no text critical for comprehension is below 11px.",
+      "location": "app/globals.css, app/pipeline/page.tsx (line 390: 11px)",
+      "relates_to_check_finding": "F-007"
+    },
+    {
+      "id": "QA-S01",
+      "dimension": "spacing",
+      "severity": "minor",
+      "design_source": "extract.json > tokens.spacing: 4px anchor, 7 tokens (--space-1 through --space-7); check.json F-048: spacing system",
+      "implementation": "CSS variables --space-1 through --space-7 defined in globals.css. Many components use hardcoded pixel values instead of spacing tokens (e.g., IMShell padding: '8px 8px 0', pipeline gap: '16px').",
+      "delta": "Spacing tokens defined but adoption is inconsistent. Inline styles use raw px values instead of var(--space-N).",
+      "suggestion": "Replace hardcoded spacing in inline styles with var(--space-N) tokens. Consider creating shared style objects.",
+      "location": "app/im/IMShell.tsx, app/pipeline/page.tsx, app/_components/app-layout.tsx",
+      "relates_to_check_finding": "F-048"
+    },
+    {
+      "id": "QA-RS01",
+      "dimension": "radius-shadow",
+      "severity": "minor",
+      "design_source": "extract.json > tokens.radius: --radius-sm: 6px, --radius-md: 10px, --radius-lg: 16px; check.json F-015",
+      "implementation": "Radius tokens defined in globals.css (--radius-sm: 6px, --radius-md: 10px, --radius-lg: 14px, --radius-full: 999px). CSS classes .btn, .card use these tokens. Inline styles sometimes use var(--radius-sm) correctly (IMShell floatBtn).",
+      "delta": "Radius token values mostly match extract.json except --radius-lg is 14px vs 16px in design. Minor discrepancy. Inline styles using tokens is good.",
+      "suggestion": "Align --radius-lg to 16px per extract.json, or update extract.json to document the 14px decision.",
+      "location": "app/globals.css (line 99: --radius-lg: 14px)",
+      "relates_to_check_finding": "F-015"
+    },
+    {
+      "id": "QA-I01",
+      "dimension": "assets",
+      "severity": "pass",
+      "design_source": "extract.json > icon_set: lucide-react v0.469.0, outlined style, 16px default",
+      "implementation": "All icon imports verified from lucide-react: Menu, PanelRight, X, AlertTriangle, ShieldOff, MessageSquare, etc. No mixed icon libraries detected.",
+      "delta": null,
+      "suggestion": null,
+      "location": "Cross-page verified",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-IS01",
+      "dimension": "interaction-states",
+      "severity": "major",
+      "design_source": "stories.json > story-6 AC3: retry button for retryable errors; edge.json > error states with retry",
+      "implementation": "Toast component (src/components/ui/toast.tsx) supports 4 types (success/error/warning/info) with close button and auto-dismiss. But no retry button prop. Toast API has no action/retry parameter.",
+      "delta": "Story-6 acceptance criterion 'retryable errors show retry button' not implemented. Toast only has dismiss (x) button.",
+      "suggestion": "Add optional `action` prop to Toast: { label: string; onClick: () => void }. Render as button alongside close. Update toast.error() to accept action config.",
+      "location": "src/components/ui/toast.tsx (lines 14-58)",
+      "relates_to_check_finding": "F-035"
+    },
+    {
+      "id": "QA-IS02",
+      "dimension": "interaction-states",
+      "severity": "major",
+      "design_source": "stories.json > story-6 AC2: auto-dismiss 5 seconds; check.json F-035",
+      "implementation": "Toast default duration is 4000ms (4 seconds). Design specifies 5000ms (5 seconds).",
+      "delta": "Auto-dismiss is 1 second shorter than design specification.",
+      "suggestion": "Change default duration from 4000 to 5000 in showToast() function signature.",
+      "location": "src/components/ui/toast.tsx (line 69: duration = 4000)",
+      "relates_to_check_finding": "F-035"
+    },
+    {
+      "id": "QA-IS03",
+      "dimension": "interaction-states",
+      "severity": "major",
+      "design_source": "check.json F-014: replace alert() with toast; stories.json > story-6 AC4: no alert()/console.error",
+      "implementation": "alert() still used in: skills-list.tsx (lines 102,104,132,139), remote-skill-search.tsx (lines 63,69), workspaces-list.tsx (lines 31,36), useImActions.ts (lines 373,397). Total: 10 remaining alert() calls.",
+      "delta": "10 alert() calls remain across 4 files. Story-6 AC4 requires zero alert()/console.error patterns. These were supposed to be replaced by unified toast.",
+      "suggestion": "Replace all remaining alert() calls with toast.error() or toast.warning(). Import toast from @/components/ui in each file.",
+      "location": "app/_components/skills-list.tsx, app/_components/remote-skill-search.tsx, app/_components/workspaces-list.tsx, app/im/useImActions.ts",
+      "relates_to_check_finding": "F-014"
+    },
+    {
+      "id": "QA-IS04",
+      "dimension": "interaction-states",
+      "severity": "minor",
+      "design_source": "check.json F-053: replace window.prompt with custom modal",
+      "implementation": "useImActions.ts line 216 still uses window.prompt() for sub-agent role input.",
+      "delta": "window.prompt() is a browser-blocking native dialog. Design requires custom modal for consistency and accessibility.",
+      "suggestion": "Replace window.prompt with a custom input modal/dialog using existing ConfirmDialog pattern or new InputDialog component.",
+      "location": "app/im/useImActions.ts (line 216)",
+      "relates_to_check_finding": "F-053"
+    },
+    {
+      "id": "QA-SC01",
+      "dimension": "state-coverage",
+      "severity": "major",
+      "design_source": "check.json F-008: empty message list; edge.json > IM Page > empty-collection state",
+      "implementation": "IMMessageList.tsx uses Virtuoso for virtual scrolling. When messages array is empty, Virtuoso renders nothing - no empty state UI.",
+      "delta": "Empty chat shows blank area with no guidance. Edge.json specifies: '还没有任何群组对话' + CTA button.",
+      "suggestion": "Add empty state check before Virtuoso: if messages.length === 0, render EmptyState component with message icon + '发送第一条消息开始对话' + guidance.",
+      "location": "app/im/IMMessageList.tsx",
+      "relates_to_check_finding": "F-008"
+    },
+    {
+      "id": "QA-SC02",
+      "dimension": "state-coverage",
+      "severity": "major",
+      "design_source": "edge.json > critical_missing: offline-no-network (blocker), offline-poor-connection (high)",
+      "implementation": "No offline detection UI found. No navigator.onLine check, no offline banner, no bottom bar for offline state.",
+      "delta": "Edge.json marks offline-no-network as blocker severity. No implementation of any offline/poor-connection state across any page.",
+      "suggestion": "Add useOnline() hook wrapping navigator.onLine + online/offline events. Show fixed bottom banner when offline. Disable send input when offline.",
+      "location": "app/im/page.tsx (new hook needed)",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-SC03",
+      "dimension": "state-coverage",
+      "severity": "minor",
+      "design_source": "edge.json > Global > error-not-found (404 page); edge.json > Global > error-server (Error Boundary)",
+      "implementation": "app/global-error.tsx exists with error page UI. Individual route error.tsx files exist for 8 routes. However, no custom 404 not-found.tsx page found.",
+      "delta": "Error boundaries are implemented (positive finding). Missing: custom 404 page for unknown routes (Next.js not-found.tsx).",
+      "suggestion": "Create app/not-found.tsx with design-specified 404 UI: FileQuestion icon + '页面不存在' + '返回工作台' button.",
+      "location": "app/ (missing not-found.tsx)",
+      "relates_to_check_finding": null
+    },
+    {
+      "id": "QA-A01",
+      "dimension": "accessibility",
+      "severity": "pass",
+      "design_source": "check.json F-005: focus-visible; WCAG 2.4.7",
+      "implementation": "globals.css lines 2265-2306: comprehensive focus-visible styles for all interactive elements (*, inputs, buttons, links, selects). Uses var(--cyan) 2px outline with offset. Also includes .sr-only utility class.",
+      "delta": null,
+      "suggestion": null,
+      "location": "app/globals.css (lines 2265-2319)",
+      "relates_to_check_finding": "F-005 (RESOLVED)"
+    },
+    {
+      "id": "QA-A02",
+      "dimension": "accessibility",
+      "severity": "major",
+      "design_source": "check.json F-021: ARIA landmarks; WCAG 1.3.1",
+      "implementation": "Partial landmarks: <main> in app-layout.tsx, <nav> in global-sidebar.tsx + skills/page.tsx, <aside> in AgentSidebar.tsx, <header> in PageLayout.tsx. But: IMShell mobile layout uses only <div>. IM page right section uses <div> not <aside>. Many page-level containers are <div>.",
+      "delta": "Landmarks partially adopted. IMShell (the core page) has zero semantic landmarks in mobile mode. Right panel never uses <aside>.",
+      "suggestion": "Add <aside> to IMShell right panel (both mobile BottomSheet wrapper and desktop right section). Add role='complementary' to BottomSheet. Use <nav> for IMShell sidebar drawer.",
+      "location": "app/im/IMShell.tsx, app/im/page.tsx",
+      "relates_to_check_finding": "F-021"
+    },
+    {
+      "id": "QA-A03",
+      "dimension": "accessibility",
+      "severity": "major",
+      "design_source": "check.json F-022: Agent tree keyboard accessibility; WCAG 2.1.1",
+      "implementation": "AgentSidebar.tsx uses div + onClick for agent tree items. No role='treeitem', no tabIndex, no onKeyDown handler for Enter/Space activation.",
+      "delta": "Agent tree items are not keyboard-focusable or navigable. Screen reader users cannot interact with agent list.",
+      "suggestion": "Add role='tree' to container, role='treeitem' to each item, tabIndex={0}, onKeyDown for Enter/Space. Or use <button> elements for each agent item.",
+      "location": "app/im/AgentSidebar.tsx",
+      "relates_to_check_finding": "F-022"
+    },
+    {
+      "id": "QA-A04",
+      "dimension": "accessibility",
+      "severity": "minor",
+      "design_source": "check.json F-020: text-dim contrast ratio; WCAG 1.4.3",
+      "implementation": "globals.css --text-dim: rgba(148,163,184,0.65) on --bg-void: #0f172a. Approximate contrast ratio: ~4.2:1 (improved from original 2.8:1 but still below 4.5:1 AA threshold).",
+      "delta": "Contrast improved significantly but still 0.3:1 short of WCAG AA 4.5:1 for normal text.",
+      "suggestion": "Increase --text-dim opacity from 0.65 to 0.72 or lighten the base color to reach 4.5:1 ratio.",
+      "location": "app/globals.css (line 53)",
+      "relates_to_check_finding": "F-020"
+    },
+    {
+      "id": "QA-A05",
+      "dimension": "accessibility",
+      "severity": "minor",
+      "design_source": "check.json F-037: reduced motion for Viz; WCAG 2.3.3",
+      "implementation": "globals.css has @media (prefers-reduced-motion: reduce) at line 2774. src/lib/motion.ts has getReducedVariant() helper. IMMessageList uses reduced motion fallback. But TopoAnimCanvas.tsx (Canvas 2D) may not check reduced motion preference.",
+      "delta": "CSS animations and framer-motion variants properly handle reduced motion. Canvas-based topo animation may not.",
+      "suggestion": "Add prefers-reduced-motion check in TopoAnimCanvas.tsx. When matched, disable spatial movement and only use opacity transitions.",
+      "location": "app/im/TopoAnimCanvas.tsx",
+      "relates_to_check_finding": "F-037"
+    }
+  ],
+  "resolved_check_findings": [
+    {
+      "id": "F-001",
+      "description": "No media queries",
+      "resolution": "Added breakpoints at 1280px, 1024px, 768px, 640px in globals.css. IMShell fully responsive with drawer + BottomSheet pattern. App-layout has mobile drawer with auto-close on navigation."
+    },
+    {
+      "id": "F-002",
+      "description": "Body overflow hidden",
+      "resolution": "Overflow handling moved to .app container and individual panel elements. Each panel manages its own overflow-y: auto."
+    },
+    {
+      "id": "F-005",
+      "description": "No focus-visible styles",
+      "resolution": "Comprehensive focus-visible system added: global *:focus-visible ring, specific styles for inputs, buttons, links, selects. Also added .sr-only utility class for screen-reader-only content."
+    },
+    {
+      "id": "F-011",
+      "description": "Stop All Agents no confirmation",
+      "resolution": "ConfirmProvider and useConfirm hook created (confirm-dialog.tsx). Confirm dialog wraps destructive operations with custom UI modal. Fallback to window.confirm if provider not mounted."
+    },
+    {
+      "id": "F-012",
+      "description": "Skills delete no confirmation",
+      "resolution": "skills-list.tsx now uses useConfirm() before delete operations. Consistent with workspaces-list.tsx pattern."
+    },
+    {
+      "id": "F-018",
+      "description": "Pipeline system-ui font",
+      "resolution": "Pipeline page now uses fontFamily: 'var(--font-body)' for body and 'var(--font-display)' for headings. System-ui removed."
+    },
+    {
+      "id": "F-032",
+      "description": "AgentStatusCard hardcoded hex colors",
+      "resolution": "AgentStatusCard.tsx no longer contains hardcoded hex values (#1a1a1a, #333, #888, etc.). All colors now use CSS variables."
+    },
+    {
+      "id": "F-035",
+      "description": "Toast no close/auto-dismiss/stacking",
+      "resolution": "Unified toast system (src/components/ui/toast.tsx) with: close button (x), auto-dismiss timer (4000ms default), stacking support via flex column. Consumed by 4+ pages via toast API."
+    },
+    {
+      "id": "F-036",
+      "description": "Status-dot color-only indication",
+      "resolution": "AgentSidebar.tsx adds aria-label={status} to status-dot elements, providing screen reader text for status state."
+    }
+  ],
+  "summary": {
+    "total": 25,
+    "blocker": 0,
+    "major": 15,
+    "minor": 10,
+    "pass_dimensions": ["assets"],
+    "check_findings_total": 56,
+    "check_findings_resolved": 9,
+    "check_findings_partially_resolved": 5,
+    "check_findings_unresolved": 42,
+    "stories_implemented": 3,
+    "stories_not_implemented": 3,
+    "fidelity_score": 0.58,
+    "fidelity_grade": "C+"
+  }
+}
