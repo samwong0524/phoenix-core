@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { ROUTES, chatUrl } from './routes';
+import { useI18n } from '@/lib/i18n/context';
 
 // ── Types ──
 interface QuickPickItem {
@@ -31,6 +32,7 @@ function getSession(): { workspaceId: string; humanAgentId: string } | null {
 
 // ── Component ──
 export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dynamicItems, setDynamicItems] = useState<QuickPickItem[]>([]);
@@ -42,15 +44,15 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
 
   // Static navigation + action commands
   const staticItems: QuickPickItem[] = useMemo(() => [
-    { id: 'nav-im', label: 'Agent 对话', description: '进入 IM 聊天界面', icon: '💬', category: '导航', action: () => { window.location.href = ROUTES.CHAT; } },
-    { id: 'nav-graph', label: '通信拓扑图', description: '查看 Agent 通信关系', icon: '🔗', category: '导航', action: () => { window.location.href = ROUTES.GRAPH; } },
-    { id: 'nav-skills', label: '技能市场', description: '浏览和管理技能', icon: '⚡', category: '导航', action: () => { window.location.href = ROUTES.SKILLS; } },
-    { id: 'nav-models', label: '模型配置', description: '配置 LLM 模型和 API Key', icon: '🤖', category: '导航', action: () => { window.location.href = ROUTES.MODELS; } },
-    { id: 'nav-pipeline', label: '流水线监控', description: '查看工作流执行进度', icon: '🔄', category: '导航', action: () => { window.location.href = ROUTES.PIPELINE; } },
-    { id: 'nav-observability', label: '可观测性面板', description: '系统指标和成本监控', icon: '📊', category: '导航', action: () => { window.location.href = ROUTES.MONITOR; } },
-    { id: 'nav-home', label: '返回首页', description: '工作区列表和总览', icon: '🏠', category: '导航', action: () => { window.location.href = ROUTES.HOME; } },
-    { id: 'action-create', label: '创建 Agent', description: '输入角色名创建新 Agent', icon: '➕', category: '操作', action: () => { setCreateMode(true); } },
-  ], []);
+    { id: 'nav-im', label: t('quickpick.nav_im'), description: t('quickpick.nav_im_desc'), icon: '💬', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.CHAT; } },
+    { id: 'nav-graph', label: t('quickpick.nav_graph'), description: t('quickpick.nav_graph_desc'), icon: '🔗', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.GRAPH; } },
+    { id: 'nav-skills', label: t('quickpick.nav_skills'), description: t('quickpick.nav_skills_desc'), icon: '⚡', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.SKILLS; } },
+    { id: 'nav-models', label: t('quickpick.nav_models'), description: t('quickpick.nav_models_desc'), icon: '🤖', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.MODELS; } },
+    { id: 'nav-pipeline', label: t('quickpick.nav_pipeline'), description: t('quickpick.nav_pipeline_desc'), icon: '🔄', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.PIPELINE; } },
+    { id: 'nav-observability', label: t('quickpick.nav_observability'), description: t('quickpick.nav_observability_desc'), icon: '📊', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.MONITOR; } },
+    { id: 'nav-home', label: t('quickpick.nav_home'), description: t('quickpick.nav_home_desc'), icon: '🏠', category: t('quickpick.cat_nav'), action: () => { window.location.href = ROUTES.HOME; } },
+    { id: 'action-create', label: t('quickpick.action_create'), description: t('quickpick.action_create_desc'), icon: '➕', category: t('quickpick.cat_actions'), action: () => { setCreateMode(true); } },
+  ], [t]);
 
   // Fetch dynamic data when opened
   useEffect(() => {
@@ -81,46 +83,52 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
 
         // Groups
         if (groupsRes.status === 'fulfilled') {
-          const groups = (groupsRes.value as any)?.groups ?? [];
+          const groupsData = groupsRes.value as Record<string, unknown>;
+          const groups = (Array.isArray(groupsData?.groups) ? groupsData.groups : []) as Record<string, unknown>[];
           for (const g of groups) {
+            const gId = String(g.id ?? '');
             items.push({
-              id: `group-${g.id}`,
-              label: g.name || `群 ${g.id.slice(0, 8)}`,
-              description: `${g.memberCount ?? '?'} 成员`,
+              id: `group-${gId}`,
+              label: String(g.name ?? '') || `Group ${gId.slice(0, 8)}`,
+              description: t('quickpick.member_count', { count: g.memberCount ?? '?' }),
               icon: '👥',
-              category: '群组',
-              action: () => { window.location.href = chatUrl({ group: g.id }); },
+              category: t('quickpick.cat_groups'),
+              action: () => { window.location.href = chatUrl({ group: gId }); },
             });
           }
         }
 
         // Agents
         if (agentsRes.status === 'fulfilled') {
-          const agents = (agentsRes.value as any)?.agents ?? [];
+          const agentsData = agentsRes.value as Record<string, unknown>;
+          const agents = (Array.isArray(agentsData?.agents) ? agentsData.agents : []) as Record<string, unknown>[];
           for (const a of agents) {
             if (a.role === 'human') continue;
+            const aId = String(a.id ?? '');
             items.push({
-              id: `agent-${a.id}`,
-              label: a.role || `Agent ${a.id.slice(0, 8)}`,
-              description: a.status ? `状态: ${a.status}` : undefined,
+              id: `agent-${aId}`,
+              label: String(a.role ?? '') || `Agent ${aId.slice(0, 8)}`,
+              description: a.status ? t('quickpick.status_label', { status: String(a.status) }) : undefined,
               icon: '🤖',
-              category: 'Agent',
-              action: () => { window.location.href = chatUrl({ agent: a.id }); },
+              category: t('quickpick.cat_agents'),
+              action: () => { window.location.href = chatUrl({ agent: aId }); },
             });
           }
         }
 
         // Skills
         if (skillsRes.status === 'fulfilled') {
-          const skills = (skillsRes.value as any)?.skills ?? (skillsRes.value as any) ?? [];
-          for (const s of skills) {
+          const skillsData = skillsRes.value as Record<string, unknown>;
+          const skillsArr = (Array.isArray(skillsData?.skills) ? skillsData.skills : Array.isArray(skillsData) ? skillsData : []) as Record<string, unknown>[];
+          for (const s of skillsArr) {
+            const sName = String(s.name ?? '');
             items.push({
-              id: `skill-${s.name}`,
-              label: s.name,
-              description: s.description,
+              id: `skill-${sName}`,
+              label: sName,
+              description: s.description ? String(s.description) : undefined,
               icon: '⚡',
-              category: '技能',
-              action: () => { window.location.href = `${ROUTES.SKILLS}?highlight=${s.name}`; },
+              category: t('quickpick.cat_skills'),
+              action: () => { window.location.href = `${ROUTES.SKILLS}?highlight=${sName}`; },
             });
           }
         }
@@ -131,7 +139,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
       setLoading(false);
     };
     void fetchAll();
-  }, [isOpen]);
+  }, [isOpen, t]);
 
   // All items combined
   const allItems = useMemo(() => [...staticItems, ...dynamicItems], [staticItems, dynamicItems]);
@@ -227,7 +235,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
             ref={inputRef}
             type="text"
             className="qp-input"
-            placeholder="输入命令、搜索群组 / Agent / 技能…"
+            placeholder={t('quickpick.placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={createMode}
@@ -238,7 +246,7 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
         {/* Create agent sub-flow */}
         {createMode ? (
           <div className="qp-create-area">
-            <div className="qp-create-label">输入 Agent 角色名：</div>
+            <div className="qp-create-label">{t('quickpick.create_label')}</div>
             <input
               ref={createInputRef}
               type="text"
@@ -248,14 +256,14 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
               onChange={(e) => setCreateRole(e.target.value)}
               autoFocus
             />
-            <div className="qp-create-hint">Enter 创建 · Esc 返回</div>
+            <div className="qp-create-hint">{t('quickpick.create_hint')}</div>
           </div>
         ) : (
           <>
             {/* Results */}
             <div className="qp-results">
               {filteredItems.length === 0 ? (
-                <div className="qp-empty">未找到匹配的命令</div>
+                <div className="qp-empty">{t('quickpick.empty')}</div>
               ) : (
                 Array.from(grouped.entries()).map(([category, items]) => (
                   <div key={category} className="qp-category">
@@ -287,9 +295,9 @@ export default function QuickPick({ isOpen, onClose }: QuickPickProps) {
 
             {/* Footer */}
             <div className="qp-footer">
-              <span>↑↓ 选择</span>
-              <span>↵ 执行</span>
-              <span>Esc 关闭</span>
+              <span>{t('quickpick.footer_up')}</span>
+              <span>{t('quickpick.footer_enter')}</span>
+              <span>{t('quickpick.footer_esc')}</span>
             </div>
           </>
         )}

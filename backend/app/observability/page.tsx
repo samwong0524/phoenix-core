@@ -8,6 +8,7 @@ import { ROUTES } from "@/app/_components/routes";
 
 // ─── Types ────────────────────────────────────────────
 interface HourlyMetric {
+  [key: string]: string | number | null | undefined;
   hour: string;
   request_count: number;
   success_count: number;
@@ -78,7 +79,7 @@ function StatCard({ label, value, unit, trend, status }: {
 
 // ─── Simple Bar Chart ─────────────────────────────────
 function BarChart({ data, labelKey, valueKey, height = 120 }: {
-  data: any[]; labelKey: string; valueKey: string; height?: number;
+  data: Record<string, unknown>[]; labelKey: string; valueKey: string; height?: number;
 }) {
   const { t } = useI18n();
   if (!data.length) return <div className="text-sm p-4" style={{ color: 'var(--text-dim)' }}>{t("observability.no_data")}</div>;
@@ -173,8 +174,8 @@ function ObservabilityDashboardInner() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to load");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }

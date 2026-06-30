@@ -187,7 +187,7 @@ function WorkflowEditor() {
       .then((r) => r.json())
       .then((data) => {
         const roles = (data.agents || [])
-          .map((a: any) => a.role)
+          .map((a: Record<string, unknown>) => String(a.role ?? ""))
           .filter((r: string) => r && r !== "human")
           .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i);
         setAvailableRoles(roles);
@@ -301,7 +301,7 @@ function WorkflowEditor() {
       );
       const agentsData = await agentsRes.json();
       const humanAgent = (agentsData.agents || []).find(
-        (a: any) => a.role === "human"
+        (a: Record<string, unknown>) => a.role === "human"
       );
       const creatorId = humanAgent?.id;
       if (!creatorId) throw new Error("No human agent found");

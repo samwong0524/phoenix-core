@@ -1,16 +1,15 @@
-﻿"use client";
+"use client";
 
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Briefcase, Code2, Network, User } from "lucide-react";
 import { ErrorBoundary } from "../_components/error-boundary";
 import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { useTopoNodes } from "./useTopoNodes";
-import { useAgentTreeLayout } from "./useAgentTreeLayout";
 import { useVizLayout } from "./useVizLayout";
 import { FileCard } from "./FileCard";
 const MarkdownContent = dynamic(() => import("./MarkdownContent").then(m => ({ default: m.MarkdownContent })), { ssr: false });
@@ -24,12 +23,14 @@ import { useIMStore } from "./store";
 import type {
   Group, Message,
 } from "./types";
-import { ROUTES } from "@/app/_components/routes";
 import {
+  MID_GRAPH_MIN_HEIGHT, MID_SPLITTER_SIZE,
   RIGHT_PANEL_MIN_HEIGHT,
-  MID_CHAT_MIN_HEIGHT, MID_GRAPH_MIN_HEIGHT, MID_SPLITTER_SIZE,
   api, fmtTime, cx,
 } from "./helpers";
+import { AgentSidebar } from "./AgentSidebar";
+import { useTaskMonitorData } from "./useTaskMonitorData";
+import { useMidResize } from "./useMidResize";
 
 // Dynamic imports for heavy components (code-split, no SSR needed)
 const TopoAnimCanvas = dynamic(() => import("./TopoAnimCanvas").then(m => m.TopoAnimCanvas), {
@@ -54,19 +55,18 @@ function IMPageInner() {
   const searchParams = useSearchParams();
   const { t } = useI18n();
   const workspaceOverrideId = searchParams.get("workspaceId");
-    const {
+  const {
     // Session slice
-    session, tokenLimit, groups, agents, activeGroupId, availableModels, selectedModel,
+    session, groups, agents, activeGroupId, availableModels, selectedModel,
     // Messages slice
     messages, contentStream, reasoningStream, toolStream, llmHistory,
     // UI slice
     status, error, draft, reasoningExpanded, agentActivity, agentActivityTool,
     agentError, uploading, answeredQuestions, stoppingAgents,
     vizEvents, vizBeams, vizSize, vizScale, vizOffset, vizIsPanning,
-    rightPanels, midSplitRatio, midStackHeight,
-    nodeOffsets, collapsedAgents, detailsCollapsed,
+    rightPanels, midStackHeight,
+    nodeOffsets,
     skillPopupOpen, skillSelectedIndex,
-    workingDir, showDirInput, dirBrowsePath, dirBrowseEntries, dirBrowseParent, dirBrowseLoading,
     // Agent status slice
     agentStatusById,
     // Session actions
@@ -78,11 +78,10 @@ function IMPageInner() {
     setError, setDraft, setReasoningExpanded,
     setAnsweredQuestions,
     setVizSize, setVizScale, setVizOffset, setVizIsPanning,
-    setRightPanels, setMidSplitRatio, setMidStackHeight,
-    setNodeOffsets, setCollapsedAgents, setDetailsCollapsed,
+    setRightPanels,
+    setNodeOffsets,
     setSkillList, setSkillPopupOpen, setSkillSelectedIndex,
-    setWorkingDir, setShowDirInput, setDirBrowsePath, setDirBrowseEntries,
-    setDirBrowseParent, setDirBrowseLoading,
+    setWorkingDir,
     // Skill suggestions (A-05)
     skillSuggestions, dismissSkillSuggestion,
   } = useIMStore();
@@ -97,12 +96,10 @@ function IMPageInner() {
   const activeGroupIdRef = useRef<string | null>(null);
   const streamAgentIdValueRef = useRef<string | null>(null);
   const vizRef = useRef<HTMLDivElement | null>(null);
-  const midStackRef = useRef<HTMLDivElement | null>(null);
-  const midChatHeightRef = useRef(0);
   const nodeOffsetsRef = useRef<Record<string, { x: number; y: number }>>({});
   const messagesRef = useRef<Message[]>([]);
   const vizPanStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeGroup = useMemo(
     () => groups.find((g) => g.id === activeGroupId) ?? null,
@@ -138,16 +135,6 @@ function IMPageInner() {
     [agentRoleById, session?.defaultGroupId, session?.humanAgentId, t]
   );
 
-  const { rows: agentTreeRows, groupByAgentId } = useAgentTreeLayout(
-    agents, groups, collapsedAgents, session?.humanAgentId ?? null, !!session,
-  );
-
-  const extraGroups = useMemo(() => {
-    if (!session) return groups;
-    const mappedIds = new Set(Array.from(groupByAgentId.values()).map((g) => g.id));
-    return groups.filter((g) => !mappedIds.has(g.id));
-  }, [groupByAgentId, groups, session]);
-
   const streamAgentId = useMemo(() => {
     if (!session) return null;
     if (!activeGroupId) return session.assistantAgentId;
@@ -166,71 +153,7 @@ function IMPageInner() {
     filteredSkills, handleDraftChange, selectSkill, handleSkillKeyDown,
   } = useImActions(connectAgentStream, bottomRef, messagesRef);
 
-  // ── Parse llmHistory → TaskMonitor data ──────────────────────
-  const taskMonitorData = useMemo(() => {
-    const todos: Array<{ status: "completed" | "in_progress" | "pending"; content: string }> = [];
-    const artifactSet = new Map<string, "text" | "binary" | "directory">();
-    const skillSet = new Map<string, "skill" | "mcp">();
-
-    let entries: any[] = [];
-    try {
-      entries = JSON.parse(llmHistory || "[]");
-    } catch { entries = []; }
-
-    for (const entry of entries) {
-      if (entry?.role !== "assistant" || !Array.isArray(entry.tool_calls)) continue;
-      for (const call of entry.tool_calls) {
-        const fnName: string = call?.function?.name ?? "";
-        let args: any = {};
-        try { args = JSON.parse(call?.function?.arguments ?? "{}"); } catch {}
-
-        // TodoWrite → extract todos
-        if (fnName === "TodoWrite" && Array.isArray(args.todos)) {
-          todos.length = 0; // latest wins
-          for (const t of args.todos) {
-            if (typeof t?.content === "string" && typeof t?.status === "string") {
-              todos.push({ status: t.status, content: t.content });
-            }
-          }
-        }
-
-        // Write / Edit / NotebookEdit → file artifact
-        if (fnName === "Write" && typeof args.file_path === "string") {
-          artifactSet.set(args.file_path, "text");
-        }
-        if (fnName === "Edit" && typeof args.file_path === "string") {
-          artifactSet.set(args.file_path, "text");
-        }
-        if (fnName === "NotebookEdit" && typeof args.notebook_path === "string") {
-          artifactSet.set(args.notebook_path, "text");
-        }
-
-        // Bash → output files (heuristic: look for > path or tee path)
-        if (fnName === "Bash" && typeof args.command === "string") {
-          const m = args.command.match(/(?:>\s*|tee\s+)([^\s;|&]+\.\w+)/);
-          if (m) artifactSet.set(m[1], "text");
-        }
-
-        // Skill usage
-        if (fnName === "Skill" && typeof args.skill === "string") {
-          skillSet.set(args.skill, "skill");
-        }
-
-        // MCP tools (mcp__ prefix)
-        if (fnName.startsWith("mcp__")) {
-          const parts = fnName.split("__");
-          const serverName = parts[1] ?? fnName;
-          skillSet.set(serverName, "mcp");
-        }
-      }
-    }
-
-    return {
-      todoItems: todos,
-      artifacts: Array.from(artifactSet).map(([path, type]) => ({ path, type })),
-      usedSkills: Array.from(skillSet).map(([name, type]) => ({ name, type })),
-    };
-  }, [llmHistory]);
+  const taskMonitorData = useTaskMonitorData();
 
   // Models remain separate via /api/models (FreeLLMAPI, may be slow)
   // NOTE: workspace-init is handled by bootstrap() in useImActions.
@@ -254,22 +177,12 @@ function IMPageInner() {
     streamAgentIdValueRef,
   );
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     void uploadFile(files[0]);
     e.target.value = "";
   }
-
-  // Initialize workingDir from localStorage (store defaults to "")
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("workingDir");
-      if (stored) setWorkingDir(stored);
-    } catch { /* ignore */ }
-  }, [setWorkingDir]);
 
   useEffect(() => {
     void bootstrap(workspaceOverrideId).catch((e) =>
@@ -308,20 +221,6 @@ function IMPageInner() {
   }, []);
 
   useEffect(() => {
-    const el = midStackRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const rect = entry.contentRect;
-        if (!rect.height) continue;
-        setMidStackHeight(rect.height);
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     const el = vizRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
@@ -344,191 +243,10 @@ function IMPageInner() {
     );
   }, [activeGroupId, refreshMessages, session]);
 
-  // ── Directory browser helpers ──
-  const fetchDirEntries = useCallback(async (browsePath: string) => {
-    setDirBrowseLoading(true);
-    try {
-      const qs = browsePath ? `?path=${encodeURIComponent(browsePath)}` : "";
-      const res = await fetch(`/api/browse-dir${qs}`);
-      const data = await res.json();
-      if (data.error) {
-        console.warn("[browse-dir]", data.error);
-        return;
-      }
-      setDirBrowsePath(data.path ?? "");
-      setDirBrowseEntries(data.entries ?? []);
-      setDirBrowseParent(data.parent ?? null);
-    } catch (err) {
-      console.warn("[browse-dir] fetch failed:", err);
-    } finally {
-      setDirBrowseLoading(false);
-    }
-  }, []);
+  // ── Mid-stack resize (hook) ──
+  const { midStackRef, midChatHeight, handleMidResizeStart, handleMidMouseDown, handleMidTouchStart } = useMidResize();
 
-  const openDirBrowser = useCallback(() => {
-    setShowDirInput(true);
-    // Start at current workingDir, or roots if empty
-    fetchDirEntries(workingDir || "");
-  }, [workingDir, fetchDirEntries]);
-
-  const confirmDirSelection = useCallback(() => {
-    if (dirBrowsePath) {
-      localStorage.setItem("workingDir", dirBrowsePath);
-      setWorkingDir(dirBrowsePath);
-    }
-    setShowDirInput(false);
-  }, [dirBrowsePath]);
-
-
-const renderContent = useCallback((content: string, contentType: string, message?: { id: string; senderId: string }) => {
-    if (contentType === 'image') {
-      try {
-        const img = JSON.parse(content) as { url?: string; name?: string };
-        if (img?.url) {
-          return <img src={img.url} alt={img.name || ''} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: "var(--radius-sm)", cursor: 'pointer' }} onClick={() => window.open(img.url!, '_blank')} />;
-        }
-      } catch { /* fallthrough */ }
-    }
-    if (contentType === 'file') {
-      try {
-        const file = JSON.parse(content) as { url?: string; name?: string; size?: number };
-        if (file?.url && file?.name) {
-          return <FileCard url={file.url} name={file.name} size={file.size} />;
-        }
-      } catch { /* fallthrough */ }
-    }
-    if (contentType === 'question') {
-      try {
-        const payload = JSON.parse(content) as { question?: string; options?: Array<{ label: string; description?: string }> };
-        if (payload?.question && payload?.options) {
-          return (
-            <QuestionCard
-              questionId={message?.id ?? ""}
-              question={payload.question}
-              options={payload.options}
-              answered={answeredQuestions.has(message?.id ?? "")}
-              onAnswer={(label) => {
-                if (message?.id) {
-                  setAnsweredQuestions((prev) => new Set(prev).add(message.id));
-                }
-                // Send the answer as a regular message directly
-                if (session && activeGroupId) {
-                  const optimistic: Message = {
-                    id: `optimistic-${Date.now()}`,
-                    senderId: session.humanAgentId,
-                    content: label,
-                    contentType: "text",
-                    sendTime: new Date().toISOString(),
-                  };
-                  setMessages((m) => [...m, optimistic]);
-                  queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
-                  void api(`/api/groups/${activeGroupId}/messages`, {
-                    method: "POST",
-                    body: JSON.stringify({ senderId: session.humanAgentId, content: label, contentType: "text" }),
-                  });
-                }
-              }}
-            />
-          );
-        }
-      } catch { /* fallthrough */ }
-    }
-    return <MarkdownContent content={content} />;
-  }, [answeredQuestions]);
-
-  const midChatHeight = useMemo(() => {
-    if (!midStackHeight) return 0;
-    const available = Math.max(0, midStackHeight - MID_SPLITTER_SIZE);
-    if (available <= 0) return 0;
-    const minChat = MID_CHAT_MIN_HEIGHT;
-    const minGraph = MID_GRAPH_MIN_HEIGHT;
-    if (available <= minGraph + minChat) {
-      return Math.max(minChat, available - minGraph);
-    }
-    const maxChat = available - minGraph;
-    const desired = available * midSplitRatio;
-    return Math.min(maxChat, Math.max(minChat, desired));
-  }, [midSplitRatio, midStackHeight]);
-
-  useEffect(() => {
-    midChatHeightRef.current = midChatHeight;
-  }, [midChatHeight]);
-
-  const startMidResize = useCallback(
-    (clientY: number) => {
-      const container = midStackRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const available = Math.max(0, rect.height - MID_SPLITTER_SIZE);
-      if (available <= 0) return;
-      const minChat = MID_CHAT_MIN_HEIGHT;
-      const minGraph = MID_GRAPH_MIN_HEIGHT;
-      const maxChat = Math.max(minChat, available - minGraph);
-      const startY = clientY;
-      const startHeight = midChatHeightRef.current || available * midSplitRatio;
-
-      const onMove = (e: PointerEvent | MouseEvent) => {
-        const delta = e.clientY - startY;
-        const next = Math.min(maxChat, Math.max(minChat, startHeight + delta));
-        const ratio = available ? next / available : 0.5;
-        setMidSplitRatio(ratio);
-      };
-
-      const onTouchMove = (e: TouchEvent) => {
-        const touch = e.touches[0];
-        if (!touch) return;
-        const delta = touch.clientY - startY;
-        const next = Math.min(maxChat, Math.max(minChat, startHeight + delta));
-        const ratio = available ? next / available : 0.5;
-        setMidSplitRatio(ratio);
-      };
-
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        window.removeEventListener("touchmove", onTouchMove);
-        window.removeEventListener("touchend", onUp);
-        document.body.style.cursor = "";
-      };
-
-      document.body.style.cursor = "row-resize";
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-      window.addEventListener("touchmove", onTouchMove, { passive: false });
-      window.addEventListener("touchend", onUp);
-    },
-    [midSplitRatio]
-  );
-
-  const handleMidResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      startMidResize(event.clientY);
-    },
-    [startMidResize]
-  );
-
-  const handleMidMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      startMidResize(event.clientY);
-    },
-    [startMidResize]
-  );
-
-  const handleMidTouchStart = useCallback(
-    (event: ReactTouchEvent<HTMLDivElement>) => {
-      const touch = event.touches[0];
-      if (!touch) return;
-      startMidResize(touch.clientY);
-    },
-    [startMidResize]
-  );
-
+  // ── Right panel resize ──
   const handleRightPanelResizeStart = useCallback(
     (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -570,6 +288,7 @@ const renderContent = useCallback((content: string, contentType: string, message
     [rightPanels]
   );
 
+  // ── Node drag handlers ──
   const startNodeDrag = useCallback(
     (id: string, clientX: number, clientY: number) => {
       const startOffset = nodeOffsetsRef.current[id] ?? { x: 0, y: 0 };
@@ -645,240 +364,90 @@ const renderContent = useCallback((content: string, contentType: string, message
     [startNodeDrag]
   );
 
+  // Title for chat header (computed from activeGroup)
   const title = getGroupLabel(activeGroup);
 
-  const toggleAgentCollapsed = useCallback((agentId: string) => {
-    setCollapsedAgents((prev) => ({ ...prev, [agentId]: !prev[agentId] }));
-  }, []);
-
-  const toggleDetailCollapsed = useCallback((groupId: string) => {
-    setDetailsCollapsed((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
-  }, []);
-
-  const getGroupStatus = useCallback((g: Group, agentId?: string): "online" | "busy" | "idle" | "error" => {
-    const aid = agentId ?? g.memberIds.find((id) => id !== session?.humanAgentId);
-    if (!aid) return "idle";
-    const status = agentStatusById[aid];
-    if (status === "BUSY") return "busy";
-    if (status === "WAKING") return "busy";
-    if (g.unreadCount > 0) return "online";
-    return "idle";
-  }, [agentStatusById, session?.humanAgentId]);
-
-  const renderGroupRow = (
-    g: Group,
-    tree?: {
-      depth: number;
-      hasChildren: boolean;
-      collapsed: boolean;
-      agentId: string;
-      guides: boolean[];
-      isLast: boolean;
+  const renderContent = useCallback((content: string, contentType: string, message?: { id: string; senderId: string }) => {
+    if (contentType === 'image') {
+      try {
+        const img = JSON.parse(content) as { url?: string; name?: string };
+        if (img?.url) {
+          return <img src={img.url} alt={img.name || ''} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: "var(--radius-sm)", cursor: 'pointer' }} onClick={() => window.open(img.url!, '_blank')} />;
+        }
+      } catch { /* fallthrough */ }
     }
-  ) => {
-    const depth = tree?.depth ?? 0;
-    const isCollapsed = tree?.collapsed ?? false;
-    const agentId = tree?.agentId;
-    const status = getGroupStatus(g, agentId);
-    const isActive = g.id === activeGroupId;
-
-    if (depth === 0) {
-      const isDetailCollapsed = detailsCollapsed[g.id] ?? true;
-      return (
-        <div key={g.id} className="agent-group">
-          <div
-            className={cx("agent-group-header", isActive && "active")}
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveGroupId(g.id)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveGroupId(g.id); } }}
-          >
-            {tree?.hasChildren ? (
-              <span
-                className={cx("group-chevron", !isCollapsed && "open")}
-                role="button"
-                tabIndex={0}
-                aria-label={isCollapsed ? "展开" : "收起"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleAgentCollapsed(tree.agentId);
-                  toggleDetailCollapsed(g.id);
-                }}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleAgentCollapsed(tree.agentId); toggleDetailCollapsed(g.id); } }}
-              >▶</span>
-            ) : (
-              <span
-                className={cx("group-chevron", !isDetailCollapsed && "open")}
-                role="button"
-                tabIndex={0}
-                aria-label={isDetailCollapsed ? "展开详情" : "收起详情"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleDetailCollapsed(g.id);
-                }}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleDetailCollapsed(g.id); } }}
-              >▶</span>
-            )}
-            <span className={cx("status-dot", status)} aria-label={status} />
-            <span className="group-name">{getGroupLabel(g)}</span>
-            {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
-          </div>
-          {!isCollapsed && !isDetailCollapsed ? (
-            <div className="group-detail">
-              {g.lastMessage ? (
-                <div style={{ marginBottom: g.contextTokens > 0 ? 4 : 0 }}>{g.lastMessage.content}</div>
-              ) : null}
-              {g.contextTokens > 0 ? (
-                <div className="ctx-bar">
-                  <span className="ctx-bar-label">{t("im.context_label")}</span>
-                  <div className="ctx-bar-track">
-                    <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
-                  </div>
-                  <span className="ctx-bar-text">{g.contextTokens.toLocaleString()} / {tokenLimit.toLocaleString()}</span>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
+    if (contentType === 'file') {
+      try {
+        const file = JSON.parse(content) as { url?: string; name?: string; size?: number };
+        if (file?.url && file?.name) {
+          return <FileCard url={file.url} name={file.name} size={file.size} />;
+        }
+      } catch { /* fallthrough */ }
     }
-
-    // depth > 0: sub-agent
-    const isDetailCollapsed = detailsCollapsed[g.id] ?? true;
-    return (
-      <div key={g.id}>
-        <div className={cx("agent-sub", isActive && "active")} role="button" tabIndex={0} onClick={() => setActiveGroupId(g.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveGroupId(g.id); } }}>
-          <span className={cx("status-dot", status)} aria-label={status} />
-          <span className={cx("sub-name", isActive && "highlight")}>{getGroupLabel(g)}</span>
-          {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
-        </div>
-        {!isCollapsed && !isDetailCollapsed && tree?.hasChildren ? (
-          <div className="group-detail" style={{ paddingLeft: 54, paddingTop: 0 }}>
-            {g.lastMessage ? (
-              <div style={{ marginBottom: g.contextTokens > 0 ? 4 : 0 }}>{g.lastMessage.content}</div>
-            ) : null}
-            {g.contextTokens > 0 ? (
-              <div className="ctx-bar">
-                <span className="ctx-bar-label">{t("im.context_label")}</span>
-                <div className="ctx-bar-track">
-                  <div className="ctx-bar-fill" style={{ width: `${Math.min(100, (g.contextTokens / tokenLimit) * 100)}%` }} />
-                </div>
-                <span className="ctx-bar-text">{g.contextTokens.toLocaleString()} / {tokenLimit.toLocaleString()}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    );
-  };
+    if (contentType === 'question') {
+      try {
+        const payload = JSON.parse(content) as { question?: string; options?: Array<{ label: string; description?: string }> };
+        if (payload?.question && payload?.options) {
+          return (
+            <QuestionCard
+              questionId={message?.id ?? ""}
+              question={payload.question}
+              options={payload.options}
+              answered={answeredQuestions.has(message?.id ?? "")}
+              onAnswer={(label) => {
+                if (message?.id) {
+                  setAnsweredQuestions((prev) => new Set(prev).add(message.id));
+                }
+                if (session && activeGroupId) {
+                  const optimistic: Message = {
+                    id: `optimistic-${Date.now()}`,
+                    senderId: session.humanAgentId,
+                    content: label,
+                    contentType: "text",
+                    sendTime: new Date().toISOString(),
+                  };
+                  setMessages((m) => [...m, optimistic]);
+                  queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+                  void api(`/api/groups/${activeGroupId}/messages`, {
+                    method: "POST",
+                    body: JSON.stringify({ senderId: session.humanAgentId, content: label, contentType: "text" }),
+                  });
+                }
+              }}
+            />
+          );
+        }
+      } catch { /* fallthrough */ }
+    }
+    return <MarkdownContent content={content} />;
+  }, [answeredQuestions]);
 
   return (
     <IMShell
       left={
-        <ErrorBoundary name="IM.LeftPanel">
-        <aside className="panel panel-left" style={{ overflow: "hidden" }}>
-        <div className="logo-bar">
-          <img className="logo-icon" src="data:image/png;base64,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" alt="PHOENIX CORE" />
-          <div className="logo-text">PHOENIX CORE</div>
-        </div>
-        <div className="ws-info">
-          <div className="ws-title">{t("im.workspace")}</div>
-          <div className="ws-id">{session?.workspaceId ?? "-"}</div>
-          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 4 }}>工作目录</div>
-            {showDirInput ? (
-              <div className="dir-browser">
-                {/* Path bar */}
-                <div className="dir-browser-path">
-                  {dirBrowseParent !== null && (
-                    <button className="dir-browser-up" onClick={() => fetchDirEntries(dirBrowseParent)} title="上级目录">↑</button>
-                  )}
-                  <span className="dir-browser-path-text" title={dirBrowsePath}>{dirBrowsePath || "选择目录…"}</span>
-                </div>
-                {/* Entry list */}
-                <div className="dir-browser-list">
-                  {dirBrowseLoading ? (
-                    <div className="dir-browser-empty">加载中…</div>
-                  ) : dirBrowseEntries.length === 0 ? (
-                    <div className="dir-browser-empty">空目录</div>
-                  ) : (
-                    dirBrowseEntries.map((entry) => (
-                      <div
-                        key={entry.fullPath}
-                        className="dir-browser-item"
-                        onDoubleClick={() => fetchDirEntries(entry.fullPath)}
-                        onClick={() => { setDirBrowsePath(entry.fullPath); }}
-                        style={{ background: dirBrowsePath === entry.fullPath ? "rgba(0,255,255,0.08)" : undefined }}
-                      >
-                        <span style={{ fontSize: 11, flexShrink: 0 }}>📁</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-                {/* Actions */}
-                <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                  <button onClick={confirmDirSelection} className="dir-browser-btn dir-browser-btn-primary">选择此目录</button>
-                  <button onClick={() => setShowDirInput(false)} className="dir-browser-btn">取消</button>
-                </div>
-              </div>
-            ) : (
-              <div onClick={openDirBrowser} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDirBrowser(); } }} role="button" tabIndex={0} style={{ fontSize: 10, color: "var(--text-secondary)", cursor: "pointer", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }} title="点击选择工作目录">
-                <span style={{ fontSize: 11 }}>📁</span>
-                <span>{workingDir || "未设置（点击添加）"}</span>
-              </div>
-            )}
-            {workingDir && !showDirInput && (
-              <div style={{ fontSize: 8, color: "var(--text-dim)", marginTop: 3, fontStyle: "italic" }}>修改后需刷新页面生效</div>
-            )}
-          </div>
-          <div style={{ marginTop: 4, fontSize: 9 }}>
-            {t("im.human_label")} {(session?.humanAgentId ?? "-").slice(0, 22)}…
-          </div>
-          <div style={{ fontSize: 9 }}>
-            {t("im.assistant_label")} {(session?.assistantAgentId ?? "-").slice(0, 22)}…
-          </div>
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-            <a href={ROUTES.HOME} style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
-              {t("common.back_home")}
-            </a>
-          </div>
-        </div>
-        <div className="agent-scroll">
-          <div className="section-label">{t("im.agents")}</div>
-          {agentTreeRows.length === 0 && extraGroups.length === 0 ? (
-            <div style={{ padding: 16 }} className="muted">
-              {t("im.no_groups")}
-            </div>
-          ) : (
-            <>
-              {(() => {
-                const lastDepth0Idx = agentTreeRows.reduce((acc, row, idx) => {
-                  if (row.depth === 0 && row.group) return idx;
-                  return acc;
-                }, -1);
-                return agentTreeRows.map(({ agent, group, depth, hasChildren, collapsed, guides, isLast }, idx) => (
-                  <Fragment key={idx}>
-                    {group
-                      ? renderGroupRow(group, {
-                          depth,
-                          hasChildren,
-                          collapsed,
-                          agentId: agent.id,
-                          guides,
-                          isLast,
-                        })
-                      : null}
-                    {depth === 0 && group && idx < lastDepth0Idx ? <div className="sidebar-divider" /> : null}
-                  </Fragment>
-                ));
-              })()}
-              {extraGroups.map((g) => renderGroupRow(g))}
-            </>
-          )}
-        </div>
-        </aside>
-        </ErrorBoundary>
+        <AgentSidebar
+          session={session}
+          groups={groups}
+          agents={agents}
+          activeGroupId={activeGroupId}
+          collapsedAgents={useIMStore((s) => s.collapsedAgents)}
+          detailsCollapsed={useIMStore((s) => s.detailsCollapsed)}
+          workingDir={useIMStore((s) => s.workingDir)}
+          showDirInput={useIMStore((s) => s.showDirInput)}
+          dirBrowsePath={useIMStore((s) => s.dirBrowsePath)}
+          dirBrowseEntries={useIMStore((s) => s.dirBrowseEntries)}
+          dirBrowseParent={useIMStore((s) => s.dirBrowseParent)}
+          dirBrowseLoading={useIMStore((s) => s.dirBrowseLoading)}
+          setActiveGroupId={setActiveGroupId}
+          setCollapsedAgents={useIMStore((s) => s.setCollapsedAgents)}
+          setDetailsCollapsed={useIMStore((s) => s.setDetailsCollapsed)}
+          setShowDirInput={useIMStore((s) => s.setShowDirInput)}
+          setDirBrowsePath={useIMStore((s) => s.setDirBrowsePath)}
+          setDirBrowseLoading={useIMStore((s) => s.setDirBrowseLoading)}
+          setDirBrowseEntries={useIMStore((s) => s.setDirBrowseEntries)}
+          setDirBrowseParent={useIMStore((s) => s.setDirBrowseParent)}
+          setWorkingDir={setWorkingDir}
+        />
       }
       mid={
         <ErrorBoundary name="IM.ChatPanel">

@@ -103,7 +103,7 @@ export default function WorkflowTemplateGallery() {
       // Get a creator agent ID from the workspace
       const agentsRes = await fetch(`/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`);
       const agentsData = await agentsRes.json();
-      const creator = (agentsData.agents || []).find((a: any) => a.role !== "human");
+      const creator = (agentsData.agents || []).find((a: Record<string, unknown>) => a.role !== "human");
       if (!creator) throw new Error("No agent found in workspace");
 
       // Get the default group

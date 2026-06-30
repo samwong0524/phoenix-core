@@ -67,9 +67,14 @@ export default function SkillsList() {
     try {
       const res = await fetch("/api/skills");
       const data = await res.json();
-      const local: LocalSkill[] = (data.skills ?? []).map((s: any) => ({
+      const local: LocalSkill[] = (data.skills ?? []).map((s: Record<string, unknown>) => ({
         type: "local" as const,
-        ...s,
+        name: String(s.name ?? ""),
+        description: String(s.description ?? ""),
+        autoLoad: Boolean(s.autoLoad),
+        roles: Array.isArray(s.roles) ? s.roles.map(String) : [],
+        skillPath: String(s.skillPath ?? s.path ?? ""),
+        skillDir: String(s.skillDir ?? ""),
       }));
       setSkills(local);
     } catch {
@@ -155,7 +160,15 @@ export default function SkillsList() {
           body: JSON.stringify({ action: "search_remote", query: search.trim() }),
         });
         const data = await res.json();
-        const remote: RemoteSkill[] = (data.skills ?? []).map((s: any) => ({ type: "remote" as const, ...s }));
+        const remote: RemoteSkill[] = (data.skills ?? []).map((s: Record<string, unknown>) => ({
+          type: "remote" as const,
+          name: String(s.name ?? ""),
+          description: String(s.description ?? ""),
+          source_url: String(s.source_url ?? ""),
+          repo: String(s.repo ?? ""),
+          trust_level: (s.trust_level === "official" || s.trust_level === "community" ? s.trust_level : "unknown") as RemoteSkill["trust_level"],
+          source: String(s.source ?? ""),
+        }));
         setSkills((prev) => [...prev.filter((s) => s.type === "local"), ...remote]);
       } catch {
         /* ignore */

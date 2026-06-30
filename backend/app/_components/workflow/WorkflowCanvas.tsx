@@ -13,6 +13,8 @@ import {
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
+  type NodeChange,
+  type EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -78,7 +80,7 @@ function WorkflowCanvasInner() {
 
   // Sync RF → store on user interactions
   const handleNodesChange = useCallback(
-    (changes: any[]) => {
+    (changes: NodeChange<WorkflowNode>[]) => {
       onNodesChange(changes);
       // Sync selection
       const selectChange = changes.find((c) => c.type === "select");
@@ -119,7 +121,7 @@ function WorkflowCanvasInner() {
   );
 
   const handleEdgesChange = useCallback(
-    (changes: any[]) => {
+    (changes: EdgeChange<WorkflowEdge>[]) => {
       onEdgesChange(changes);
       // Sync to store
       const removeChanges = changes.filter((c) => c.type === "remove");

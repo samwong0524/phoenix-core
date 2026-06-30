@@ -3,18 +3,22 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/app/_components/routes";
+import { useI18n } from "@/lib/i18n/context";
 
 // ── Types ─────────────────────────────────────────────────────
 
 type OAuthProviderInfo = { id: string; name: string };
 
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  oauth_state_mismatch: "会话已过期，请重试",
-  oauth_no_code: "认证已取消",
-  oauth_provider_not_found: "OAuth 提供商未配置",
-  oauth_token_exchange_failed: "认证失败，请重试",
-  oauth_userinfo_failed: "无法获取用户信息",
-};
+function getOAuthError(key: string, t: (k: string) => string): string {
+  const map: Record<string, string> = {
+    oauth_state_mismatch: t("login.oauth_state_mismatch"),
+    oauth_no_code: t("login.oauth_no_code"),
+    oauth_provider_not_found: t("login.oauth_provider_not_found"),
+    oauth_token_exchange_failed: t("login.oauth_token_exchange_failed"),
+    oauth_userinfo_failed: t("login.oauth_userinfo_failed"),
+  };
+  return map[key] ?? t("login.oauth_fail");
+}
 
 // ── Styles ────────────────────────────────────────────────────
 
@@ -213,6 +217,7 @@ const spinnerStyle: React.CSSProperties = {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -229,9 +234,9 @@ export default function LoginPage() {
 
     const urlError = searchParams.get("error");
     if (urlError) {
-      setError(OAUTH_ERROR_MESSAGES[urlError] ?? "OAuth 认证失败");
+      setError(getOAuthError(urlError, t));
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -254,14 +259,14 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "发生错误");
+        setError(data.error || t("login.generic_error"));
         return;
       }
 
       router.push(ROUTES.HOME);
       router.refresh();
     } catch {
-      setError("网络错误，请重试");
+      setError(t("login.network_error"));
     } finally {
       setLoading(false);
     }
@@ -273,13 +278,13 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={logoStyle}>
           <h1 style={logoTitleStyle}>SWARM IDE</h1>
-          <p style={logoSubtitleStyle}>多智能体协作平台</p>
+          <p style={logoSubtitleStyle}>{t("login.subtitle")}</p>
         </div>
 
         {/* Card */}
         <div style={cardStyle}>
           <h2 style={cardTitleStyle}>
-            {mode === "login" ? "登录" : "创建账号"}
+            {mode === "login" ? t("login.login_title") : t("login.register_title")}
           </h2>
 
           {/* OAuth */}
@@ -305,14 +310,14 @@ export default function LoginPage() {
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                       </svg>
                     )}
-                    {p.id === "github" ? `通过 ${p.name} 登录` : `通过 ${p.name} 登录`}
+                    {t("login.oauth_via", { name: p.name })}
                   </a>
                 ))}
               </div>
 
               <div style={dividerRow}>
                 <div style={dividerLine} />
-                <span style={dividerText}>或</span>
+                <span style={dividerText}>{t("login.oauth_divider")}</span>
                 <div style={dividerLine} />
               </div>
             </>
@@ -323,14 +328,14 @@ export default function LoginPage() {
             {mode === "register" && (
               <div style={fieldGroup}>
                 <label htmlFor="name" style={labelStyle}>
-                  姓名（可选）
+                  {t("login.name_optional")}
                 </label>
                 <input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="你的名字"
+                  placeholder={t("login.name_placeholder")}
                   style={inputStyle}
                   onFocus={(e) => {
                     e.currentTarget.style.borderColor = "var(--color-primary-dim)";
@@ -344,7 +349,7 @@ export default function LoginPage() {
 
             <div style={fieldGroup}>
               <label htmlFor="email" style={labelStyle}>
-                邮箱
+                {t("login.email")}
               </label>
               <input
                 id="email"
@@ -365,14 +370,14 @@ export default function LoginPage() {
 
             <div style={fieldGroup}>
               <label htmlFor="password" style={labelStyle}>
-                密码
+                {t("login.password")}
               </label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "register" ? "至少 6 个字符" : "你的密码"}
+                placeholder={mode === "register" ? t("login.password_placeholder_register") : t("login.password_placeholder_login")}
                 required
                 minLength={mode === "register" ? 6 : undefined}
                 style={inputStyle}
@@ -396,10 +401,10 @@ export default function LoginPage() {
             >
               {loading && <span style={spinnerStyle} />}
               {loading
-                ? "请稍候…"
+                ? t("login.loading")
                 : mode === "login"
-                  ? "登录"
-                  : "创建账号"}
+                  ? t("login.login_title")
+                  : t("login.register_title")}
             </button>
           </form>
 
@@ -412,13 +417,13 @@ export default function LoginPage() {
               }}
               style={toggleStyle}
             >
-              {mode === "login" ? "没有账号？注册" : "已有账号？登录"}
+              {mode === "login" ? t("login.toggle_to_register") : t("login.toggle_to_login")}
             </button>
           </div>
 
           {mode === "register" && (
             <p style={hintStyle}>
-              第一个注册的用户将自动成为管理员
+              {t("login.first_user_admin")}
             </p>
           )}
         </div>

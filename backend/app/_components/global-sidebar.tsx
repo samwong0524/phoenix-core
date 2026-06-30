@@ -14,56 +14,65 @@ import {
   Zap,
 } from "lucide-react";
 import { ROUTES } from "./routes";
+import { useI18n } from "@/lib/i18n/context";
 
 interface NavChild {
+  key: string;
   label: string;
   href: string;
   icon: React.ElementType;
 }
 
 interface NavItem {
+  key: string;
   label: string;
   icon: React.ElementType;
   href: string;
   children?: NavChild[];
 }
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    label: "对话",
-    icon: MessageSquare,
-    href: ROUTES.CHAT,
-  },
-  {
-    label: "编排",
-    icon: Workflow,
-    href: ROUTES.WORKFLOW,
-    children: [
-      { label: "工作流", href: ROUTES.WORKFLOW, icon: Workflow },
-      { label: "流水线", href: ROUTES.PIPELINE, icon: Zap },
-      { label: "拓扑", href: ROUTES.GRAPH, icon: Activity },
-    ],
-  },
-  {
-    label: "运维",
-    icon: Activity,
-    href: ROUTES.MONITOR,
-    children: [
-      { label: "监控", href: ROUTES.MONITOR, icon: Activity },
-      { label: "历史", href: ROUTES.HISTORY, icon: MessageSquare },
-      { label: "模型", href: ROUTES.MODELS, icon: Settings },
-    ],
-  },
-  {
-    label: "配置",
-    icon: Settings,
-    href: ROUTES.SKILLS,
-    children: [
-      { label: "技能", href: ROUTES.SKILLS, icon: Settings },
-      { label: "设置", href: ROUTES.SETTINGS, icon: Settings },
-    ],
-  },
-];
+function buildNavItems(t: (key: string) => string): NavItem[] {
+  return [
+    {
+      key: "chat",
+      label: t("sidebar.chat"),
+      icon: MessageSquare,
+      href: ROUTES.CHAT,
+    },
+    {
+      key: "orchestrate",
+      label: t("sidebar.orchestrate"),
+      icon: Workflow,
+      href: ROUTES.WORKFLOW,
+      children: [
+        { key: "workflow", label: t("sidebar.workflow"), href: ROUTES.WORKFLOW, icon: Workflow },
+        { key: "pipeline", label: t("sidebar.pipeline"), href: ROUTES.PIPELINE, icon: Zap },
+        { key: "topology", label: t("sidebar.topology"), href: ROUTES.GRAPH, icon: Activity },
+      ],
+    },
+    {
+      key: "operations",
+      label: t("sidebar.operations"),
+      icon: Activity,
+      href: ROUTES.MONITOR,
+      children: [
+        { key: "monitor", label: t("sidebar.monitor"), href: ROUTES.MONITOR, icon: Activity },
+        { key: "history", label: t("sidebar.history"), href: ROUTES.HISTORY, icon: MessageSquare },
+        { key: "models", label: t("sidebar.models"), href: ROUTES.MODELS, icon: Settings },
+      ],
+    },
+    {
+      key: "config",
+      label: t("sidebar.config"),
+      icon: Settings,
+      href: ROUTES.SKILLS,
+      children: [
+        { key: "skills", label: t("sidebar.skills"), href: ROUTES.SKILLS, icon: Settings },
+        { key: "settings", label: t("sidebar.settings"), href: ROUTES.SETTINGS, icon: Settings },
+      ],
+    },
+  ];
+}
 
 const SIDEBAR_WIDTH = 220;
 const SIDEBAR_COLLAPSED = 56;
@@ -71,16 +80,18 @@ const EASE = [0.2, 0, 0, 1] as const;
 
 export const GlobalSidebar = memo(function GlobalSidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
+  const NAV_ITEMS = buildNavItems(t);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(["编排", "运维", "配置"])
+    new Set(["orchestrate", "operations", "config"])
   );
 
-  const toggleGroup = (label: string) => {
+  const toggleGroup = (key: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -152,14 +163,14 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
-          const expanded = expandedGroups.has(item.label);
+          const expanded = expandedGroups.has(item.key);
           const hasChildren = item.children && item.children.length > 0;
           const groupActive = hasChildren
             ? item.children!.some((c) => isActive(c.href))
             : active;
 
           return (
-            <div key={item.label}>
+            <div key={item.key}>
               <motion.div
                 role={hasChildren ? "button" : undefined}
                 tabIndex={hasChildren ? 0 : undefined}
@@ -167,7 +178,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                 onKeyDown={hasChildren ? (e: React.KeyboardEvent) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    toggleGroup(item.label);
+                    toggleGroup(item.key);
                   }
                 } : undefined}
                 style={{
@@ -194,7 +205,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                 whileTap={hasChildren ? { scale: 0.98 } : undefined}
                 transition={{ duration: 0.15 }}
                 onClick={() => {
-                  if (hasChildren) toggleGroup(item.label);
+                  if (hasChildren) toggleGroup(item.key);
                 }}
               >
                 <Link
@@ -204,11 +215,11 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                   onClick={(e) => {
                     if (hasChildren) {
                       e.preventDefault();
-                      toggleGroup(item.label);
+                      toggleGroup(item.key);
                     }
                   }}
                 >
-                  <Icon size={18} style={{ flexShrink: 0 }} />
+                  <Icon size={18} style={{ flexShrink: 0 }} aria-hidden="true" />
                   <AnimatePresence>
                     {!collapsed && (
                       <motion.span
@@ -284,7 +295,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                               }}
                               aria-current={childActive ? "page" : undefined}
                             >
-                              <ChildIcon size={14} style={{ flexShrink: 0 }} />
+                              <ChildIcon size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.label}</span>
                             </Link>
                           </motion.div>
@@ -317,7 +328,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
           borderTop: "1px solid var(--border)",
           color: "var(--text-secondary)",
         }}
-        aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+        aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
       >
         <motion.span
           animate={{ rotate: collapsed ? 180 : 0 }}

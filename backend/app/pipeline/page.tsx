@@ -20,7 +20,7 @@ type Stage = {
 
 type PipelineEvent = {
   event: string;
-  data: unknown;
+  data: Record<string, any>;
 };
 
 type AgentInfo = {
@@ -120,8 +120,8 @@ export default function PipelinePage() {
           fetch(`/api/agents?workspaceId=${encodeURIComponent(ws.id)}&meta=true`)
             .then(r => r.json())
             .then(a => {
-              setAgents((a.agents || []).map((ag: any) => ({
-                id: ag.id, name: ag.role, role: ag.role,
+              setAgents((a.agents || []).map((ag: Record<string, unknown>) => ({
+                id: String(ag.id ?? ''), name: String(ag.role ?? ''), role: String(ag.role ?? ''),
                 status: 'idle' as AgentStatus, elapsed: 0, toolCalls: 0,
               })));
               // Mark connection time — skip SSE history replay events
@@ -142,10 +142,8 @@ export default function PipelinePage() {
       try {
         const event = JSON.parse(e.data) as PipelineEvent;
         // Skip SSE history replay events — only process live events after connection
-        if (event.data && typeof event.data === 'object' && 'at' in (event.data as any)) {
-          const eventTime = (event.data as any).at;
-          if (eventTime < connectionTimeRef.current) return;
-        }
+        const eventTime = event.data?.at;
+        if (eventTime && eventTime < connectionTimeRef.current) return;
         setEvents((prev) => [...prev.slice(-200), event]);
         handleEvent(event);
       } catch {
@@ -158,7 +156,7 @@ export default function PipelinePage() {
   const handleEvent = useCallback((event: PipelineEvent) => {
     switch (event.event) {
       case 'pipeline.start': {
-        const d = event.data as any;
+        const d = event.data;
         setOverallStatus('running');
         startTimeRef.current = Date.now();
         setStages(d.stageNames?.map((name: string) => ({
@@ -167,7 +165,7 @@ export default function PipelinePage() {
         break;
       }
       case 'pipeline.stage_start': {
-        const d = event.data as any;
+        const d = event.data;
         setStages((prev) => prev.map((s) => s.name === d.stageName ? { ...s, status: 'running', role: d.role } : s));
         // Update agent status to working
         if (d.agentId) {
@@ -183,7 +181,7 @@ export default function PipelinePage() {
       }
       case 'pipeline.stage_complete':
       case 'pipeline.stage_done': {
-        const d = event.data as any;
+        const d = event.data;
         setStages((prev) => prev.map((s) => s.name === d.stageName ? { ...s, status: d.status, output: d.output } : s));
         // Mark agent as idle
         if (d.agentId) {
@@ -192,13 +190,13 @@ export default function PipelinePage() {
         break;
       }
       case 'pipeline.complete': {
-        const d = event.data as any;
+        const d = event.data;
         setOverallStatus(d.overallStatus);
         setAgents(prev => prev.map(a => ({ ...a, status: 'idle' as AgentStatus, currentStage: undefined })));
         break;
       }
       case 'pipeline.review': {
-        const d = event.data as any;
+        const d = event.data;
         setStages((prev) => prev.map((s) => s.name === d.stageName ? { ...s, status: 'review_requested', output: d.output } : s));
         // Mark agent as waiting for review
         if (d.agentId) {
@@ -207,7 +205,7 @@ export default function PipelinePage() {
         break;
       }
       case 'agent.error': {
-        const d = event.data as any;
+        const d = event.data;
         setAgents(prev => {
           const idx = prev.findIndex(a => a.id === d.agentId);
           if (idx >= 0) {
@@ -218,7 +216,7 @@ export default function PipelinePage() {
         break;
       }
       case 'agent.wakeup': {
-        const d = event.data as any;
+        const d = event.data;
         setAgents(prev => {
           const existing = prev.find(a => a.id === d.agentId);
           if (existing) {
@@ -229,14 +227,14 @@ export default function PipelinePage() {
         break;
       }
       case 'agent.tool_call': {
-        const d = event.data as any;
+        const d = event.data;
         setAgents(prev => prev.map(a =>
           a.id === d.agentId ? { ...a, toolCalls: (a.toolCalls || 0) + 1 } : a
         ));
         break;
       }
       case 'llm.429': {
-        const d = event.data as any;
+        const d = event.data;
         const retryAfter = d.retryAfter || 30;
         setRateLimitAlert(t("pipeline.rate_limit", { seconds: retryAfter }));
         setTimeout(() => setRateLimitAlert(null), retryAfter * 1000);
@@ -245,7 +243,7 @@ export default function PipelinePage() {
 
       // ui.agent.* events (IM chat — not pipeline mode)
       case 'ui.agent.llm.start': {
-        const d = event.data as any;
+        const d = event.data;
         if (d.agentId) {
           setAgents(prev => {
             const existing = prev.find(a => a.id === d.agentId);
@@ -256,14 +254,14 @@ export default function PipelinePage() {
         break;
       }
       case 'ui.agent.llm.done': {
-        const d = event.data as any;
+        const d = event.data;
         if (d.agentId) {
           setAgents(prev => prev.map(a => a.id === d.agentId ? { ...a, status: 'idle' as AgentStatus } : a));
         }
         break;
       }
       case 'ui.agent.tool_call.start': {
-        const d = event.data as any;
+        const d = event.data;
         if (d.agentId) {
           setAgents(prev => prev.map(a =>
             a.id === d.agentId ? { ...a, status: 'working' as AgentStatus, toolCalls: (a.toolCalls || 0) + 1 } : a
@@ -272,7 +270,7 @@ export default function PipelinePage() {
         break;
       }
       case 'ui.message.created': {
-        const d = event.data as any;
+        const d = event.data;
         // When a human sends a message, show it as an event
         if (d.message?.senderId) {
           setAgents(prev => {
@@ -286,7 +284,7 @@ export default function PipelinePage() {
         break;
       }
       case 'ui.agent.created': {
-        const d = event.data as any;
+        const d = event.data;
         if (d.agent?.id) {
           setAgents(prev => {
             if (prev.some(a => a.id === d.agent.id)) return prev;
