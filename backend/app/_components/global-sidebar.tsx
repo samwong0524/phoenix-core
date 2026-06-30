@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare,
   Workflow,
@@ -66,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const SIDEBAR_WIDTH = 220;
 const SIDEBAR_COLLAPSED = 56;
+const EASE = [0.2, 0, 0, 1] as const;
 
 export const GlobalSidebar = memo(function GlobalSidebar() {
   const pathname = usePathname();
@@ -73,8 +75,6 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(["编排", "运维", "配置"])
   );
-
-  const width = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH;
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => {
@@ -89,17 +89,19 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
     pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <aside
+    <motion.aside
       role="navigation"
       aria-label="Main navigation"
+      animate={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
+      transition={{ duration: 0.25, ease: EASE }}
       style={{
-        width,
         display: "flex",
         flexDirection: "column",
         height: "100%",
         borderRight: "1px solid var(--border)",
-        transition: "all 0.2s",
         backgroundColor: "var(--bg-panel)",
+        overflow: "hidden",
+        flexShrink: 0,
       }}
     >
       {/* Logo */}
@@ -112,6 +114,8 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
           height: 48,
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
+          overflow: "hidden",
+          whiteSpace: "nowrap",
         }}
       >
         <div
@@ -129,17 +133,23 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
         >
           <Zap size={16} />
         </div>
-        {!collapsed && (
-          <span
-            style={{ fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "var(--text-primary)" }}
-          >
-            SWARM IDE
-          </span>
-        )}
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.span
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.15, ease: EASE }}
+              style={{ fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "var(--text-primary)" }}
+            >
+              SWARM IDE
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto" }}>
+      <nav style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto", overflowX: "hidden" }}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -151,7 +161,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
 
           return (
             <div key={item.label}>
-              <div
+              <motion.div
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -160,7 +170,6 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                   margin: "0 var(--space-1)",
                   borderRadius: "var(--radius-sm)",
                   cursor: "pointer",
-                  transition: "color 0.15s",
                   backgroundColor:
                     active && !hasChildren
                       ? "var(--bg-card)"
@@ -169,6 +178,13 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                     ? "var(--accent-cyan)"
                     : "var(--text-secondary)",
                 }}
+                whileHover={{
+                  backgroundColor: active && !hasChildren
+                    ? "var(--bg-card)"
+                    : "rgba(0, 240, 255, 0.06)",
+                }}
+                whileTap={hasChildren ? { scale: 0.98 } : undefined}
+                transition={{ duration: 0.15 }}
                 onClick={() => {
                   if (hasChildren) toggleGroup(item.label);
                 }}
@@ -180,92 +196,130 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                   aria-current={active && !hasChildren ? "page" : undefined}
                   onClick={(e) => {
                     if (hasChildren) {
-                      // clicking the icon/label area toggles the group
                       e.preventDefault();
                       toggleGroup(item.label);
                     }
                   }}
                 >
                   <Icon size={18} style={{ flexShrink: 0 }} />
-                  {!collapsed && (
-                    <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
-                  )}
-                </Link>
-                {!collapsed && hasChildren && (
-                  <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.5 }}>
-                    {expanded ? (
-                      <ChevronLeft size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
-                  </span>
-                )}
-              </div>
-
-              {/* Sub-items */}
-              {!collapsed && hasChildren && expanded && (
-                <div style={{ marginLeft: 16, marginBottom: 4 }}>
-                  {item.children!.map((child) => {
-                    const ChildIcon = child.icon;
-                    const childActive = isActive(child.href);
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-2)",
-                          padding: "6px var(--space-3)",
-                          margin: "0 var(--space-1)",
-                          borderRadius: "var(--radius-sm)",
-                          fontSize: 13,
-                          transition: "color 0.15s",
-                          backgroundColor: childActive
-                            ? "var(--bg-card)"
-                            : "transparent",
-                          color: childActive
-                            ? "var(--accent-cyan)"
-                            : "var(--text-secondary)",
-                          textDecoration: "none",
-                        }}
-                        aria-current={childActive ? "page" : undefined}
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2, ease: EASE }}
+                        style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       >
-                        <ChildIcon size={14} style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </Link>
+                <AnimatePresence>
+                  {!collapsed && hasChildren && (
+                    <motion.span
+                      initial={{ opacity: 0, rotate: 0 }}
+                      animate={{ opacity: 0.5, rotate: expanded ? 90 : 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, ease: EASE }}
+                      style={{ marginLeft: "auto", fontSize: 11, display: "flex" }}
+                    >
+                      <ChevronRight size={14} />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+
+              {/* Sub-items with AnimatePresence */}
+              <AnimatePresence initial={false}>
+                {!collapsed && hasChildren && expanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: EASE }}
+                    style={{ overflow: "hidden", marginLeft: 16 }}
+                  >
+                    <div style={{ marginBottom: 4 }}>
+                      {item.children!.map((child) => {
+                        const ChildIcon = child.icon;
+                        const childActive = isActive(child.href);
+                        return (
+                          <motion.div
+                            key={child.href}
+                            whileHover={{
+                              backgroundColor: childActive
+                                ? "var(--bg-card)"
+                                : "rgba(0, 240, 255, 0.06)",
+                            }}
+                            transition={{ duration: 0.15 }}
+                            style={{
+                              borderRadius: "var(--radius-sm)",
+                              margin: "0 var(--space-1)",
+                            }}
+                          >
+                            <Link
+                              href={child.href}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "var(--space-2)",
+                                padding: "6px var(--space-3)",
+                                fontSize: 13,
+                                backgroundColor: childActive
+                                  ? "var(--bg-card)"
+                                  : "transparent",
+                                color: childActive
+                                  ? "var(--accent-cyan)"
+                                  : "var(--text-secondary)",
+                                textDecoration: "none",
+                              }}
+                              aria-current={childActive ? "page" : undefined}
+                            >
+                              <ChildIcon size={14} style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.label}</span>
+                            </Link>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })}
       </nav>
 
       {/* Collapse toggle */}
-      <button
+      <motion.button
         onClick={() => setCollapsed(!collapsed)}
+        whileHover={{ backgroundColor: "rgba(0, 240, 255, 0.06)" }}
+        whileTap={{ scale: 0.95 }}
+        transition={{ duration: 0.15 }}
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           height: 40,
-          borderTop: "1px solid var(--border)",
-          transition: "color 0.15s",
           flexShrink: 0,
           background: "transparent",
           cursor: "pointer",
           border: "none",
-          borderTopWidth: 1,
-          borderTopStyle: "solid",
-          borderTopColor: "var(--border)",
+          borderTop: "1px solid var(--border)",
           color: "var(--text-secondary)",
         }}
         aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
       >
-        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </button>
-    </aside>
+        <motion.span
+          animate={{ rotate: collapsed ? 180 : 0 }}
+          transition={{ duration: 0.25, ease: EASE }}
+          style={{ display: "flex" }}
+        >
+          <ChevronLeft size={16} />
+        </motion.span>
+      </motion.button>
+    </motion.aside>
   );
 });

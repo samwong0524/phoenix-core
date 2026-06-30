@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, createContext, useContext } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { corporateVariants } from "@/lib/motion";
 
 // ─── Types ────────────────────────────────────────────
 
@@ -150,46 +152,52 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     ? typed === state.typeToConfirm
     : true;
 
-  if (!state.open) return <>{children}</>;
-
   return (
     <>
       {children}
 
-      {/* Overlay */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={state.title ?? "Confirm Action"}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 9999,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "rgba(0, 0, 0, 0.6)",
-          backdropFilter: "blur(4px)",
-        }}
-        onClick={() => !loading && handleResolve(false)}
-      >
-        {/* Dialog */}
-        <div
-          ref={dialogRef}
-          onKeyDown={handleDialogKeyDown}
-          onClick={(e) => e.stopPropagation()}
-          tabIndex={-1}
-          style={{
-            width: "100%",
-            maxWidth: 420,
-            margin: "0 16px",
-            borderRadius: 12,
-            border: `1px solid ${styles.borderColor}`,
-            background: "var(--bg-card, #0f172a)",
-            boxShadow: `0 0 40px ${styles.bgGlow}, 0 20px 60px rgba(0,0,0,0.5)`,
-            padding: "24px",
-          }}
-        >
+      <AnimatePresence>
+        {state.open && (
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={state.title ?? "Confirm Action"}
+            variants={corporateVariants.modalOverlay}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0, 0, 0, 0.6)",
+              backdropFilter: "blur(4px)",
+            }}
+            onClick={() => !loading && handleResolve(false)}
+          >
+            <motion.div
+              ref={dialogRef}
+              onKeyDown={handleDialogKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              tabIndex={-1}
+              variants={corporateVariants.modalPanel}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              style={{
+                width: "100%",
+                maxWidth: 420,
+                margin: "0 16px",
+                borderRadius: 12,
+                border: `1px solid ${styles.borderColor}`,
+                background: "var(--bg-card, #0f172a)",
+                boxShadow: `0 0 40px ${styles.bgGlow}, 0 20px 60px rgba(0,0,0,0.5)`,
+                padding: "24px",
+              }}
+            >
           {/* Icon + Title */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
             <span style={{ fontSize: 20 }}>{styles.icon}</span>
@@ -291,8 +299,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               {state.confirmLabel ?? "Confirm"}
             </button>
           </div>
-        </div>
-      </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

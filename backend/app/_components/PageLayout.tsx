@@ -66,10 +66,10 @@ export function PageLayout({
           <h1 style={titleStyle}>{title}</h1>
         </header>
         <div style={skeletonContainerStyle}>
-          <div style={skeletonStyle} />
-          <div style={{ ...skeletonStyle, width: "70%" }} />
-          <div style={{ ...skeletonStyle, width: "85%" }} />
-          <div style={{ ...skeletonStyle, width: "60%" }} />
+          <div className="skeleton-shimmer" style={skeletonStyle} />
+          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "70%" }} />
+          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "85%" }} />
+          <div className="skeleton-shimmer" style={{ ...skeletonStyle, width: "60%" }} />
         </div>
       </div>
     );
@@ -197,9 +197,6 @@ const skeletonContainerStyle: React.CSSProperties = {
 const skeletonStyle: React.CSSProperties = {
   height: 16,
   width: "100%",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--bg-card)",
-  animation: "pulse-glow 2s ease-in-out infinite",
 };
 
 const errorIconStyle: React.CSSProperties = {

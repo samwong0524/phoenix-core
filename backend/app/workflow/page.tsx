@@ -3,6 +3,8 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { corporateVariants } from "@/lib/motion";
 import WorkflowCanvas from "../_components/workflow/WorkflowCanvas";
 import { useWorkflowStore, type WorkflowState } from "../_components/workflow/store";
 import { Button } from "@/components/ui";
@@ -12,11 +14,13 @@ import { useI18n } from "@/lib/i18n/context";
 /* ── Save-as-Template modal ── */
 
 function SaveAsTemplateModal({
+  open,
   workflowName,
   workflowDescription,
   onClose,
   onSaved,
 }: {
+  open: boolean;
   workflowName: string;
   workflowDescription: string;
   onClose: () => void;
@@ -69,18 +73,31 @@ function SaveAsTemplateModal({
   };
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 9999,
-      background: "rgba(0,0,0,0.6)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={onClose}>
-      <div
-        style={{
-          background: "var(--bg-panel)", border: "1px solid var(--border)",
-          borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          variants={corporateVariants.modalOverlay}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={onClose}
+        >
+          <motion.div
+            style={{
+              background: "var(--bg-panel)", border: "1px solid var(--border)",
+              borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
+            }}
+            variants={corporateVariants.modalPanel}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={(e) => e.stopPropagation()}
+          >
         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
           {t("workflow.tpl_title")}
         </div>
@@ -114,8 +131,10 @@ function SaveAsTemplateModal({
             {saving ? t("workflow.tpl_saving") : t("workflow.tpl_save")}
           </Button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -413,14 +432,13 @@ function WorkflowEditor() {
       </div>
 
       {/* Save as Template dialog */}
-      {showSaveAsTemplate && (
-        <SaveAsTemplateModal
-          workflowName={workflowName}
-          workflowDescription={workflowDescription}
-          onClose={() => setShowSaveAsTemplate(false)}
-          onSaved={setMessage}
-        />
-      )}
+      <SaveAsTemplateModal
+        open={showSaveAsTemplate}
+        workflowName={workflowName}
+        workflowDescription={workflowDescription}
+        onClose={() => setShowSaveAsTemplate(false)}
+        onSaved={setMessage}
+      />
 
       {/* Canvas */}
       <div style={{ flex: 1 }}>

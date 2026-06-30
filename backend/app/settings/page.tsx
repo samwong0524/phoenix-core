@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Globe, Palette, Cpu, Info, Check } from "lucide-react";
+import { motion } from "framer-motion";
+import { corporateVariants } from "@/lib/motion";
 import { useI18n } from "@/lib/i18n/context";
 import { PageLayout } from "../_components/PageLayout";
 import { ROUTES } from "../_components/routes";
@@ -79,7 +81,11 @@ export default function SettingsPage() {
     <PageLayout title={t("settings.title")} backHref={ROUTES.CHAT}>
       {/* Toast */}
       {toast && (
-        <div
+        <motion.div
+          initial={{ opacity: 0, x: 16 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 16 }}
+          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
           style={{
             position: "fixed",
             top: 16,
@@ -99,10 +105,15 @@ export default function SettingsPage() {
         >
           <Check size={14} />
           {t("settings.saved")}
-        </div>
+        </motion.div>
       )}
 
-      <div style={{ maxWidth: 600, display: "flex", flexDirection: "column", gap: 24 }}>
+      <motion.div
+        variants={corporateVariants.staggerContainer}
+        initial="hidden"
+        animate="visible"
+        style={{ maxWidth: 600, display: "flex", flexDirection: "column", gap: 24 }}
+      >
         {/* Language */}
         <SettingsSection icon={Globe} title={t("settings.language")} desc={t("settings.language_desc")}>
           <SegmentedControl
@@ -156,7 +167,7 @@ export default function SettingsPage() {
             {t("settings.version")}: <span style={{ color: "var(--text-primary)" }}>1.0.0</span>
           </div>
         </SettingsSection>
-      </div>
+      </motion.div>
     </PageLayout>
   );
 }
@@ -175,7 +186,8 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section
+    <motion.section
+      variants={corporateVariants.staggerItem}
       style={{
         background: "var(--bg-card)",
         border: "1px solid var(--border)",
@@ -200,7 +212,7 @@ function SettingsSection({
         </p>
       )}
       <div style={{ marginLeft: 26 }}>{children}</div>
-    </section>
+    </motion.section>
   );
 }
 
