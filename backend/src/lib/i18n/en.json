@@ -76,7 +76,28 @@
     "default_workspace": "Default Workspace",
     "new_workspace": "New Workspace",
     "llm_history_fail": "(failed to load llm_history: {error})",
-    "llm_history_fail_generic": "(failed to load llm_history)"
+    "llm_history_fail_generic": "(failed to load llm_history)",
+    "taskMonitor": {
+      "title": "Task Monitor",
+      "debug": "Debug",
+      "debug_panel": "Debug panel",
+      "todo": "Todo",
+      "no_tasks": "No tasks yet",
+      "artifacts": "Artifacts",
+      "files": "Files",
+      "no_artifacts": "No artifacts yet",
+      "skills_mcp": "Skills & MCP",
+      "no_skills": "No skills/MCP yet",
+      "awareness": "Awareness",
+      "memory": "Memory",
+      "calendar": "Calendar",
+      "online": "Online",
+      "busy": "Busy",
+      "idle": "Idle",
+      "events": "Events",
+      "thinking": "Think",
+      "answered": "Answered"
+    }
   },
   "monitor": {
     "agents": "Agents",

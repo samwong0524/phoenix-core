@@ -2,7 +2,14 @@
 
 import type { WorkspaceDefaults } from "./types";
 
-const SESSION_KEY = "agent-wechat.session.v1";
+export const SESSION_KEY = "agent-wechat.session.v1";
+
+// Layout constants for the IM page panels
+export const RIGHT_PANEL_MIN_HEIGHT = 120;
+export const RIGHT_PANEL_HEADER_HEIGHT = 32;
+export const MID_CHAT_MIN_HEIGHT = 0;
+export const MID_GRAPH_MIN_HEIGHT = 160;
+export const MID_SPLITTER_SIZE = 6;
 
 export function loadSession(): WorkspaceDefaults | null {
   try {
@@ -18,17 +25,19 @@ export function saveSession(session: WorkspaceDefaults) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
-export async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
     ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      "Content-Type": "application/json",
+    },
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text}`);
+    throw new Error(`${res.status} ${res.statusText} ${text}`);
   }
-  const data = await res.json();
-  return data as T;
+  return (await res.json()) as T;
 }
 
 export function fmtTime(iso: string) {

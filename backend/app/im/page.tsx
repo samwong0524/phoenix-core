@@ -6,18 +6,32 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Briefcase, ChevronDown, ChevronLeft, ChevronRight, Code2, Network, User } from "lucide-react";
-import { Streamdown } from "streamdown";
-import { createCodePlugin } from "@streamdown/code";
-import { mermaid } from "@streamdown/mermaid";
 import { useConfirm } from "../_components/confirm-dialog";
 import { ErrorBoundary } from "../_components/error-boundary";
 import { IMShell } from "./IMShell";
 import { IMMessageList } from "./IMMessageList";
 import { IMHistoryList } from "./IMHistoryList";
+import { useTopoNodes } from "./useTopoNodes";
+import { useAgentTreeLayout } from "./useAgentTreeLayout";
+import { useVizLayout } from "./useVizLayout";
+import { MarkdownContent } from "./MarkdownContent";
+import { FileCard } from "./FileCard";
+import { QuestionCard } from "./QuestionCard";
+import { roleColor, statusColor, historyAccent } from "./colors";
 import { useI18n } from "@/lib/i18n/context";
 import { detectAtTrigger } from "@/lib/skill-utils";
 import { useIMStore } from "./store";
+import type {
+  UUID, ModelEntry, WorkspaceDefaults, AgentMeta, AgentStatus,
+  Group, Message, UiStreamEvent, VizEvent, VizBeam, VizDebugEntry,
+  RightPanelId, RightPanelState, AgentStreamEvent,
+} from "./types";
 import { ROUTES } from "@/app/_components/routes";
+import {
+  SESSION_KEY, RIGHT_PANEL_MIN_HEIGHT, RIGHT_PANEL_HEADER_HEIGHT,
+  MID_CHAT_MIN_HEIGHT, MID_GRAPH_MIN_HEIGHT, MID_SPLITTER_SIZE,
+  loadSession, saveSession, api, fmtTime, cx,
+} from "./helpers";
 
 // Dynamic imports for heavy components (code-split, no SSR needed)
 const TopoAnimCanvas = dynamic(() => import("./TopoAnimCanvas").then(m => m.TopoAnimCanvas), {
@@ -29,283 +43,6 @@ const TaskMonitor = dynamic(() => import("./TaskMonitor").then(m => m.TaskMonito
   ssr: false,
   loading: () => <div className="animate-pulse bg-surface-2 h-full rounded" />,
 });
-
-// Create code plugin with dark theme
-const code = createCodePlugin({
-  themes: ["github-dark", "github-dark"], // Use dark theme for both light/dark modes
-});
-
-type UUID = string;
-
-type ModelEntry = {
-  id: string;
-  displayName: string;
-  platform: string;
-};
-
-type WorkspaceDefaults = {
-  workspaceId: UUID;
-  humanAgentId: UUID;
-  assistantAgentId: UUID;
-  defaultGroupId: UUID;
-};
-
-type AgentMeta = {
-  id: UUID;
-  role: string;
-  parentId: UUID | null;
-  createdAt: string;
-};
-
-type AgentStatus = "IDLE" | "BUSY" | "WAKING";
-
-type Group = {
-  id: UUID;
-  name: string | null;
-  memberIds: UUID[];
-  unreadCount: number;
-  contextTokens: number;
-  lastMessage?: {
-    content: string;
-    contentType: string;
-    sendTime: string;
-    senderId: UUID;
-  };
-  updatedAt: string;
-  createdAt: string;
-};
-
-type Message = {
-  id: UUID;
-  senderId: UUID;
-  content: string;
-  contentType: string;
-  sendTime: string;
-};
-
-type UiStreamEvent = {
-  id?: number;
-  at?: number;
-  event: string;
-  data: Record<string, any>;
-};
-
-type VizEvent = {
-  id: string;
-  kind: "agent" | "message" | "llm" | "tool" | "db";
-  label: string;
-  at: number;
-};
-
-type VizBeam = {
-  id: string;
-  fromId: UUID;
-  toId: UUID;
-  kind: "create" | "message";
-  label?: string;
-  createdAt: number;
-};
-
-type VizDebugEntry = {
-  id: string;
-  at: number;
-  type: "message_event" | "beam_created" | "beam_skipped";
-  data: Record<string, unknown>;
-};
-
-type RightPanelId = "history" | "content" | "reasoning" | "tools";
-type RightPanelState = {
-  id: RightPanelId;
-  title: string;
-  size: number;
-  collapsed: boolean;
-};
-
-// Streamdown plugins for markdown rendering
-const streamdownPlugins = { code, mermaid };
-
-// Helper component for rendering markdown content
-function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
-  if (!content) return <span className="muted">—</span>;
-  return (
-    <div className={className}>
-      <Streamdown plugins={streamdownPlugins}>{content}</Streamdown>
-    </div>
-  );
-}
-
-function FileCard({ url, name, size }: { url: string; name: string; size?: number }) {
-  const fmtSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const ext = name.split(".").pop()?.toUpperCase() || "";
-
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 12px",
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
-        textDecoration: "none",
-        color: "var(--text-primary)",
-        cursor: "pointer",
-        maxWidth: 280,
-      }}
-    >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: "var(--radius-sm)",
-          background: "var(--cyan)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "#000",
-          flexShrink: 0,
-          fontFamily: "var(--font-mono)",
-        }}
-      >
-        {ext.slice(0, 3)}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {name}
-        </div>
-        {size ? <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>{fmtSize(size)}</div> : null}
-      </div>
-      <span style={{ fontSize: 16, color: "var(--text-dim)" }}>↓</span>
-    </a>
-  );
-}
-
-function QuestionCard({
-  questionId,
-  question,
-  options,
-  answered,
-  onAnswer,
-}: {
-  questionId: string;
-  question: string;
-  options: Array<{ label: string; description?: string }>;
-  answered: boolean;
-  onAnswer: (label: string) => void;
-}) {
-  const [selected, setSelected] = useState<string | null>(answered ? "__answered__" : null);
-
-  const handleClick = (label: string) => {
-    if (selected) return;
-    setSelected(label);
-    onAnswer(label);
-  };
-
-  return (
-    <div className="question-card">
-      <div className="question-card-text">{question}</div>
-      <div className="question-card-options">
-        {options.map((opt) => (
-          <button
-            key={opt.label}
-            className={`question-option-btn${selected === opt.label ? " selected" : ""}`}
-            disabled={!!selected}
-            onClick={() => handleClick(opt.label)}
-          >
-            <span className="question-option-label">{opt.label}</span>
-            {opt.description ? <span className="question-option-desc">{opt.description}</span> : null}
-          </button>
-        ))}
-      </div>
-      {selected === "__answered__" && (
-        <div className="question-card-answered">已回复</div>
-      )}
-    </div>
-  );
-}
-
-type AgentStreamEvent =
-  | {
-      id: number;
-      at: number;
-      event: "agent.stream";
-      data: {
-        kind: "reasoning" | "content" | "tool_calls" | "tool_result";
-        delta: string;
-        tool_call_id?: string;
-        tool_call_name?: string;
-      };
-    }
-  | {
-      id: number;
-      at: number;
-      event: "agent.wakeup";
-      data: { agentId: string; reason?: string | null };
-    }
-  | {
-      id: number;
-      at: number;
-      event: "agent.unread";
-      data: { agentId: string; batches: Array<{ groupId: string; messageIds: string[] }> };
-    }
-  | { id: number; at: number; event: "agent.done"; data: { finishReason?: string | null } }
-  | { id: number; at: number; event: "agent.error"; data: { message: string } };
-
-const SESSION_KEY = "agent-wechat.session.v1";
-const RIGHT_PANEL_MIN_HEIGHT = 120;
-const RIGHT_PANEL_HEADER_HEIGHT = 32;
-const MID_CHAT_MIN_HEIGHT = 0;
-const MID_GRAPH_MIN_HEIGHT = 160;
-const MID_SPLITTER_SIZE = 6;
-
-function loadSession(): WorkspaceDefaults | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as WorkspaceDefaults;
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(session: WorkspaceDefaults) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      "Content-Type": "application/json",
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText} ${text}`);
-  }
-  return (await res.json()) as T;
-}
-
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit" });
-}
-
-function cx(...classes: Array<string | false | undefined | null>) {
-  return classes.filter(Boolean).join(" ");
-}
 
 export default function IMPage() {
   return (
@@ -406,183 +143,10 @@ function IMPageInner() {
     return map;
   }, [agents]);
 
-  const vizLayout = useMemo(() => {
-    const width = Math.max(1, vizSizeRounded.width);
-    const height = Math.max(1, vizSizeRounded.height);
-    const paddingX = 70;
-    const paddingY = 60;
-    const byId = new Map(agents.map((a) => [a.id, a]));
-    const parentById = new Map<string, string | null>();
-    const childrenById = new Map<string, AgentMeta[]>();
-    const roots: AgentMeta[] = [];
-
-    for (const agent of agents) {
-      const parentId = agent.parentId;
-      if (parentId && parentId !== agent.id && byId.has(parentId)) {
-        const list = childrenById.get(parentId) ?? [];
-        list.push(agent);
-        childrenById.set(parentId, list);
-        parentById.set(agent.id, parentId);
-      } else {
-        roots.push(agent);
-        parentById.set(agent.id, null);
-      }
-    }
-
-    const byCreatedAt = (a: AgentMeta, b: AgentMeta) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-
-    for (const list of childrenById.values()) list.sort(byCreatedAt);
-    roots.sort(byCreatedAt);
-
-    if (session) {
-      const humanIndex = roots.findIndex((a) => a.id === session.humanAgentId);
-      if (humanIndex > -1) {
-        const [human] = roots.splice(humanIndex, 1);
-        roots.unshift(human);
-      }
-    }
-
-    const nodeMeta = new Map<string, { xIndex: number; depth: number }>();
-    let leafIndex = 0;
-    let maxDepth = 0;
-    const visiting = new Set<string>();
-    const visited = new Set<string>();
-
-    const walk = (agent: AgentMeta, depth: number): { min: number; max: number } => {
-      if (visited.has(agent.id)) {
-        const meta = nodeMeta.get(agent.id);
-        if (meta) return { min: meta.xIndex, max: meta.xIndex };
-      }
-      if (visiting.has(agent.id)) {
-        const xIndex = leafIndex++;
-        nodeMeta.set(agent.id, { xIndex, depth });
-        return { min: xIndex, max: xIndex };
-      }
-
-      visiting.add(agent.id);
-      maxDepth = Math.max(maxDepth, depth);
-      const children = (childrenById.get(agent.id) ?? []).filter((child) => child.id !== agent.id);
-      let range: { min: number; max: number };
-      if (children.length === 0) {
-        const xIndex = leafIndex++;
-        nodeMeta.set(agent.id, { xIndex, depth });
-        range = { min: xIndex, max: xIndex };
-      } else {
-        const ranges = children.map((child) => walk(child, depth + 1));
-        const min = ranges[0]?.min ?? leafIndex;
-        const max = ranges[ranges.length - 1]?.max ?? min;
-        const xIndex = (min + max) / 2;
-        nodeMeta.set(agent.id, { xIndex, depth });
-        range = { min, max };
-      }
-      visiting.delete(agent.id);
-      visited.add(agent.id);
-      return range;
-    };
-
-    roots.forEach((root) => {
-      walk(root, 0);
-    });
-
-    for (const agent of agents) {
-      if (!nodeMeta.has(agent.id)) {
-        walk(agent, 0);
-      }
-    }
-
-    const leafCount = Math.max(1, leafIndex);
-    const depthCount = Math.max(1, maxDepth + 1);
-    const baseSpan = Math.max(1, width - paddingX * 2);
-    const maxSpan =
-      leafCount <= 2 ? Math.min(baseSpan, 360) : leafCount <= 4 ? Math.min(baseSpan, 520) : baseSpan;
-    const xSpan = Math.max(1, maxSpan);
-    const xStart = (width - xSpan) / 2;
-    const ySpan = Math.max(1, height - paddingY * 2);
-    const xStep = leafCount === 1 ? 0 : xSpan / (leafCount - 1);
-    const yStep = depthCount === 1 ? 0 : ySpan / (depthCount - 1);
-
-    const basePositions = new Map<string, { x: number; y: number }>();
-    for (const agent of agents) {
-      const meta = nodeMeta.get(agent.id);
-      if (!meta) continue;
-      basePositions.set(agent.id, {
-        x: xStart + meta.xIndex * xStep,
-        y: paddingY + meta.depth * yStep,
-      });
-    }
-
-    const offsetCache = new Map<string, { x: number; y: number }>();
-    const positions = new Map<string, { x: number; y: number }>();
-    const getAccumulatedOffset = (id: string) => {
-      if (offsetCache.has(id)) return offsetCache.get(id)!;
-      let x = 0;
-      let y = 0;
-      const seen = new Set<string>();
-      let current: string | null | undefined = id;
-      while (current) {
-        if (seen.has(current)) break;
-        seen.add(current);
-        const offset = nodeOffsets[current];
-        if (offset) {
-          x += offset.x;
-          y += offset.y;
-        }
-        current = parentById.get(current) ?? null;
-      }
-      const total = { x, y };
-      offsetCache.set(id, total);
-      return total;
-    };
-
-    for (const agent of agents) {
-      const base = basePositions.get(agent.id);
-      if (!base) continue;
-      const offset = getAccumulatedOffset(agent.id);
-      positions.set(agent.id, { x: base.x + offset.x, y: base.y + offset.y });
-    }
-
-    const ordered = [...agents].sort((a, b) => {
-      const da = nodeMeta.get(a.id)?.depth ?? 0;
-      const db = nodeMeta.get(b.id)?.depth ?? 0;
-      if (da !== db) return da - db;
-      return byCreatedAt(a, b);
-    });
-
-    const edges: Array<{ fromId: UUID; toId: UUID }> = [];
-    for (const [parentId, children] of childrenById.entries()) {
-      for (const child of children) {
-        edges.push({ fromId: parentId, toId: child.id });
-      }
-    }
-
-    return { positions, ordered, edges, parentById };
-  }, [agents, session, vizSizeRounded.height, vizSizeRounded.width, nodeOffsets]);
+  const vizLayout = useVizLayout(agents, session, vizSizeRounded, nodeOffsets);
 
   // Topo animation nodes (pixel positions for canvas overlay)
-  const topoNodes = useMemo(() => {
-    const agentColor = (role?: string) => {
-      if (!role || role === "human") return "var(--text-primary)";
-      if (role === "assistant") return "var(--cyan)";
-      if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "var(--magenta)";
-      if (role === "reviewer" || role === "qa") return "var(--purple)";
-      if (role === "researcher" || role === "analyst" || role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "var(--green)";
-      if (role === "creator" || role === "writer" || role === "editor" || role === "worker") return "var(--yellow)";
-      return "var(--yellow)";
-    };
-    return vizLayout.ordered.map((a) => {
-      const pos = vizLayout.positions.get(a.id);
-      const status = agentStatusById[a.id] ?? "IDLE";
-      return {
-        id: a.id,
-        x: pos?.x ?? 0,
-        y: pos?.y ?? 0,
-        color: agentColor(a.role),
-        r: 30,
-        status,
-      };
-    });
-  }, [vizLayout.ordered, vizLayout.positions, agentStatusById, agents]);
+  const topoNodes = useTopoNodes(vizLayout, agentStatusById, agents);
 
   const getGroupLabel = useCallback(
     (g: Group | null | undefined) => {
@@ -602,82 +166,9 @@ function IMPageInner() {
     [agentRoleById, session?.defaultGroupId, session?.humanAgentId, t]
   );
 
-  const groupByAgentId = useMemo(() => {
-    const map = new Map<string, Group>();
-    if (!session) return map;
-    for (const g of groups) {
-      if (!g.memberIds.includes(session.humanAgentId)) continue;
-      const others = g.memberIds.filter((id) => id !== session.humanAgentId);
-      if (others.length === 1) {
-        map.set(others[0], g);
-      }
-    }
-    return map;
-  }, [groups, session]);
-
-  const agentTreeRows = useMemo(() => {
-    if (!session)
-      return [] as Array<{
-        agent: AgentMeta;
-        group: Group | null;
-        depth: number;
-        hasChildren: boolean;
-        collapsed: boolean;
-        guides: boolean[];
-        isLast: boolean;
-      }>;
-    const byId = new Map(agents.map((a) => [a.id, a]));
-    const childrenById = new Map<string, AgentMeta[]>();
-    const roots: AgentMeta[] = [];
-    const byCreatedAt = (a: AgentMeta, b: AgentMeta) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-
-    for (const agent of agents) {
-      if (agent.role === "human") continue;
-      const parentId = agent.parentId;
-      const parent = parentId && parentId !== agent.id ? byId.get(parentId) : null;
-      if (parent && parent.role !== "human" && parent.id !== agent.id) {
-        const list = childrenById.get(parent.id) ?? [];
-        list.push(agent);
-        childrenById.set(parent.id, list);
-      } else {
-        roots.push(agent);
-      }
-    }
-
-    for (const list of childrenById.values()) list.sort(byCreatedAt);
-    roots.sort(byCreatedAt);
-
-    const rows: Array<{
-      agent: AgentMeta;
-      group: Group | null;
-      depth: number;
-      hasChildren: boolean;
-      collapsed: boolean;
-      guides: boolean[];
-      isLast: boolean;
-    }> = [];
-    const walk = (agent: AgentMeta, depth: number, guides: boolean[], isLast: boolean) => {
-      const children = childrenById.get(agent.id) ?? [];
-      const collapsed = !!collapsedAgents[agent.id];
-      rows.push({
-        agent,
-        group: groupByAgentId.get(agent.id) ?? null,
-        depth,
-        hasChildren: children.length > 0,
-        collapsed,
-        guides,
-        isLast,
-      });
-      if (collapsed) return;
-      const nextGuides = [...guides, !isLast];
-      children.forEach((child, index) => {
-        walk(child, depth + 1, nextGuides, index === children.length - 1);
-      });
-    };
-    roots.forEach((root, index) => walk(root, 0, [], index === roots.length - 1));
-    return rows;
-  }, [agents, collapsedAgents, groupByAgentId, session]);
+  const { rows: agentTreeRows, groupByAgentId } = useAgentTreeLayout(
+    agents, groups, collapsedAgents, session?.humanAgentId ?? null, !!session,
+  );
 
   const extraGroups = useMemo(() => {
     if (!session) return groups;
@@ -1658,20 +1149,6 @@ function IMPageInner() {
     };
   }, []);
 
-  const roleColor = (role?: string) => {
-    if (!role) return "var(--text-primary)";
-    if (role === "human") return "var(--text-primary)";
-    if (role === "assistant") return "var(--cyan)";
-    if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager" || role === "cto") return "var(--magenta)";
-    if (role === "reviewer" || role === "qa") return "var(--purple)";
-    if (role === "researcher" || role === "analyst") return "var(--green)";
-    if (role === "specialist" || role === "coder" || role === "developer" || role === "engineer") return "var(--green)";
-    if (role === "creator" || role === "writer") return "var(--yellow)";
-    if (role === "editor") return "var(--yellow)";
-    if (role === "worker") return "var(--text-secondary)";
-    return "var(--yellow)";
-  };
-
   // ── Directory browser helpers ──
   const fetchDirEntries = useCallback(async (browsePath: string) => {
     setDirBrowseLoading(true);
@@ -1707,11 +1184,6 @@ function IMPageInner() {
     setShowDirInput(false);
   }, [dirBrowsePath]);
 
-  const statusColor = (status?: AgentStatus) => {
-    if (status === "BUSY") return "var(--red)";
-    if (status === "WAKING") return "var(--yellow)";
-    return "var(--green)";
-  };
 
 const renderContent = useCallback((content: string, contentType: string, message?: { id: string; senderId: string }) => {
     if (contentType === 'image') {
@@ -2022,18 +1494,6 @@ const renderContent = useCallback((content: string, contentType: string, message
     return typeof entry?.role === "string" ? entry.role : "unknown";
   }, []);
 
-  const historyAccent = useCallback((role?: string) => {
-    if (!role) return "var(--purple)";
-    if (role === "human") return "var(--text-primary)";
-    if (role === "assistant") return "var(--cyan)";
-    if (role === "coordinator" || role === "productmanager" || role === "pm" || role === "manager") return "var(--magenta)";
-    if (role === "reviewer") return "var(--purple)";
-    if (role === "researcher" || role === "specialist" || role === "coder" || role === "developer") return "var(--green)";
-    if (role === "creator" || role === "editor") return "var(--yellow)";
-    if (role === "tool") return "var(--yellow)";
-    if (role === "system") return "var(--purple)";
-    return "var(--purple)";
-  }, []);
 
   const title = getGroupLabel(activeGroup);
 
@@ -2852,7 +2312,6 @@ const renderContent = useCallback((content: string, contentType: string, message
           toolStream={toolStream}
           agentError={agentError}
           llmHistory={llmHistory}
-          locale={locale}
           todoItems={taskMonitorData.todoItems}
           artifacts={taskMonitorData.artifacts}
           usedSkills={taskMonitorData.usedSkills}

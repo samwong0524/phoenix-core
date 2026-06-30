@@ -7,6 +7,7 @@
 
 import { memo, useState, useMemo, useCallback } from "react";
 import { TraceTree } from "./TraceTree";
+import { useI18n } from "@/lib/i18n/context";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -37,7 +38,6 @@ type TaskMonitorProps = {
   toolStream: string;
   agentError: string | null;
   llmHistory?: string;
-  locale?: "zh" | "en";
   /** TodoWrite 条目（从 message 中解析） */
   todoItems?: TodoItem[];
   /** 产物文件列表 */
@@ -83,12 +83,12 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
   const {
     agents, agentStatusById, groups, activeGroupId,
     vizEvents, streamAgentId, contentStream, reasoningStream, toolStream,
-    agentError, llmHistory = "", locale = "zh",
+    agentError, llmHistory = "",
     todoItems, artifacts, usedSkills,
   } = props;
 
+  const { t } = useI18n();
   const [showDebug, setShowDebug] = useState(false);
-  const isZh = locale === "zh";
 
   // Filter non-human agents
   const nonHumanAgents = useMemo(
@@ -100,14 +100,14 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
     <div className="panel-right" style={monitorStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <span style={headerTitleStyle}>{isZh ? "任务监控" : "Task Monitor"}</span>
+        <span style={headerTitleStyle}>{t("im.taskMonitor.title")}</span>
         <button
           onClick={() => setShowDebug(!showDebug)}
           style={{
             ...headerDebugBtnStyle,
             ...(showDebug ? { color: "var(--cyan)", background: "var(--bg-hover)" } : {}),
           }}
-          title={isZh ? "调试面板" : "Debug panel"}
+          title={t("im.taskMonitor.debug_panel")}
         >
           ⚙️
         </button>
@@ -116,7 +116,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
       {/* Scrollable content */}
       <div style={scrollStyle}>
         {/* 待办 */}
-        <CollapsibleSection title={isZh ? "待办" : "Todo"} icon="✓" defaultOpen={!!todoItems?.length}>
+        <CollapsibleSection title={t("im.taskMonitor.todo")} icon="✓" defaultOpen={!!todoItems?.length}>
           {todoItems && todoItems.length > 0 ? (
             todoItems.map((item, i) => (
               <div key={i} style={todoItemStyle}>
@@ -127,15 +127,15 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
               </div>
             ))
           ) : (
-            <div style={emptyHintStyle}>{isZh ? "暂无待办任务" : "No tasks yet"}</div>
+            <div style={emptyHintStyle}>{t("im.taskMonitor.no_tasks")}</div>
           )}
         </CollapsibleSection>
 
         {/* 产物 */}
-        <CollapsibleSection title={isZh ? "产物" : "Artifacts"} icon="📦" defaultOpen={!!artifacts?.length}>
+        <CollapsibleSection title={t("im.taskMonitor.artifacts")} icon="📦" defaultOpen={!!artifacts?.length}>
           {artifacts && artifacts.length > 0 ? (
             <div>
-              <div style={artifactsSubLabelStyle}>{isZh ? "文件" : "Files"}</div>
+              <div style={artifactsSubLabelStyle}>{t("im.taskMonitor.files")}</div>
               {artifacts.map((file, i) => (
                 <div key={i} style={artifactItemStyle}>
                   <span style={artifactIconStyle}>{file.type === "directory" ? "📁" : "📄"}</span>
@@ -144,12 +144,12 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
               ))}
             </div>
           ) : (
-            <div style={emptyHintStyle}>{isZh ? "暂无产物" : "No artifacts yet"}</div>
+            <div style={emptyHintStyle}>{t("im.taskMonitor.no_artifacts")}</div>
           )}
         </CollapsibleSection>
 
         {/* 技能与 MCP */}
-        <CollapsibleSection title={isZh ? "技能与 MCP" : "Skills & MCP"} icon="" defaultOpen={!!usedSkills?.length}>
+        <CollapsibleSection title={t("im.taskMonitor.skills_mcp")} icon="" defaultOpen={!!usedSkills?.length}>
           {usedSkills && usedSkills.length > 0 ? (
             usedSkills.map((skill, i) => (
               <div key={i} style={skillItemStyle}>
@@ -160,27 +160,27 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
               </div>
             ))
           ) : (
-            <div style={emptyHintStyle}>{isZh ? "暂无技能/MCP" : "No skills/MCP yet"}</div>
+            <div style={emptyHintStyle}>{t("im.taskMonitor.no_skills")}</div>
           )}
         </CollapsibleSection>
 
         {/* 意识更新 */}
-        <CollapsibleSection title={isZh ? "意识更新" : "Awareness"} icon="💡" defaultOpen={false}>
+        <CollapsibleSection title={t("im.taskMonitor.awareness")} icon="💡" defaultOpen={false}>
           <div style={awarenessGridStyle}>
             <div style={awarenessBtnStyle}>
               <span>🧠</span>
-              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{isZh ? "记忆" : "Memory"}</span>
+              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{t("im.taskMonitor.memory")}</span>
             </div>
             <div style={awarenessBtnStyle}>
               <span>📅</span>
-              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{isZh ? "日历" : "Calendar"}</span>
+              <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{t("im.taskMonitor.calendar")}</span>
             </div>
           </div>
         </CollapsibleSection>
 
         {/* 调试面板（收拢状态） */}
         {showDebug && (
-          <CollapsibleSection title={isZh ? "调试" : "Debug"} icon="" defaultOpen>
+          <CollapsibleSection title={t("im.taskMonitor.debug")} icon="" defaultOpen>
             <DebugPanel
               vizEvents={vizEvents}
               llmHistory={llmHistory}
@@ -189,7 +189,6 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
               toolStream={toolStream}
               agentError={agentError}
               streamAgentId={streamAgentId}
-              locale={locale}
             />
           </CollapsibleSection>
         )}
@@ -200,17 +199,17 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
         <StatusDot
           color="var(--green)"
           count={nonHumanAgents.filter((a) => agentStatusById[a.id] === "IDLE").length}
-          label={isZh ? "在线" : "Online"}
+          label={t("im.taskMonitor.online")}
         />
         <StatusDot
           color="var(--magenta)"
           count={nonHumanAgents.filter((a) => agentStatusById[a.id] === "BUSY" || agentStatusById[a.id] === "WAKING").length}
-          label={isZh ? "忙碌" : "Busy"}
+          label={t("im.taskMonitor.busy")}
         />
         <StatusDot
           color="var(--text-dim)"
           count={nonHumanAgents.filter((a) => !agentStatusById[a.id]).length}
-          label={isZh ? "空闲" : "Idle"}
+          label={t("im.taskMonitor.idle")}
         />
       </div>
     </div>
@@ -220,26 +219,26 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
 // ─── Debug Panel (original tabs) ────────────────────────────
 
 function DebugPanel({
-  vizEvents, llmHistory, contentStream, reasoningStream, toolStream, agentError, streamAgentId, locale,
+  vizEvents, llmHistory, contentStream, reasoningStream, toolStream, agentError, streamAgentId,
 }: Omit<TaskMonitorProps, "agents" | "agentStatusById" | "groups" | "activeGroupId" | "todoItems" | "artifacts" | "usedSkills">) {
   const [tab, setTab] = useState<"trace" | "events" | "reasoning" | "raw">("trace");
-  const isZh = locale === "zh";
+  const { t } = useI18n();
 
   return (
     <div>
       <div style={{ display: "flex", gap: 2, marginBottom: 6 }}>
-        {(["trace", "events", "reasoning", "raw"] as const).map((t) => (
+        {(["trace", "events", "reasoning", "raw"] as const).map((tabName) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabName}
+            onClick={() => setTab(tabName)}
             style={{
               flex: 1, padding: "4px 8px", fontSize: 10, fontFamily: "var(--font-mono)",
-              background: tab === t ? "var(--bg-hover)" : "var(--bg-card)",
-              color: tab === t ? "var(--cyan)" : "var(--text-dim)",
+              background: tab === tabName ? "var(--bg-hover)" : "var(--bg-card)",
+              color: tab === tabName ? "var(--cyan)" : "var(--text-dim)",
               border: "1px solid var(--border)", borderRadius: 3, cursor: "pointer",
             }}
           >
-            {t === "trace" ? "Trace" : t === "events" ? (isZh ? "事件" : "Events") : t === "reasoning" ? (isZh ? "思考" : "Think") : "Raw"}
+            {tabName === "trace" ? "Trace" : tabName === "events" ? t("im.taskMonitor.events") : tabName === "reasoning" ? t("im.taskMonitor.thinking") : "Raw"}
           </button>
         ))}
       </div>

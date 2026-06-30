@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useMemo } from "react";
 import type { AgentMeta, Group } from "./types";
 
-type AgentRow = {
+export type AgentRow = {
   agent: AgentMeta;
   group: Group | null;
   depth: number;
@@ -13,80 +13,76 @@ type AgentRow = {
   isLast: boolean;
 };
 
+export type AgentTreeResult = {
+  rows: AgentRow[];
+  groupByAgentId: Map<string, Group>;
+};
+
 /**
  * Build tree-structured rows for the agent sidebar.
- * Extracted from IMPageInner (lines 548-612 of original page.tsx).
+ * Returns both rows and groupByAgentId (used by extraGroups in page.tsx).
  */
 export function useAgentTreeLayout(
   agents: AgentMeta[],
   groups: Group[],
   collapsedAgents: Record<string, boolean>,
-): AgentRow[] {
+  humanAgentId: string | null,
+  sessionExists: boolean,
+): AgentTreeResult {
   return useMemo(() => {
+    const groupByAgentId = new Map<string, Group>();
+    if (!sessionExists) return { rows: [], groupByAgentId };
+
+    // Build group lookup — exclude humanAgentId from memberIds
+    for (const g of groups) {
+      if (humanAgentId && !g.memberIds.includes(humanAgentId)) continue;
+      const others = g.memberIds.filter((id) => id !== humanAgentId);
+      if (others.length === 1) groupByAgentId.set(others[0], g);
+    }
+
     const byId = new Map(agents.map((a) => [a.id, a]));
     const childrenById = new Map<string, AgentMeta[]>();
     const roots: AgentMeta[] = [];
     const byCreatedAt = (a: AgentMeta, b: AgentMeta) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
 
-    // Build parent-child relationships
     for (const agent of agents) {
-      const pid = agent.parentId;
-      if (!pid || !byId.has(pid)) {
-        roots.push(agent);
-      } else {
-        const list = childrenById.get(pid) ?? [];
+      if (agent.role === "human") continue;
+      const parentId = agent.parentId;
+      const parent = parentId && parentId !== agent.id ? byId.get(parentId) : null;
+      if (parent && parent.role !== "human" && parent.id !== agent.id) {
+        const list = childrenById.get(parent.id) ?? [];
         list.push(agent);
-        childrenById.set(pid, list);
+        childrenById.set(parent.id, list);
+      } else {
+        roots.push(agent);
       }
     }
-    // Sort siblings by creation time
-    for (const [, kids] of childrenById) kids.sort(byCreatedAt);
+
+    for (const list of childrenById.values()) list.sort(byCreatedAt);
     roots.sort(byCreatedAt);
 
-    // Build group lookup
-    const groupByAgentId = new Map<string, Group>();
-    for (const g of groups) {
-      const nonHumanMember = g.memberIds.find((mid) => mid !== g.creatorId);
-      if (nonHumanMember) groupByAgentId.set(nonHumanMember, g);
-    }
-
-    const rows: Array<{
-      agent: AgentMeta;
-      group: Group | null;
-      depth: number;
-      hasChildren: boolean;
-      collapsed: boolean;
-      guides: boolean[];
-      isLast: boolean;
-    }> = [];
-
+    const rows: AgentRow[] = [];
     const walk = (agent: AgentMeta, depth: number, guides: boolean[], isLast: boolean) => {
-      const group = groupByAgentId.get(agent.id) ?? null;
-      const kids = childrenById.get(agent.id) ?? [];
-      const collapsed = collapsedAgents[agent.id] ?? false;
+      const children = childrenById.get(agent.id) ?? [];
+      const collapsed = !!collapsedAgents[agent.id];
       rows.push({
         agent,
-        group,
+        group: groupByAgentId.get(agent.id) ?? null,
         depth,
-        hasChildren: kids.length > 0,
+        hasChildren: children.length > 0,
         collapsed,
         guides,
         isLast,
       });
-      if (!collapsed && kids.length > 0) {
-        for (let i = 0; i < kids.length; i++) {
-          const child = kids[i];
-          const childGuides = [...guides, !isLast];
-          walk(child, depth + 1, childGuides, i === kids.length - 1);
-        }
-      }
+      if (collapsed) return;
+      const nextGuides = [...guides, !isLast];
+      children.forEach((child, index) => {
+        walk(child, depth + 1, nextGuides, index === children.length - 1);
+      });
     };
+    roots.forEach((root, index) => walk(root, 0, [], index === roots.length - 1));
 
-    for (let i = 0; i < roots.length; i++) {
-      walk(roots[i], 0, [], i === roots.length - 1);
-    }
-
-    return rows;
-  }, [agents, groups, collapsedAgents]);
+    return { rows, groupByAgentId };
+  }, [agents, groups, collapsedAgents, humanAgentId, sessionExists]);
 }

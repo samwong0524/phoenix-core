@@ -1,8 +1,5 @@
 import { memo } from "react";
-
-function cx(...classes: Array<string | false | undefined | null>): string {
-  return classes.filter(Boolean).join(" ");
-}
+import { cx } from "./helpers";
 
 type IMHistoryListProps = {
   entries: any[];

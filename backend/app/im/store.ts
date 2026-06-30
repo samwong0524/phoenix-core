@@ -1,98 +1,10 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-
-// ── Shared types ──────────────────────────────────────────────
-
-export type UUID = string;
-
-export type ModelEntry = {
-  id: string;
-  displayName: string;
-  platform: string;
-};
-
-export type WorkspaceDefaults = {
-  workspaceId: UUID;
-  humanAgentId: UUID;
-  assistantAgentId: UUID;
-  defaultGroupId: UUID;
-};
-
-export type AgentMeta = {
-  id: UUID;
-  role: string;
-  parentId: UUID | null;
-  createdAt: string;
-};
-
-export type AgentStatus = "IDLE" | "BUSY" | "WAKING";
-
-export type Group = {
-  id: UUID;
-  name: string | null;
-  memberIds: UUID[];
-  unreadCount: number;
-  contextTokens: number;
-  lastMessage?: {
-    content: string;
-    contentType: string;
-    sendTime: string;
-    senderId: UUID;
-  };
-  updatedAt: string;
-  createdAt: string;
-};
-
-export type Message = {
-  id: UUID;
-  senderId: UUID;
-  content: string;
-  contentType: string;
-  sendTime: string;
-};
-
-export type VizEvent = {
-  id: string;
-  kind: "agent" | "message" | "llm" | "tool" | "db" | "skill";
-  label: string;
-  at: number;
-};
-
-export type VizBeam = {
-  id: string;
-  fromId: UUID;
-  toId: UUID;
-  kind: "create" | "message";
-  label?: string;
-  createdAt: number;
-};
-
-export type VizDebugEntry = {
-  id: string;
-  at: number;
-  type: "message_event" | "beam_created" | "beam_skipped";
-  data: Record<string, unknown>;
-};
-
-export type SkillSuggestion = {
-  id: string;
-  skillName: string;
-  confidence: number;
-  reason: string;
-  triggerPattern: string;
-  createdAt: number;
-};
-
-export type RightPanelId = "history" | "content" | "reasoning" | "tools";
-
-export type RightPanelState = {
-  id: RightPanelId;
-  title: string;
-  size: number;
-  collapsed: boolean;
-};
-
-export type BootStatus = "boot" | "groups" | "messages" | "send" | "idle";
+import type {
+  UUID, ModelEntry, WorkspaceDefaults, AgentMeta, AgentStatus,
+  Group, Message, VizEvent, VizBeam, VizDebugEntry,
+  RightPanelState, SkillSuggestion, BootStatus,
+} from "./types";
 
 // ── Store interface ───────────────────────────────────────────
 

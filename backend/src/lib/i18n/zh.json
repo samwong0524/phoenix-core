@@ -76,7 +76,28 @@
     "default_workspace": "Default Workspace",
     "new_workspace": "New Workspace",
     "llm_history_fail": "(加载 llm_history 失败: {error})",
-    "llm_history_fail_generic": "(加载 llm_history 失败)"
+    "llm_history_fail_generic": "(加载 llm_history 失败)",
+    "taskMonitor": {
+      "title": "任务监控",
+      "debug": "调试",
+      "debug_panel": "调试面板",
+      "todo": "待办",
+      "no_tasks": "暂无待办任务",
+      "artifacts": "产物",
+      "files": "文件",
+      "no_artifacts": "暂无产物",
+      "skills_mcp": "技能与 MCP",
+      "no_skills": "暂无技能/MCP",
+      "awareness": "意识更新",
+      "memory": "记忆",
+      "calendar": "日历",
+      "online": "在线",
+      "busy": "忙碌",
+      "idle": "空闲",
+      "events": "事件",
+      "thinking": "思考",
+      "answered": "已回复"
+    }
   },
   "monitor": {
     "agents": "Agents",
