@@ -1,0 +1,59 @@
+{
+  "skill": "brief",
+  "generated_at": "2026-06-30T17:30:00+08:00",
+  "project_name": "Phoenix-Core",
+  "project_type": "产品设计",
+  "project_subtype": "产品改版",
+  "business_context": "Phoenix-Core 多 Agent 蜂群系统前端已完成 4 阶段商用化（TSC 0、570 tests、81% 覆盖），但启发评估发现 48 个体验问题（7 blocker / 41 major），首次使用引导和响应式适配为系统性缺失。",
+  "business_goal": [
+    "新用户 5 分钟内完成首次 Agent 交互",
+    "Blocker 级 UX 问题清零（7 项）",
+    "错误反馈模式统一为 1 种标准组件",
+    "核心页面移动端可用率 > 80%"
+  ],
+  "user": [
+    "AI 研发工程师——日常创建/监控多 Agent 协作任务",
+    "工作流开发者——构建和调试 Workflow/Pipeline DAG",
+    "运维人员——实时观测 Agent 运行状态和系统指标",
+    "首次接触多 Agent 聊天范式的新用户"
+  ],
+  "strategy_dimensions": [
+    {
+      "dimension": "多端适配",
+      "thesis": "全局响应式策略，4 页移动端可用",
+      "tactics": [
+        "侧栏→滑出抽屉 + 汉堡菜单",
+        "右面板→底部 sheet 折叠",
+        "CSS Grid minmax + 断点策略"
+      ],
+      "rationale": "audit-2/5/6/44/20；4 核心页面移动端完全不可用，是系统性架构问题"
+    }
+  ],
+  "design_criteria": {
+    "quantitative": [
+      "移动端可用率 > 80%",
+      "核心任务操作步骤 ≤ 3",
+      "触摸目标 ≥ 44px"
+    ],
+    "qualitative": [
+      "断点切换无布局崩坏"
+    ]
+  },
+  "constraints": [
+    "Next.js 16 + React 19 + Tailwind v4 不变",
+    "Zustand + Immer 状态管理架构保留",
+    "后端 SSE / REST API 接口不变",
+    "framer-motion（Corporate 调性）延续",
+    "8 周完成改版"
+  ],
+  "out_of_scope": [
+    "后端 Agent 运行时架构不改",
+    "数据库 schema 不变",
+    "OAuth 认证流程不改",
+    "不引入新的状态管理库",
+    "i18n 方案（React Context + Cookie）不变"
+  ],
+  "style": "chalk",
+  "ratio": "16-9",
+  "scale": "md"
+}

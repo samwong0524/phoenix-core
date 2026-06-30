@@ -1,0 +1,60 @@
+{
+  "skill": "flow-web",
+  "generated_at": "2026-06-30T20:00:00+08:00",
+  "project_name": "Phoenix-Core",
+  "scenario": "AI Product",
+  "component_library": "shadcn/ui",
+  "tech_stack": {
+    "framework": "Next.js 16",
+    "react": "19",
+    "styling": "Tailwind v4 + CSS variables",
+    "animation": "framer-motion 11",
+    "icons": "lucide-react"
+  },
+  "flows": [
+    {
+      "name": "IM Responsive Chat",
+      "screens": [
+        {
+          "number": 1,
+          "name": "Desktop Full Layout",
+          "breakpoint": "≥1024px",
+          "file_path": "spark-output/flow-web/flow-1/im-responsive.tsx",
+          "components": ["Sidebar (220px)", "ChatArea", "TaskPanel (280px)"]
+        },
+        {
+          "number": 2,
+          "name": "Tablet Layout",
+          "breakpoint": "768-1023px",
+          "file_path": "spark-output/flow-web/flow-1/im-responsive.tsx",
+          "components": ["Hamburger Button", "Drawer Sidebar (280px)", "ChatArea", "Collapsed Panel"]
+        },
+        {
+          "number": 3,
+          "name": "Mobile Layout",
+          "breakpoint": "<768px",
+          "file_path": "spark-output/flow-web/flow-1/im-responsive.tsx",
+          "components": ["Hamburger Button", "Drawer Sidebar (85vw)", "ChatArea (full-width)", "Bottom Sheet Trigger"]
+        },
+        {
+          "number": 4,
+          "name": "Mobile Bottom Sheet",
+          "breakpoint": "<768px",
+          "file_path": "spark-output/flow-web/flow-1/im-responsive.tsx",
+          "components": ["Bottom Sheet (60vh)", "Task List", "Progress Bar", "Drag Handle"]
+        }
+      ],
+      "related_stories": ["story-1", "story-2"]
+    }
+  ],
+  "responsive_patterns": {
+    "breakpoints": [
+      { "name": "mobile", "query": "(max-width: 767px)" },
+      { "name": "tablet", "query": "(min-width: 768px) and (max-width: 1023px)" },
+      { "name": "desktop", "query": "(min-width: 1024px)" }
+    ],
+    "sidebar_behavior": "Desktop: 220px fixed | Tablet: 280px drawer overlay | Mobile: 85vw drawer overlay",
+    "right_panel_behavior": "Desktop: 280px fixed | Tablet: 48px icon strip | Mobile: bottom sheet (60vh)",
+    "touch_targets": "≥44px on tablet, ≥48px on mobile"
+  }
+}

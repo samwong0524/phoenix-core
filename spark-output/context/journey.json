@@ -1,0 +1,127 @@
+{
+  "skill": "journey",
+  "generated_at": "2026-06-30T18:00:00+08:00",
+  "project_name": "Phoenix-Core",
+  "persona": {
+    "name": "AI 研发工程师",
+    "description": "日常创建/监控多 Agent 协作任务，需要快速查看 Agent 状态和执行结果",
+    "jtbd": "当我需要编排多个 Agent 协同完成复杂任务时，我希望快速搭建工作流并实时监控执行状态，以便高效获得结果"
+  },
+  "journey_type": "end-to-end",
+  "stages": [
+    {
+      "name": "Awareness",
+      "emoji": "👀",
+      "order": 1,
+      "user_goal": "了解 Phoenix-Core 是什么，能解决什么问题",
+      "touchpoints": ["GitHub 仓库", "官方文档站", "技术社区/论坛"],
+      "actions": ["GitHub 搜索 multi-agent 项目", "阅读 README 和文档", "同事推荐或技术社区发现"],
+      "thoughts": ["多 Agent 蜂群系统是什么？", "跟 AutoGen 有什么不同？"],
+      "emotion": "😐",
+      "pain_level": 2,
+      "quotes": ["搜了一圈发现这个蜂群系统，名字挺酷"],
+      "pain_points": ["缺乏直观的产品价值展示", "多 Agent 概念不直观"],
+      "opportunities": ["增加产品 Landing Page 价值展示"]
+    },
+    {
+      "name": "Consideration",
+      "emoji": "🤔",
+      "order": 2,
+      "user_goal": "判断多 Agent 蜂群系统是否适合自己的开发场景",
+      "touchpoints": ["README / 功能截图", "在线 Demo（如有）", "技术评测文章"],
+      "actions": ["浏览功能列表和截图", "对比 AutoGen / CrewAI", "评估技术栈兼容性"],
+      "thoughts": ["Agent 群组是怎么协作的？", "前端体验看起来还行"],
+      "emotion": "😐",
+      "pain_level": 3,
+      "quotes": ["Agent 群组 + 技能附加，概念有点多"],
+      "pain_points": ["功能列表缺少使用场景映射", "无在线 Demo 可体验"],
+      "opportunities": ["场景化功能介绍替代功能列表"]
+    },
+    {
+      "name": "Onboarding",
+      "emoji": "🚀",
+      "order": 3,
+      "user_goal": "完成环境搭建，登录系统，看到第一个可交互界面",
+      "touchpoints": ["登录页 (login/page)", "IM 主界面 (im/page)", "目录浏览器组件"],
+      "actions": ["Clone 仓库 / 部署环境", "OAuth 登录系统", "进入 IM 主界面", "尝试选择工作目录"],
+      "thoughts": ["这 3 栏布局是干嘛的？", "@ 是什么意思？怎么触发？", "目录浏览器怎么用？"],
+      "emotion": "😡",
+      "pain_level": 5,
+      "quotes": ["进去三栏全是空的，完全不知道该干嘛"],
+      "pain_points": ["无任何首次使用引导 (audit-1)", "三栏布局无解释 (audit-16)", "@skill 语法需偶然发现 (audit-19)", "移动端完全不可用 (audit-2)"],
+      "opportunities": ["实现首次使用引导体系 (HIGH)", "全站响应式适配 (HIGH)"]
+    },
+    {
+      "name": "Activation",
+      "emoji": "⚡",
+      "order": 4,
+      "user_goal": "成功发送第一条消息并收到 Agent 响应",
+      "touchpoints": ["IM 聊天输入框", "@技能自动完成", "Agent 响应流", "拓扑可视化面板"],
+      "actions": ["在 Agent 群组中 @技能", "发送第一条任务消息", "查看 Agent 响应和推理过程", "观察拓扑可视化变化"],
+      "thoughts": ["Agent 回复了！原来是这样", "拓扑图在动，能看到谁在工作"],
+      "emotion": "😊",
+      "pain_level": 1,
+      "quotes": ["哦！@ 一下居然能调技能，拓扑图也动了"],
+      "pain_points": ["15+ 信息区域同时可见 (audit-17)", "文件上传无进度 (audit-8)", "Ctrl+Enter 快捷键无提示 (audit-15)"],
+      "opportunities": ["信息密度渐进式展示", "快捷键提示内联化"]
+    },
+    {
+      "name": "Engagement",
+      "emoji": "🔧",
+      "order": 5,
+      "user_goal": "用 Workflow/Pipeline 编排日常开发任务",
+      "touchpoints": ["Workflow 编辑器", "Pipeline 监控面板", "Skills 管理页", "Observability 仪表盘"],
+      "actions": ["创建 Workflow DAG", "运行 Pipeline 任务", "查看 Observability 指标", "管理 Skills 和 Models"],
+      "thoughts": ["节点删了怎么没有撤销？", "事件流 JSON 看不懂", "SSE 断了怎么不重连？"],
+      "emotion": "😕",
+      "pain_level": 4,
+      "quotes": ["节点不小心按了 Delete 就没了？没撤销？"],
+      "pain_points": ["Workflow 无撤销/重做 (audit-3)", "节点删除无确认 (audit-4)", "SSE 断连无重连 (audit-27)", "事件流 dump 原始 JSON (audit-29)"],
+      "opportunities": ["撤销/恢复 + 破坏性操作防护 (HIGH)", "错误反馈标准化 (HIGH)"]
+    },
+    {
+      "name": "Retention",
+      "emoji": "🔄",
+      "order": 6,
+      "user_goal": "形成稳定的多 Agent 协作工作模式",
+      "touchpoints": ["Settings 配置页", "Graph 拓扑页", "IM 多 Agent 协作", "Workflow 模板库"],
+      "actions": ["建立常用 Workflow 模板", "配置自定义 Agent 群组", "通过 Graph 页监控全局", "调整设置优化体验"],
+      "thoughts": ["已经习惯多 Agent 模式了", "Observability 还没仔细看过"],
+      "emotion": "🙂",
+      "pain_level": 2,
+      "quotes": ["习惯了之后确实比手动编排快很多"],
+      "pain_points": ["Settings 仅 4 项配置 (audit-33)", "Observability 图表数据不全 (audit-42)"],
+      "opportunities": ["监控与可观测性增强"]
+    },
+    {
+      "name": "Advocacy",
+      "emoji": "📣",
+      "order": 7,
+      "user_goal": "向团队推广多 Agent 协作模式",
+      "touchpoints": ["GitHub Issues / Discussions", "团队内部分享", "技术博客"],
+      "actions": ["分享 Workflow 给团队", "写使用心得或 Blog", "提交 Feature Request"],
+      "thoughts": ["多 Agent 确实提升了效率", "推荐给团队试试"],
+      "emotion": "😊",
+      "pain_level": 1,
+      "quotes": ["这套多 Agent 模式值得团队推广"],
+      "pain_points": ["暂无 Workflow 模板分享机制"],
+      "opportunities": ["Workflow 模板分享与社区"]
+    }
+  ],
+  "emotion_curve": [
+    { "stage_order": 1, "pain_level": 2 },
+    { "stage_order": 2, "pain_level": 3 },
+    { "stage_order": 3, "pain_level": 5 },
+    { "stage_order": 4, "pain_level": 1 },
+    { "stage_order": 5, "pain_level": 4 },
+    { "stage_order": 6, "pain_level": 2 },
+    { "stage_order": 7, "pain_level": 1 }
+  ],
+  "key_moments": [
+    { "stage_order": 3, "type": "dropout-risk", "description": "Onboarding 无任何引导（audit-1/16/19），用户面对 3 栏布局 + 15 信息区完全不知所措，pain_level=5 为全旅程最高" },
+    { "stage_order": 4, "type": "moment-of-truth", "description": "首次在 Agent 群组 @skill 发送任务并收到响应 + 拓扑图联动，多 Agent 协作价值首次感知" },
+    { "stage_order": 5, "type": "dropout-risk", "description": "Workflow 无撤销（audit-3）、节点删除无确认（audit-4）、SSE 断连无重连（audit-27），破坏性操作导致数据丢失" },
+    { "stage_order": 7, "type": "delight", "description": "多 Agent 协作模式成熟，开发效率提升，愿意向团队推荐" }
+  ],
+  "journey_file": "spark-output/journey/phoenix-core.html"
+}

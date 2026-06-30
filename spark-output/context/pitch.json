@@ -1,0 +1,60 @@
+{
+  "skill": "pitch",
+  "generated_at": "2026-06-30T22:30:00+08:00",
+  "project_name": "Phoenix-Core",
+  "audience": "mixed",
+  "format": "doc",
+  "pitch_file": "spark-output/pitch/multi-platform-blocker-fix.md",
+  "sections": {
+    "the_bet": {
+      "one_liner": "全局响应式降级 + 4 项 Blocker 修复",
+      "success_metric": "移动端可用率 0%→80%，8 周交付"
+    },
+    "why_now": "4 阶段商用化完成但 48 个体验问题积债，移动端 0% 可用，竞品无 Web UI 窗口期",
+    "user_jtbd": {
+      "persona_name": "陈昊",
+      "persona_description": "28 岁 AI 研发工程师，工位和会议室之间切换",
+      "jtbd": "在任意设备上编排多 Agent 并监控执行状态"
+    },
+    "direction": {
+      "chosen": "全局响应式降级 + Blocker 修复",
+      "chosen_id": "A",
+      "alternatives_considered": [
+        "B: 纯桌面端深度优化（不押：忽略 50%+ 移动场景）",
+        "C: Native Mobile App（不押：维护成本翻倍，8 周不够）"
+      ],
+      "why_this_one": "移动端是竞品空白 + 系统性体验障碍是当前最大阻塞",
+      "key_risk": "移动端无实际使用场景",
+      "critical_assumption": "陈昊确实会在移动端查看和操作 Agent 任务"
+    },
+    "design_decisions": [
+      { "decision": "三档断点策略", "rationale": "复杂组件需独立布局策略", "evidence": "flow-web 4 屏原型验证", "related_screen": "IM Page" },
+      { "decision": "侧栏→抽屉 + 面板→底部 Sheet", "rationale": "导航低频→抽屉，监控高频→Sheet", "evidence": "stories-1 验收标准", "related_screen": "IM Mobile" },
+      { "decision": "Zustand temporal middleware 做撤销", "rationale": "官方生态零侵入", "evidence": "audit-3 blocker", "related_screen": "Workflow" },
+      { "decision": "全局 Toast 先行（基础设施优先）", "rationale": "5 种错误模式需先统一", "evidence": "check F-011~F-035", "related_screen": "Global" },
+      { "decision": "Workflow 手机先只读后编辑", "rationale": "780px 最小宽度限制", "evidence": "stories-3 risk", "related_screen": "Workflow Canvas Mobile" }
+    ],
+    "asks": [
+      { "ask": "移动端可用率 > 80% 作为核心验证指标", "why_needed": "决定改版方向优先级", "decision_needed_by": "本周内", "impact_if_no_decision": "Story 优先级无法排序" },
+      { "ask": "v1 MVP 是否包含首次使用引导", "why_needed": "直接影响 Onboarding pain_level=5", "decision_needed_by": "下周初", "impact_if_no_decision": "引导组件无法排入 sprint" },
+      { "ask": "Workflow 手机编辑纳入 v1 还是 Phase 2", "why_needed": "影响 8 周工期分配", "decision_needed_by": "第 2 周", "impact_if_no_decision": "Workflow 改造范围不明确" },
+      { "ask": "8 周工期 + 渐进式改造策略", "why_needed": "IM 1060 行改造方式决定风险", "decision_needed_by": "本周内", "impact_if_no_decision": "可能延长到 10-12 周" },
+      { "ask": "CI workflow PAT workflow scope", "why_needed": "CI 流水线无法推送", "decision_needed_by": "本周内", "impact_if_no_decision": "自动化测试保障缺失" }
+    ]
+  },
+  "source_skills": {
+    "frame": false,
+    "scope": false,
+    "audit": true,
+    "brief": true,
+    "stories": true,
+    "flow_web": true,
+    "flow_mobile": false,
+    "check": true,
+    "qa": false,
+    "edge": true,
+    "journey": true,
+    "prd": true
+  },
+  "thin_sections": []
+}

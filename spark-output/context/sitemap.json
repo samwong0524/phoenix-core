@@ -1,0 +1,189 @@
+{
+  "skill": "sitemap",
+  "generated_at": "2026-06-30T19:00:00+08:00",
+  "project_name": "Phoenix-Core",
+  "platform": "multi",
+  "primary_navigation": [
+    {
+      "id": "im",
+      "label": "IM",
+      "route": "/im",
+      "icon_hint": "message-square",
+      "children": []
+    },
+    {
+      "id": "workflow",
+      "label": "Workflow",
+      "route": "/workflow",
+      "icon_hint": "git-branch",
+      "children": []
+    },
+    {
+      "id": "pipeline",
+      "label": "Pipeline",
+      "route": "/pipeline",
+      "icon_hint": "activity",
+      "children": []
+    },
+    {
+      "id": "skills",
+      "label": "技能",
+      "route": "/skills",
+      "icon_hint": "zap",
+      "children": []
+    },
+    {
+      "id": "models",
+      "label": "模型",
+      "route": "/models",
+      "icon_hint": "cpu",
+      "children": []
+    },
+    {
+      "id": "observability",
+      "label": "可观测",
+      "route": "/observability",
+      "icon_hint": "bar-chart-2",
+      "children": []
+    },
+    {
+      "id": "graph",
+      "label": "拓扑",
+      "route": "/graph",
+      "icon_hint": "network",
+      "children": []
+    },
+    {
+      "id": "settings",
+      "label": "设置",
+      "route": "/settings",
+      "icon_hint": "settings",
+      "children": []
+    }
+  ],
+  "pages": [
+    {
+      "id": "page-login",
+      "route": "/login",
+      "label": "登录",
+      "purpose": "OAuth 认证入口，认证成功后跳转 IM 工作台",
+      "parent": null,
+      "access": "public",
+      "related_features": ["认证流程"],
+      "related_stories": ["story-5"]
+    },
+    {
+      "id": "page-home",
+      "route": "/",
+      "label": "工作台首页",
+      "purpose": "已登录用户的工作台入口，重定向到 IM 页面",
+      "parent": null,
+      "access": "authenticated",
+      "related_features": ["多端适配"],
+      "related_stories": []
+    },
+    {
+      "id": "page-im",
+      "route": "/im",
+      "label": "IM 工作台",
+      "purpose": "核心工作区：多 Agent 群组聊天 + 拓扑可视化 + 任务监控三栏布局",
+      "parent": "im",
+      "access": "authenticated",
+      "related_features": ["多端适配", "首次使用引导", "信息密度优化"],
+      "related_stories": ["story-1", "story-2", "story-5"]
+    },
+    {
+      "id": "page-workflow",
+      "route": "/workflow",
+      "label": "Workflow 编辑器",
+      "purpose": "可视化 DAG 编辑器：节点调色板 + 画布 + 属性面板，支持拖拽创建/编辑/运行工作流",
+      "parent": "workflow",
+      "access": "authenticated",
+      "related_features": ["多端适配", "撤销/恢复", "破坏性操作防护"],
+      "related_stories": ["story-3", "story-4"]
+    },
+    {
+      "id": "page-pipeline",
+      "route": "/pipeline",
+      "label": "Pipeline 监控",
+      "purpose": "实时 Pipeline 执行监控：阶段进度 + SSE 事件流 + Review 审批",
+      "parent": "pipeline",
+      "access": "authenticated",
+      "related_features": ["SSE 重连", "错误反馈标准化"],
+      "related_stories": ["story-6"]
+    },
+    {
+      "id": "page-skills",
+      "route": "/skills",
+      "label": "技能管理",
+      "purpose": "MCP Skills 列表：安装/卸载/配置，查看已注册技能",
+      "parent": "skills",
+      "access": "authenticated",
+      "related_features": ["错误反馈标准化"],
+      "related_stories": ["story-6"]
+    },
+    {
+      "id": "page-models",
+      "route": "/models",
+      "label": "模型配置",
+      "purpose": "LLM Provider 管理：API Key 配置、模型列表、连通性测试",
+      "parent": "models",
+      "access": "authenticated",
+      "related_features": ["错误反馈标准化"],
+      "related_stories": ["story-6"]
+    },
+    {
+      "id": "page-observability",
+      "route": "/observability",
+      "label": "可观测性",
+      "purpose": "系统指标仪表盘：Agent 调用成功率、响应时间、错误率图表",
+      "parent": "observability",
+      "access": "authenticated",
+      "related_features": ["监控与可观测性增强"],
+      "related_stories": []
+    },
+    {
+      "id": "page-graph",
+      "route": "/graph",
+      "label": "Agent 拓扑",
+      "purpose": "Agent 关系可视化：节点为 Agent，边为通信关系，支持缩放/平移/节点详情",
+      "parent": "graph",
+      "access": "authenticated",
+      "related_features": ["监控与可观测性增强"],
+      "related_stories": []
+    },
+    {
+      "id": "page-settings",
+      "route": "/settings",
+      "label": "设置",
+      "purpose": "用户偏好配置：语言切换、主题选择、LLM 默认模型、关于信息",
+      "parent": "settings",
+      "access": "authenticated",
+      "related_features": ["多端适配"],
+      "related_stories": []
+    }
+  ],
+  "key_flows": [
+    {
+      "name": "首次登录引导",
+      "page_sequence": ["page-login", "page-home", "page-im"]
+    },
+    {
+      "name": "IM 多 Agent 交互",
+      "page_sequence": ["page-im"]
+    },
+    {
+      "name": "Workflow 创建与运行",
+      "page_sequence": ["page-workflow", "page-pipeline"]
+    },
+    {
+      "name": "系统监控与诊断",
+      "page_sequence": ["page-observability", "page-graph"]
+    }
+  ],
+  "metadata": {
+    "depth_max": 1,
+    "page_count": 10,
+    "platform_notes": "Multi 端：Web 桌面侧栏导航 + Mobile 响应式降级（侧栏→抽屉，面板→底部 sheet）。8 项主导航通过侧栏滚动容纳。"
+  }
+}

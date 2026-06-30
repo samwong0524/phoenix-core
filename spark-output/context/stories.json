@@ -1,0 +1,121 @@
+{
+  "skill": "stories",
+  "generated_at": "2026-06-30T18:30:00+08:00",
+  "project_name": "Phoenix-Core",
+  "direction": "多端适配改版 + 高优先级 Blocker 修复",
+  "persona": {
+    "name": "陈昊",
+    "description": "28 岁 AI 研发工程师，日常创建/监控多 Agent 协作任务，经常在工位和会议室之间切换",
+    "jtbd": "当陈昊需要编排多个 Agent 协同完成复杂开发任务时，陈昊想快速搭建工作流并实时监控执行状态，从而高效获得结果——无论他在工位还是在路上"
+  },
+  "stories": [
+    {
+      "id": "story-1",
+      "title": "陈昊在手机上也能顺畅查看 Agent 聊天进度",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊从会议室出来，掏出手机查看 Agent 群组最新执行状态",
+      "acceptance_criteria": [
+        "375px 宽手机上看到完整聊天记录，不需要横向滚动",
+        "点击汉堡菜单 0.3 秒内展开侧栏",
+        "触摸滚动聊天消息，触摸目标不小于 44px",
+        "手机上看到 Agent 活动状态文字（已走 i18n）"
+      ],
+      "design_touchpoints": ["screen:im/page", "component:hamburger-menu", "component:drawer", "component:chat-bubble", "state:loading", "state:normal", "state:empty", "pattern:responsive-layout", "pattern:drawer-navigation"],
+      "related_strategy_dimension": "多端适配",
+      "risk": "IM 页面 1060 行复杂组件，响应式改造需重构布局策略，工程量最大但是核心",
+      "priority": "p0",
+      "critical_assumption": true
+    },
+    {
+      "id": "story-2",
+      "title": "陈昊的三栏布局在平板上自动折叠为侧栏抽屉",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊用 iPad 在沙发上查看和调整 Agent 配置",
+      "acceptance_criteria": [
+        "768px 宽平板上侧栏默认隐藏，聊天区占满可用宽度",
+        "从左边缘向右滑动展开侧栏",
+        "点击侧栏中群组后侧栏自动收回",
+        "触摸操作全部在 44px 触摸目标内"
+      ],
+      "design_touchpoints": ["screen:im/page", "component:drawer", "component:touch-gesture", "component:group-list", "component:overlay", "state:drawer-closed", "state:drawer-open", "state:switching", "pattern:swipe-gesture", "pattern:responsive-breakpoint"],
+      "related_strategy_dimension": "多端适配",
+      "risk": "平板是桌面到手机的过渡地带，断点选择（768 vs 1024）和抽屉模式（overlay vs push）是关键决策",
+      "priority": "p0",
+      "critical_assumption": false
+    },
+    {
+      "id": "story-3",
+      "title": "陈昊在手机上编辑 Workflow 时不再丢失节点",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊收到同事消息说 Workflow 节点参数不对，掏出手机快速修正",
+      "acceptance_criteria": [
+        "手机上看到 Workflow 画布自动缩放为只读概览",
+        "点击节点后底部弹出配置 sheet（不超过屏幕 60% 高度）",
+        "能在 sheet 表单中修改参数并保存，保存后有明确成功反馈",
+        "双指缩放手势能放大/缩小画布"
+      ],
+      "design_touchpoints": ["screen:workflow/page", "screen:WorkflowCanvas", "component:canvas-zoom", "component:bottom-sheet", "component:form", "state:readonly-overview", "state:node-selected", "state:editing", "state:saving", "state:save-success", "pattern:pinch-zoom", "pattern:bottom-sheet"],
+      "related_strategy_dimension": "多端适配",
+      "risk": "Workflow Canvas 三面板最小宽度 780px，手机上完整编辑不现实，建议先做只读(P0)编辑放 P1",
+      "priority": "p0",
+      "critical_assumption": false
+    },
+    {
+      "id": "story-4",
+      "title": "陈昊误删 Agent 节点后能一键撤销",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊拖拽节点时手滑按到 Delete 键，精心配置的节点消失",
+      "acceptance_criteria": [
+        "删除节点后 3 秒内看到 toast '节点已删除 · 撤销'",
+        "点击'撤销'后节点原样恢复（含所有配置数据）",
+        "按 Ctrl+Z 也能触发撤销",
+        "连续撤销最多回退 20 步操作"
+      ],
+      "design_touchpoints": ["screen:workflow/page", "screen:WorkflowCanvas", "component:toast-with-action", "component:undo-stack", "state:normal", "state:node-deleted", "state:undoing", "state:undo-success", "pattern:undo-redo", "pattern:keyboard-shortcut"],
+      "related_strategy_dimension": "撤销/恢复与破坏性操作防护",
+      "risk": "修复成本最低（quick-win），Zustand+Immer 天然支持 temporal middleware，但应做成全局通用组件覆盖 Skills/Stop All/Pipeline Review",
+      "priority": "p0",
+      "critical_assumption": false
+    },
+    {
+      "id": "story-5",
+      "title": "陈昊第一次打开系统就知道各面板是干嘛的",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊 OAuth 登录成功后第一次进入 IM 页面",
+      "acceptance_criteria": [
+        "首次登录后看到 3-4 步引导覆盖三个主面板",
+        "可以点'跳过'直接关闭引导",
+        "引导结束后 30 秒内输入框看到 @skill 提示",
+        "可以在设置里选择'重新播放引导'"
+      ],
+      "design_touchpoints": ["screen:im/page", "screen:IMShell", "screen:login-redirect", "component:onboarding-tour", "component:coachmark", "component:skip-button", "state:first-visit", "state:tour-in-progress", "state:tour-completed", "state:tour-skipped", "pattern:onboarding-tour", "pattern:progressive-disclosure"],
+      "related_strategy_dimension": "首次使用引导体系",
+      "risk": "Audit Blocker 但 Brief 策略维度未选此项，降为 P1 合理。建议作为改版'顺手做'的 quick-win（react-joyride 接入 + 4 步文案）",
+      "priority": "p1",
+      "critical_assumption": false
+    },
+    {
+      "id": "story-6",
+      "title": "陈昊看到一条统一的错误提示而不是 5 种不同反馈",
+      "size": "story",
+      "persona": "陈昊",
+      "scenario": "陈昊在多个页面遇到操作失败，每次反馈方式不同（toast/alert/静默/inline/无反应）",
+      "acceptance_criteria": [
+        "IM/Workflow/Pipeline/Skills/Models/Settings 6 个页面同样风格 toast 错误提示",
+        "每条 toast 有关闭按钮(X)和自动消失(5 秒)",
+        "可重试错误显示'重试'按钮",
+        "不再出现 alert()/console.error 静默/inline text 混杂模式"
+      ],
+      "design_touchpoints": ["screen:all-pages", "component:unified-toast", "component:error-boundary", "component:retry-button", "state:success", "state:error-retryable", "state:error-permanent", "state:disconnected", "pattern:toast-notification", "pattern:error-boundary", "pattern:retry-pattern"],
+      "related_strategy_dimension": "错误反馈标准化",
+      "risk": "当前 5 种错误模式分布 6 个页面，统一需创建全局 Toast + 逐页替换 catch + 替换 alert()。建议作为基础设施在所有页面级改版前完成",
+      "priority": "p1",
+      "critical_assumption": false
+    }
+  ]
+}

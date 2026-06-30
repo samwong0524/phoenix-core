@@ -1,0 +1,58 @@
+{
+  "skill": "prd",
+  "generated_at": "2026-06-30T22:00:00+08:00",
+  "project_name": "Phoenix-Core",
+  "direction": "多端适配改版 + 高优先级 Blocker 修复",
+  "prd_file": "spark-output/prd/multi-platform-blocker-fix.md",
+  "sections_summary": {
+    "summary": "面向 AI 研发工程师的多 Agent 蜂群系统前端改版，解决移动端不可用、无首次引导、7 Blocker 问题",
+    "primary_persona": "陈昊（28 岁 AI 研发工程师）",
+    "product_goal": "让陈昊在任意设备上 5 分钟内完成首次 Agent 交互，Blocker 级 UX 问题清零",
+    "success_metrics": [
+      { "metric": "移动端可用率", "target": "> 80%", "timeframe": "30 天" },
+      { "metric": "首次交互时间", "target": "≤ 5 分钟", "timeframe": "60 天" },
+      { "metric": "Blocker 清零数", "target": "7/7", "timeframe": "30 天" },
+      { "metric": "错误反馈统一度", "target": "100%", "timeframe": "60 天" },
+      { "metric": "触摸目标合规率", "target": "≥ 95%", "timeframe": "30 天" }
+    ],
+    "feature_count": 6,
+    "in_scope_features": [
+      "IM 三档响应式（mobile/tablet/desktop）",
+      "平板抽屉侧栏 + 手势",
+      "Workflow 手机只读概览 + 底部 Sheet 编辑",
+      "Zustand temporal middleware 撤销/恢复",
+      "首次使用引导（react-joyride）",
+      "全局统一 Toast + Error Boundary"
+    ],
+    "out_of_scope_features": [
+      "后端 Agent 运行时架构",
+      "数据库 schema",
+      "OAuth 认证流程",
+      "i18n 方案",
+      "Pipeline 事件流结构化",
+      "Observability 图表交互",
+      "Workflow 快捷键系统"
+    ],
+    "critical_assumption": "陈昊确实会在移动端查看和操作 Agent 任务——若仅在桌面端工作，响应式 ROI 大幅下降",
+    "mvp_stories": [
+      "Story 6: 统一错误反馈",
+      "Story 1: 移动端 IM",
+      "Story 2: 平板抽屉",
+      "Story 4: 撤销/恢复"
+    ]
+  },
+  "source_skills": {
+    "brief": true,
+    "stories": true,
+    "sitemap": true,
+    "flow_web": true,
+    "flow_mobile": false,
+    "frame": false,
+    "scope": false,
+    "check": true,
+    "journey": true,
+    "edge": true,
+    "audit": true
+  },
+  "thin_sections": []
+}

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Phoenix-Core — User Journey Map</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    body { padding: 32px; background: #FAFAF7; color: #1F2937; }
+    .header { margin-bottom: 24px; }
+    .title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { font-size: 14px; color: #6B7280; }
+    .persona-card { display: inline-flex; align-items: center; padding: 12px 20px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin: 16px 0 32px; }
+    .persona-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #6366F1, #EC4899); margin-right: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; }
+    .persona-info { font-size: 13px; }
+    .persona-info b { display: block; font-size: 15px; color: #111827; }
+    .persona-info span { color: #6B7280; }
+    .jtbd { font-style: italic; padding: 12px 16px; background: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 4px; margin-bottom: 32px; font-size: 14px; }
+    .journey-grid { display: grid; grid-template-columns: 120px repeat(7, 1fr); gap: 1px; background: #E5E7EB; border-radius: 12px; overflow: hidden; }
+    .grid-row { display: contents; }
+    .row-label, .stage-cell { background: white; padding: 14px 12px; font-size: 12px; }
+    .row-label { background: #F3F4F6; font-weight: 600; color: #4B5563; display: flex; align-items: center; }
+    .stage-header { background: #1F2937; color: white; padding: 16px 12px; font-size: 13px; font-weight: 600; text-align: center; }
+    .stage-header .emoji { font-size: 24px; display: block; margin-bottom: 4px; }
+    .stage-cell ul { list-style: none; }
+    .stage-cell li { padding: 4px 0; line-height: 1.4; }
+    .stage-cell li:before { content: "·"; color: #9CA3AF; margin-right: 6px; }
+    .emotion-cell { font-size: 28px; text-align: center; padding: 16px; }
+    .pain-bar { height: 4px; background: linear-gradient(to right, #10B981, #F59E0B, #EF4444); border-radius: 2px; margin-top: 8px; }
+    .pain-indicator { height: 8px; margin-top: 4px; display: flex; gap: 2px; }
+    .pain-indicator span { flex: 1; height: 100%; background: #E5E7EB; border-radius: 1px; }
+    .pain-indicator span.active { background: currentColor; }
+    .key-moment-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-top: 4px; }
+    .key-moment-badge.truth { background: #EFF6FF; color: #2563EB; }
+    .key-moment-badge.dropout { background: #FEE2E2; color: #DC2626; }
+    .key-moment-badge.delight { background: #D1FAE5; color: #059669; }
+    .key-moment-badge.recovery { background: #FEF3C7; color: #D97706; }
+    .opportunity { background: #ECFDF5; padding: 6px 8px; border-radius: 4px; font-size: 11px; color: #047857; margin: 3px 0; }
+    .quote { font-style: italic; color: #4B5563; padding: 6px 8px; background: #F9FAFB; border-left: 3px solid #D1D5DB; font-size: 11px; margin: 3px 0; }
+    .curve-section { margin-top: 32px; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .curve-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .curve-svg { width: 100%; height: 120px; }
+    .footer { margin-top: 24px; text-align: center; color: #9CA3AF; font-size: 11px; }
+    @media print { body { padding: 16px; } .journey-grid { page-break-inside: avoid; } }
+    .toolbar { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
+    .toolbar button { padding: 8px 16px; background: #1F2937; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .toolbar button:hover { background: #374151; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">打印 / PDF</button>
+  </div>
+
+  <div class="header">
+    <div class="title">Phoenix-Core — User Journey Map</div>
+    <div class="subtitle">生成时间: 2026-06-30 · 数据源: audit / brief / check / motion-plan</div>
+  </div>
+
+  <div class="persona-card">
+    <div class="persona-avatar">A</div>
+    <div class="persona-info">
+      <b>AI 研发工程师</b>
+      <span>日常创建/监控多 Agent 协作任务，需要快速查看 Agent 状态和执行结果</span>
+    </div>
+  </div>
+
+  <div class="jtbd">「当我需要编排多个 Agent 协同完成复杂任务时，我希望快速搭建工作流并实时监控执行状态，以便高效获得结果。」</div>
+
+  <div class="journey-grid" style="grid-template-columns: 120px repeat(7, 1fr);">
+    <!-- 表头行 -->
+    <div class="row-label"></div>
+    <div class="stage-header">
+      <span class="emoji">👀</span>
+      Awareness<br><small style="font-weight:400;opacity:0.7">发现</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">🤔</span>
+      Consideration<br><small style="font-weight:400;opacity:0.7">评估</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">🚀</span>
+      Onboarding<br><small style="font-weight:400;opacity:0.7">上手</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">⚡</span>
+      Activation<br><small style="font-weight:400;opacity:0.7">激活</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">🔧</span>
+      Engagement<br><small style="font-weight:400;opacity:0.7">日常使用</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">🔄</span>
+      Retention<br><small style="font-weight:400;opacity:0.7">留存</small>
+    </div>
+    <div class="stage-header">
+      <span class="emoji">📣</span>
+      Advocacy<br><small style="font-weight:400;opacity:0.7">推荐</small>
+    </div>
+
+    <!-- User Goal -->
+    <div class="row-label">用户目标</div>
+    <div class="stage-cell">了解 Phoenix-Core 是什么，能解决什么问题</div>
+    <div class="stage-cell">判断多 Agent 蜂群系统是否适合自己的开发场景</div>
+    <div class="stage-cell">完成环境搭建，登录系统，看到第一个可交互界面</div>
+    <div class="stage-cell">成功发送第一条消息并收到 Agent 响应</div>
+    <div class="stage-cell">用 Workflow/Pipeline 编排日常开发任务</div>
+    <div class="stage-cell">形成稳定的多 Agent 协作工作模式</div>
+    <div class="stage-cell">向团队推广多 Agent 协作模式</div>
+
+    <!-- Actions -->
+    <div class="row-label">用户行动</div>
+    <div class="stage-cell"><ul>
+      <li>GitHub 搜索 multi-agent 项目</li>
+      <li>阅读 README 和文档</li>
+      <li>同事推荐或技术社区发现</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>浏览功能列表和截图</li>
+      <li>对比 AutoGen / CrewAI</li>
+      <li>评估技术栈兼容性</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>Clone 仓库 / 部署环境</li>
+      <li>OAuth 登录系统</li>
+      <li>进入 IM 主界面</li>
+      <li>尝试选择工作目录</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>在 Agent 群组中 @技能</li>
+      <li>发送第一条任务消息</li>
+      <li>查看 Agent 响应和推理过程</li>
+      <li>观察拓扑可视化变化</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>创建 Workflow DAG</li>
+      <li>运行 Pipeline 任务</li>
+      <li>查看 Observability 指标</li>
+      <li>管理 Skills 和 Models</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>建立常用 Workflow 模板</li>
+      <li>配置自定义 Agent 群组</li>
+      <li>通过 Graph 页监控全局</li>
+      <li>调整设置优化体验</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>分享 Workflow 给团队</li>
+      <li>写使用心得或 Blog</li>
+      <li>提交 Feature Request</li>
+    </ul></div>
+
+    <!-- Touchpoints -->
+    <div class="row-label">触点</div>
+    <div class="stage-cell"><ul>
+      <li>GitHub 仓库</li>
+      <li>官方文档站</li>
+      <li>技术社区/论坛</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>README / 功能截图</li>
+      <li>在线 Demo（如有）</li>
+      <li>技术评测文章</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>登录页 (login/page)</li>
+      <li>IM 主界面 (im/page)</li>
+      <li>目录浏览器组件</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>IM 聊天输入框</li>
+      <li>@技能自动完成</li>
+      <li>Agent 响应流</li>
+      <li>拓扑可视化面板</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>Workflow 编辑器</li>
+      <li>Pipeline 监控面板</li>
+      <li>Skills 管理页</li>
+      <li>Observability 仪表盘</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>Settings 配置页</li>
+      <li>Graph 拓扑页</li>
+      <li>IM 多 Agent 协作</li>
+      <li>Workflow 模板库</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>GitHub Issues / Discussions</li>
+      <li>团队内部分享</li>
+      <li>技术博客</li>
+    </ul></div>
+
+    <!-- Thoughts -->
+    <div class="row-label">用户心声</div>
+    <div class="stage-cell"><ul>
+      <li>"多 Agent 蜂群系统是什么？"</li>
+      <li>"跟 AutoGen 有什么不同？"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"Agent 群组是怎么协作的？"</li>
+      <li>"前端体验看起来还行"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"这 3 栏布局是干嘛的？"</li>
+      <li>"@ 是什么意思？怎么触发？"</li>
+      <li>"目录浏览器怎么用？"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"Agent 回复了！原来是这样"</li>
+      <li>"拓扑图在动，能看到谁在工作"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"节点删了怎么没有撤销？"</li>
+      <li>"事件流 JSON 看不懂"</li>
+      <li>"SSE 断了怎么不重连？"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"已经习惯多 Agent 模式了"</li>
+      <li>"Observability 还没仔细看过"</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>"多 Agent 确实提升了效率"</li>
+      <li>"推荐给团队试试"</li>
+    </ul></div>
+
+    <!-- Emotion -->
+    <div class="row-label">情绪</div>
+    <div class="stage-cell emotion-cell">
+      😐
+      <div class="pain-indicator" style="color: #34D399;">
+        <span class="active"></span>
+        <span class="active"></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+    <div class="stage-cell emotion-cell">
+      😐
+      <div class="pain-indicator" style="color: #F59E0B;">
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+    <div class="stage-cell emotion-cell">
+      😡
+      <div class="pain-indicator" style="color: #EF4444;">
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+      </div>
+      <span class="key-moment-badge dropout">流失风险</span>
+    </div>
+    <div class="stage-cell emotion-cell">
+      😊
+      <div class="pain-indicator" style="color: #10B981;">
+        <span class="active"></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <span class="key-moment-badge truth">关键时刻</span>
+    </div>
+    <div class="stage-cell emotion-cell">
+      😕
+      <div class="pain-indicator" style="color: #F97316;">
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+        <span class="active"></span>
+        <span></span>
+      </div>
+      <span class="key-moment-badge dropout">流失风险</span>
+    </div>
+    <div class="stage-cell emotion-cell">
+      🙂
+      <div class="pain-indicator" style="color: #34D399;">
+        <span class="active"></span>
+        <span class="active"></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+    <div class="stage-cell emotion-cell">
+      😊
+      <div class="pain-indicator" style="color: #10B981;">
+        <span class="active"></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <span class="key-moment-badge delight">满意峰值</span>
+    </div>
+
+    <!-- Pain Points -->
+    <div class="row-label">痛点</div>
+    <div class="stage-cell"><ul>
+      <li>缺乏直观的产品价值展示</li>
+      <li>多 Agent 概念不直观</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>功能列表缺少使用场景映射</li>
+      <li>无在线 Demo 可体验</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>无任何首次使用引导 (audit-1)</li>
+      <li>三栏布局无解释 (audit-16)</li>
+      <li>@skill 语法需偶然发现 (audit-19)</li>
+      <li>移动端完全不可用 (audit-2)</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>15+ 信息区域同时可见 (audit-17)</li>
+      <li>文件上传无进度 (audit-8)</li>
+      <li>Ctrl+Enter 快捷键无提示 (audit-15)</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>Workflow 无撤销/重做 (audit-3)</li>
+      <li>节点删除无确认 (audit-4)</li>
+      <li>SSE 断连无重连 (audit-27)</li>
+      <li>事件流 dump 原始 JSON (audit-29)</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>Settings 仅 4 项配置 (audit-33)</li>
+      <li>Observability 图表数据不全 (audit-42)</li>
+    </ul></div>
+    <div class="stage-cell"><ul>
+      <li>暂无 Workflow 模板分享机制</li>
+    </ul></div>
+
+    <!-- Quotes -->
+    <div class="row-label">用户原话</div>
+    <div class="stage-cell"><div class="quote">"搜了一圈发现这个蜂群系统，名字挺酷"</div></div>
+    <div class="stage-cell"><div class="quote">"Agent 群组 + 技能附加，概念有点多"</div></div>
+    <div class="stage-cell"><div class="quote">"进去三栏全是空的，完全不知道该干嘛"</div></div>
+    <div class="stage-cell"><div class="quote">"哦！@ 一下居然能调技能，拓扑图也动了"</div></div>
+    <div class="stage-cell"><div class="quote">"节点不小心按了 Delete 就没了？没撤销？"</div></div>
+    <div class="stage-cell"><div class="quote">"习惯了之后确实比手动编排快很多"</div></div>
+    <div class="stage-cell"><div class="quote">"这套多 Agent 模式值得团队推广"</div></div>
+
+    <!-- Opportunities -->
+    <div class="row-label">设计机会</div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 增加产品 Landing Page 价值展示</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 场景化功能介绍替代功能列表</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 实现首次使用引导体系 (HIGH)</div>
+      <div class="opportunity">💡 全站响应式适配 (HIGH)</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 信息密度渐进式展示</div>
+      <div class="opportunity">💡 快捷键提示内联化</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 撤销/恢复 + 破坏性操作防护 (HIGH)</div>
+      <div class="opportunity">💡 错误反馈标准化 (HIGH)</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 监控与可观测性增强</div>
+    </div>
+    <div class="stage-cell">
+      <div class="opportunity">💡 Workflow 模板分享与社区</div>
+    </div>
+  </div>
+
+  <div class="curve-section">
+    <div class="curve-title">📈 情感曲线（Pain Level over Journey）</div>
+    <svg class="curve-svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+      <!-- 网格线 -->
+      <line x1="0" y1="10" x2="1200" y2="10" stroke="#E5E7EB" stroke-dasharray="4" />
+      <line x1="0" y1="35" x2="1200" y2="35" stroke="#E5E7EB" stroke-dasharray="4" />
+      <line x1="0" y1="60" x2="1200" y2="60" stroke="#E5E7EB" stroke-dasharray="4" />
+      <line x1="0" y1="85" x2="1200" y2="85" stroke="#E5E7EB" stroke-dasharray="4" />
+      <line x1="0" y1="110" x2="1200" y2="110" stroke="#E5E7EB" stroke-dasharray="4" />
+      <!-- Y 轴标签 -->
+      <text x="4" y="14" fill="#9CA3AF" font-size="10">1 低痛</text>
+      <text x="4" y="39" fill="#9CA3AF" font-size="10">2</text>
+      <text x="4" y="64" fill="#9CA3AF" font-size="10">3</text>
+      <text x="4" y="89" fill="#9CA3AF" font-size="10">4</text>
+      <text x="4" y="114" fill="#9CA3AF" font-size="10">5 高痛</text>
+      <!-- 折线: pain_levels = [2, 3, 5, 1, 4, 2, 1] -->
+      <!-- y = (pain_level - 1) * 25 + 10: [35, 60, 110, 10, 85, 35, 10] -->
+      <!-- x = i / 6 * 1100 + 50: [50, 233, 417, 600, 783, 967, 1150] -->
+      <polyline
+        points="50,35 233,60 417,110 600,10 783,85 967,35 1150,10"
+        fill="none" stroke="#6366F1" stroke-width="3"
+        stroke-linejoin="round" stroke-linecap="round" />
+      <!-- 数据点 -->
+      <circle cx="50" cy="35" r="6" fill="#34D399" stroke="white" stroke-width="2" />
+      <circle cx="233" cy="60" r="6" fill="#F59E0B" stroke="white" stroke-width="2" />
+      <circle cx="417" cy="110" r="8" fill="#EF4444" stroke="white" stroke-width="3" />
+      <circle cx="600" cy="10" r="7" fill="#10B981" stroke="white" stroke-width="3" />
+      <circle cx="783" cy="85" r="7" fill="#F97316" stroke="white" stroke-width="3" />
+      <circle cx="967" cy="35" r="6" fill="#34D399" stroke="white" stroke-width="2" />
+      <circle cx="1150" cy="10" r="7" fill="#10B981" stroke="white" stroke-width="3" />
+      <!-- Stage 标签 -->
+      <text x="50" y="118" fill="#6B7280" font-size="10" text-anchor="middle">发现</text>
+      <text x="233" y="118" fill="#6B7280" font-size="10" text-anchor="middle">评估</text>
+      <text x="417" y="118" fill="#DC2626" font-size="10" font-weight="600" text-anchor="middle">⚠ 上手</text>
+      <text x="600" y="118" fill="#2563EB" font-size="10" font-weight="600" text-anchor="middle">★ 激活</text>
+      <text x="783" y="118" fill="#DC2626" font-size="10" font-weight="600" text-anchor="middle">⚠ 日常</text>
+      <text x="967" y="118" fill="#6B7280" font-size="10" text-anchor="middle">留存</text>
+      <text x="1150" y="118" fill="#059669" font-size="10" font-weight="600" text-anchor="middle">★ 推荐</text>
+    </svg>
+  </div>
+
+  <div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+    <div style="background:#FEE2E2;padding:16px;border-radius:8px;border-left:4px solid #DC2626;">
+      <div style="font-size:14px;font-weight:600;color:#DC2626;margin-bottom:8px;">⚠️ 流失风险 #1 — Onboarding</div>
+      <div style="font-size:12px;color:#4B5563;line-height:1.6;">首次使用无任何引导（audit-1），用户面对 3 栏布局 + 15 个信息区完全不知所措。@skill 语法需偶然发现（audit-19）。<strong>建议</strong>：实现 react-joyride 引导 + 空状态说明。</div>
+    </div>
+    <div style="background:#FEE2E2;padding:16px;border-radius:8px;border-left:4px solid #DC2626;">
+      <div style="font-size:14px;font-weight:600;color:#DC2626;margin-bottom:8px;">⚠️ 流失风险 #2 — Engagement</div>
+      <div style="font-size:12px;color:#4B5563;line-height:1.6;">Workflow 编辑器无撤销（audit-3），节点 Delete 无确认（audit-4），SSE 断连无重连（audit-27）。破坏性操作导致数据丢失。<strong>建议</strong>：全局 undo/redo + 操作确认 + SSE 指数退避重连。</div>
+    </div>
+    <div style="background:#EFF6FF;padding:16px;border-radius:8px;border-left:4px solid #2563EB;">
+      <div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:8px;">★ 关键时刻 — Activation</div>
+      <div style="font-size:12px;color:#4B5563;line-height:1.6;">用户首次在 Agent 群组中 @skill 发送任务并收到响应 + 拓扑图动画联动。这是"啊哈时刻"——多 Agent 协作价值首次感知。<strong>建议</strong>：确保此路径零摩擦，添加成就反馈。</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generated by SparkSkillsHub Journey Skill · Persona: AI 研发工程师 · 7 stages · End-to-end
+  </div>
+</body>
+</html>

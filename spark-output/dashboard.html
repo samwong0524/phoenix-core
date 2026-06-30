@@ -8,7 +8,7 @@
   使用方式（详见 chain-protocol §九）：
     1. 读取本模板原文
     2. 扫描项目目录 `spark-output/context/*.json`，构造 STATE 对象
-    3. 将本文件中唯一占位符 `/*__SPARK_STATE_INJECT__*/{"project":"Phoenix-Core","description":"多 Agent 协作 Swarm IDE — 动效设计 + 设计走查","generated_at":"2026-06-27T18:43:41Z","contexts":{"motion-plan":{"done":true,"summary":"Corporate 动效规范：签名缓动 cubic-bezier(0.2,0,0,1) + Duration palette + 6 元素动效定义","fields":{"personality":"Corporate","scene":"DASHBOARD","elements":6}},"motion-apply":{"done":true,"summary":"3 文件落地：motion.ts(10 variants) + globals.css(按钮/卡片动画) + IMMessageList(fadeSlideUp)","fields":{"framework":"Next.js 16 + framer-motion 11","files_modified":3,"variants":10}},"check":{"done":true,"summary":"全前端走查 56 findings：blocker 5 / major 35 / minor 16。核心问题：无响应式、4 套样式系统并存、无障碍缺失","fields":{"blocker":5,"major":35,"minor":16,"categories_with_findings":9}}}}` 替换为 STATE JSON
+    3. 将本文件中唯一占位符 `/*__SPARK_STATE_INJECT__*/{"project":"Phoenix-Core","generated_at":"2026-06-30T10:56:17.651Z","contexts":{"audit":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T16:45:00+08:00"},"brief":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T17:30:00+08:00"},"check":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-27T18:43:41Z"},"flow-web":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T20:00:00+08:00"},"journey":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T18:00:00+08:00"},"motion-apply":{"done":true,"summary":"Phoenix-Core","generated_at":""},"motion-plan":{"done":true,"summary":"Phoenix-Core","generated_at":""},"sitemap":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T19:00:00+08:00"},"stories":{"done":true,"summary":"Phoenix-Core","generated_at":"2026-06-30T18:30:00+08:00"}}}` 替换为 STATE JSON
     4. 写入 `spark-output/dashboard.html`（覆盖式）
 
   STATE 形态：
@@ -225,7 +225,7 @@
 // ===========================================================
 // STATE 注入点（chain-protocol §九 Step 6 由各 Skill 替换）
 // ===========================================================
-const STATE = /*__SPARK_STATE_INJECT__*/null;
+const STATE = /*__SPARK_STATE_INJECT__*/{"project":"Phoenix-Core","generated_at":"2026-06-30T22:30:00+08:00","contexts":{"audit":{"done":true,"summary":"48 findings(7 blocker/41 major)","generated_at":"2026-06-30T16:45:00+08:00"},"brief":{"done":true,"summary":"多端适配改版方向对齐","generated_at":"2026-06-30T17:30:00+08:00"},"check":{"done":true,"summary":"56 findings走查","generated_at":"2026-06-27T18:43:41Z"},"edge":{"done":true,"summary":"15屏78状态矩阵，8 critical_missing","generated_at":"2026-06-30T21:30:00+08:00"},"flow-web":{"done":true,"summary":"IM响应式4屏flow","generated_at":"2026-06-30T20:00:00+08:00"},"journey":{"done":true,"summary":"7 stage用户旅程+4 key moments","generated_at":"2026-06-30T18:00:00+08:00"},"motion-apply":{"done":true,"summary":"动画变体已应用","generated_at":""},"motion-plan":{"done":true,"summary":"动画规格规划","generated_at":""},"pitch":{"done":true,"summary":"6段决策叙事+5个Asks","generated_at":"2026-06-30T22:30:00+08:00"},"prd":{"done":true,"summary":"8段式PRD 6 stories MVP=4个story","generated_at":"2026-06-30T22:00:00+08:00"},"sitemap":{"done":true,"summary":"10页8导航multi端IA","generated_at":"2026-06-30T19:00:00+08:00"},"stories":{"done":true,"summary":"6 stories(P0x4/P1x2)","generated_at":"2026-06-30T18:30:00+08:00"}}};
 
 // 默认空状态兜底（模板未被注入时仍可预览结构）
 const EFFECTIVE_STATE = STATE || {
