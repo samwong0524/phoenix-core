@@ -45,7 +45,7 @@ export interface AgentSidebarProps {
   // Workspace & agent management
   onCreateWorkspace: () => void;
   onSwitchWorkspace: (id: string) => void;
-  onDeleteWorkspace: () => void;
+  onDeleteWorkspace: (id: string) => void;
   onHireSubAgent: () => void;
   onDeleteAgent: (agentId: string) => void;
   workspaces: Array<{ id: string; name: string; createdAt: string }>;
@@ -312,49 +312,92 @@ export function AgentSidebar(props: AgentSidebarProps) {
           <div className="logo-text">PHOENIX CORE</div>
         </div>
         <div className="ws-info">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div className="ws-title">{t("im.workspace")}</div>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button
-                onClick={onCreateWorkspace}
-                title={t("im.new_workspace")}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 2, display: "flex", alignItems: "center" }}
-              >
-                <Plus size={14} />
-              </button>
-              <button
-                onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 2, display: "flex", alignItems: "center" }}
-              >
-                <ChevronDown size={14} style={{ transform: wsDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-              </button>
-              <button
-                onClick={onDeleteWorkspace}
-                title={t("workspace.delete_tooltip", { name: "" })}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 2, display: "flex", alignItems: "center" }}
-              >
-                <Trash2 size={13} />
-              </button>
+          {/* Workspace Selector */}
+          <div
+            className="ws-selector"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 10px", cursor: "pointer", borderRadius: 6,
+              background: wsDropdownOpen ? "var(--bg-elevated)" : "transparent",
+              border: `1px solid ${wsDropdownOpen ? "var(--cyan-dim)" : "var(--border)"}`,
+              transition: "all 0.15s ease",
+            }}
+            onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWsDropdownOpen(!wsDropdownOpen); } }}
+            role="button"
+            tabIndex={0}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {workspaces.find((w) => w.id === session?.workspaceId)?.name ?? t("im.workspace")}
+              </div>
+              <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: 1 }}>
+                {session?.workspaceId?.slice(0, 12) ?? "-"}…
+              </div>
             </div>
+            <ChevronDown size={14} style={{ flexShrink: 0, color: "var(--text-secondary)", transform: wsDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
           </div>
-          {wsDropdownOpen && workspaces.length > 1 && (
-            <div style={{ marginTop: 6, maxHeight: 120, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-elevated)" }}>
-              {workspaces.filter((w) => w.id !== session?.workspaceId).map((w) => (
-                <div
-                  key={w.id}
-                  onClick={() => { onSwitchWorkspace(w.id); setWsDropdownOpen(false); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { onSwitchWorkspace(w.id); setWsDropdownOpen(false); } }}
-                  role="button"
-                  tabIndex={0}
-                  style={{ padding: "6px 8px", cursor: "pointer", fontSize: 11, borderBottom: "1px solid var(--border)" }}
-                >
-                  <div style={{ fontWeight: 500 }}>{w.name}</div>
-                  <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>{w.id.slice(0, 12)}…</div>
-                </div>
-              ))}
+
+          {/* Dropdown */}
+          {wsDropdownOpen && (
+            <div style={{
+              marginTop: 4, borderRadius: 6, border: "1px solid var(--border)",
+              background: "var(--bg-elevated)", overflow: "hidden",
+            }}>
+              <div style={{ maxHeight: 160, overflowY: "auto" }}>
+                {workspaces.map((w) => {
+                  const isCurrent = w.id === session?.workspaceId;
+                  return (
+                    <div
+                      key={w.id}
+                      onClick={() => { if (!isCurrent) { onSwitchWorkspace(w.id); setWsDropdownOpen(false); } }}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !isCurrent) { onSwitchWorkspace(w.id); setWsDropdownOpen(false); } }}
+                      role="button"
+                      tabIndex={0}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "7px 10px", cursor: isCurrent ? "default" : "pointer",
+                        background: isCurrent ? "rgba(0,240,255,0.06)" : "transparent",
+                        borderBottom: "1px solid var(--border)",
+                        transition: "background 0.1s",
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 11, fontWeight: isCurrent ? 600 : 400, color: isCurrent ? "var(--cyan)" : "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {isCurrent && <span style={{ marginRight: 4 }}>●</span>}
+                          {w.name}
+                        </div>
+                        <div style={{ fontSize: 8, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: 1 }}>
+                          {w.id.slice(0, 16)}…
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteWorkspace(w.id); setWsDropdownOpen(false); }}
+                        title={t("workspace.delete_tooltip", { name: w.name })}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 3, display: "flex", alignItems: "center", opacity: 0.5, flexShrink: 0, borderRadius: 4 }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                onClick={() => { onCreateWorkspace(); setWsDropdownOpen(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { onCreateWorkspace(); setWsDropdownOpen(false); } }}
+                role="button"
+                tabIndex={0}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "7px 10px", cursor: "pointer", fontSize: 11,
+                  color: "var(--cyan)", fontWeight: 500,
+                }}
+              >
+                <Plus size={13} />
+                {t("im.new_workspace")}
+              </div>
             </div>
           )}
-          <div className="ws-id" style={{ marginTop: 4 }}>{session?.workspaceId ?? "-"}</div>
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
             <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 4 }}>{t("im.dir_working_dir")}</div>
             {showDirInput ? (

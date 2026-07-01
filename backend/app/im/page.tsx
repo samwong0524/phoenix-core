@@ -176,21 +176,18 @@ function IMPageInner() {
   }, [createWorkspace, refreshWorkspaceList, setError]);
 
   // Delete workspace handler
-  const handleDeleteWorkspace = useCallback(async () => {
+  const handleDeleteWorkspace = useCallback(async (id: string) => {
     if (!session) return;
-    if (workspaceList.length <= 1) {
-      toast.error("Cannot delete the only workspace");
-      return;
-    }
-    const name = workspaceList.find((w) => w.id === session.workspaceId)?.name ?? session.workspaceId.slice(0, 8);
-    if (!window.confirm(`Delete workspace "${name}" and all its data?`)) return;
+    const wsName = workspaceList.find((w) => w.id === id)?.name ?? id.slice(0, 8);
+    if (!window.confirm(`Delete workspace "${wsName}" and all its data?`)) return;
     try {
-      await api(`/api/workspaces/${encodeURIComponent(session.workspaceId)}`, { method: "DELETE" });
+      await api(`/api/workspaces/${encodeURIComponent(id)}`, { method: "DELETE" });
       toast.success("Workspace deleted");
-      // Switch to the most recent remaining workspace
-      const remaining = workspaceList.filter((w) => w.id !== session.workspaceId);
-      if (remaining.length > 0) {
-        void bootstrap(remaining[0]!.id);
+      if (id === session.workspaceId) {
+        const remaining = workspaceList.filter((w) => w.id !== id);
+        if (remaining.length > 0) {
+          void bootstrap(remaining[0]!.id);
+        }
       }
       void refreshWorkspaceList();
     } catch (e) {
