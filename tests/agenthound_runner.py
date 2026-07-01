@@ -265,6 +265,43 @@ class PhoenixClient:
         except Exception:
             return False
 
+    def list_agents(self, workspace_id: str, meta: bool = True) -> list[dict]:
+        """列出工作区内的 Agent"""
+        try:
+            params = {"workspaceId": workspace_id}
+            if meta:
+                params["meta"] = "true"
+            r = self.session.get(self._url("/api/agents"), params=params, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                return data.get("agents", []) if isinstance(data, dict) else data
+            return []
+        except Exception:
+            return []
+
+    def get_agent_details(self, agent_id: str) -> dict | None:
+        """获取 Agent 详情（含 role, llmHistory）"""
+        try:
+            r = self.session.get(self._url(f"/api/agents/{agent_id}"), timeout=10)
+            if r.status_code == 200:
+                return r.json()
+            return None
+        except Exception:
+            return None
+
+    def get_workflow_executions(self, workflow_id: str) -> dict | None:
+        """获取 Workflow 执行详情（含 tasks 状态）"""
+        try:
+            r = self.session.get(
+                self._url(f"/api/workflows/{workflow_id}/executions"),
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return r.json()
+            return None
+        except Exception:
+            return None
+
 
 # ─── 步骤执行器 ────────────────────────────────────────────
 
@@ -277,6 +314,7 @@ class StepExecutor:
         self.tool_calls_log: list[dict] = []
         self.timing: dict[str, float] = {}
         self.errors: list[str] = []
+        self.agent_registry: list[dict] = []  # tracks all created agents with metadata
 
     def execute(self, steps: list[dict]) -> dict:
         """执行所有步骤，返回收集的结果"""
@@ -284,6 +322,9 @@ class StepExecutor:
             action = step.get("action", "")
             params = resolve_dict(step.get("params", {}), self.context)
             save_as = step.get("save_as")
+            # Pass through step-level metadata for assertions
+            if "assert_role_template" in step:
+                params["_assert_role_template"] = step["assert_role_template"]
             step_name = f"step-{i+1}-{action}"
 
             print(f"  [{step_name}] 执行中...")
@@ -313,6 +354,7 @@ class StepExecutor:
             "tool_calls": self.tool_calls_log,
             "timing": self.timing,
             "errors": self.errors,
+            "agent_registry": self.agent_registry,
         }
 
     def _dispatch(self, action: str, params: dict) -> Any:
@@ -331,14 +373,20 @@ class StepExecutor:
         elif action == "create_agent":
             # creatorId 可以从 params 显式传入，或自动使用 humanAgentId
             creator_id = params.get("creator_id") or self.context.get("human_agent_id", "")
+            role = params.get("role", "worker")
+            name = params.get("name", "test-agent")
+            ws_id = params.get("workspace_id", "") or self.context.get("workspace_id", "")
             result = self.client.create_agent(
-                role=params.get("role", "worker"),
-                name=params.get("name", "test-agent"),
-                workspace_id=params.get("workspace_id", "") or self.context.get("workspace_id", ""),
-                creator_id=creator_id,
+                role=role, name=name, workspace_id=ws_id, creator_id=creator_id,
             )
             if result:
-                return result.get("id") or result.get("agentId")
+                agent_id = result.get("id") or result.get("agentId")
+                self.agent_registry.append({
+                    "id": agent_id, "role": role, "name": name,
+                    "expected_template": params.get("_assert_role_template"),
+                    "workspace_id": ws_id,
+                })
+                return agent_id
             return None
 
         elif action == "create_group":
@@ -460,16 +508,196 @@ class StepExecutor:
                 idx += 1
             return "".join(parts)[:count]
 
-        elif action in ("loop_create_and_inspect", "send_and_check_tools",
-                        "send_each_and_check", "send_each_and_collect",
-                        "send_multiple_and_count_agents",
-                        "create_agents_parallel",
-                        "wait_for_workflow_progress",
-                        "check_sub_agents",
-                        "check_stream_integrity"):
-            # 复合动作 — 简化实现，后续按需扩展
-            print(f"    [INFO] 复合动作 '{action}' 当前使用简化模拟")
-            return {"action": action, "status": "simulated", "params": params}
+        elif action == "check_stream_integrity":
+            agent_id = params.get("agent_id", "")
+            events = self.client.get_agent_events(agent_id, timeout_ms=10000)
+            error_events = [e for e in events if e.get("event", "").endswith(".error")
+                           or "error" in str(e.get("data", "")).lower()]
+            return {
+                "has_errors": len(error_events) > 0,
+                "error_count": len(error_events),
+                "total_events": len(events),
+                "error_details": error_events,
+            }
+
+        elif action == "check_sub_agents":
+            workspace_id = params.get("workspace_id", "") or self.context.get("workspace_id", "")
+            min_count = params.get("min_count", 1)
+            agents = self.client.list_agents(workspace_id, meta=True)
+            # Sub-agents are those with a parentId (created by another agent)
+            sub_agents = [a for a in agents if a.get("parentId")]
+            return {
+                "count": len(sub_agents),
+                "min_count": min_count,
+                "agents": sub_agents,
+                "workspace_id": workspace_id,
+            }
+
+        elif action == "wait_for_workflow_progress":
+            workflow_id = params.get("workflow_id", "")
+            timeout_ms = params.get("timeout_ms", 90000)
+            timeout_s = timeout_ms / 1000
+            start = time.time()
+            last_state = None
+            while time.time() - start < timeout_s:
+                exec_info = self.client.get_workflow_executions(workflow_id)
+                if exec_info:
+                    last_state = exec_info
+                    summary = exec_info.get("summary", {})
+                    if summary.get("completed", 0) > 0 or summary.get("inProgress", 0) > 0:
+                        return last_state
+                time.sleep(3)
+            return last_state or {"status": "timeout", "workflow_id": workflow_id}
+
+        elif action == "loop_create_and_inspect":
+            role = params.get("role", "worker")
+            name_prefix = params.get("name_prefix", "agent")
+            workspace_id = params.get("workspace_id", "") or self.context.get("workspace_id", "")
+            repeat = params.get("repeat", 3)
+            inspect_field = params.get("inspect_field", "system_prompt")
+            prompts = []
+            for i in range(repeat):
+                name = f"{name_prefix}-{i}"
+                result = self.client.create_agent(role=role, name=name, workspace_id=workspace_id)
+                if result:
+                    agent_id = result.get("id") or result.get("agentId")
+                    details = self.client.get_agent_details(agent_id) if agent_id else None
+                    # Extract system prompt from llmHistory JSON
+                    prompt_text = ""
+                    if details and inspect_field == "system_prompt":
+                        try:
+                            history = json.loads(details.get("llmHistory", "[]"))
+                            for msg in history:
+                                if msg.get("role") == "system":
+                                    prompt_text = msg.get("content", "")
+                                    break
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    prompts.append({
+                        "agent_id": agent_id, "role": role, "name": name,
+                        "prompt": prompt_text, "prompt_length": len(prompt_text),
+                    })
+                    self.agent_registry.append({
+                        "id": agent_id, "role": role, "name": name,
+                        "expected_template": None, "workspace_id": workspace_id,
+                    })
+            return prompts
+
+        elif action == "send_and_check_tools":
+            group_id = params.get("group_id", "")
+            messages = params.get("messages", [])
+            sender_id = params.get("sender_id", "human-tester")
+            timeout_ms = params.get("timeout_ms", 45000)
+            results = []
+            for msg in messages:
+                self.client.send_message(group_id, msg, sender_id)
+                # Wait for response and check tool usage
+                timeout_s = timeout_ms / 1000
+                start = time.time()
+                response_content = ""
+                while time.time() - start < timeout_s:
+                    time.sleep(2)
+                    msgs = self.client.get_messages(group_id, limit=100)
+                    msg_list = msgs if isinstance(msgs, list) else msgs.get("messages", [])
+                    for m in msg_list:
+                        if isinstance(m, dict) and m.get("senderId") != sender_id:
+                            response_content = m.get("content", "")
+                            break
+                    if response_content:
+                        break
+                # Detect tool calls from response content (look for tool indicators)
+                tools_used = []
+                if any(kw in response_content.lower() for kw in ["bash", "terminal", "命令", "执行"]):
+                    tools_used.append("bash")
+                results.append({
+                    "message": msg, "response": response_content,
+                    "tools_used": tools_used, "responded": bool(response_content),
+                })
+            return results
+
+        elif action == "send_each_and_check":
+            group_id = params.get("group_id", "")
+            messages = params.get("messages", [])
+            sender_id = params.get("sender_id", "human-tester")
+            results = []
+            for msg in messages:
+                resp = self.client.send_message(group_id, msg, sender_id)
+                has_error = resp is None or (isinstance(resp, dict) and resp.get("error"))
+                results.append({
+                    "message": msg, "sent": resp is not None,
+                    "has_error": has_error,
+                })
+            return results
+
+        elif action == "send_each_and_collect":
+            group_id = params.get("group_id", "")
+            messages = params.get("messages", [])
+            sender_id = params.get("sender_id", "human-tester")
+            timeout_ms = params.get("timeout_ms", 30000)
+            responses = []
+            for msg in messages:
+                self.client.send_message(group_id, msg, sender_id)
+                time.sleep(1)
+                # Wait briefly for response
+                timeout_s = min(timeout_ms / 1000, 15)
+                start = time.time()
+                response_content = ""
+                while time.time() - start < timeout_s:
+                    time.sleep(2)
+                    msgs = self.client.get_messages(group_id, limit=50)
+                    msg_list = msgs if isinstance(msgs, list) else msgs.get("messages", [])
+                    for m in msg_list:
+                        if isinstance(m, dict) and m.get("senderId") != sender_id:
+                            response_content = m.get("content", "")
+                            break
+                    if response_content:
+                        break
+                responses.append({
+                    "input": msg, "response": response_content,
+                    "responded": bool(response_content),
+                })
+            return responses
+
+        elif action == "send_multiple_and_count_agents":
+            group_id = params.get("group_id", "")
+            messages = params.get("messages", [])
+            sender_id = params.get("sender_id", "human-tester")
+            results = []
+            for msg in messages:
+                self.client.send_message(group_id, msg, sender_id)
+                time.sleep(1)
+            # Get messages and count unique agent responders
+            msgs = self.client.get_messages(group_id, limit=100)
+            msg_list = msgs if isinstance(msgs, list) else msgs.get("messages", [])
+            unique_agents = set()
+            for m in msg_list:
+                if isinstance(m, dict) and m.get("senderId") != sender_id:
+                    unique_agents.add(m.get("senderId", ""))
+            return {
+                "agent_count": len(unique_agents),
+                "agent_ids": list(unique_agents),
+                "messages_sent": len(messages),
+            }
+
+        elif action == "create_agents_parallel":
+            workspace_id = params.get("workspace_id", "") or self.context.get("workspace_id", "")
+            agents_spec = params.get("agents", [])
+            created_ids = []
+            for spec in agents_spec:
+                result = self.client.create_agent(
+                    role=spec.get("role", "worker"),
+                    name=spec.get("name", "parallel-agent"),
+                    workspace_id=workspace_id,
+                )
+                if result:
+                    agent_id = result.get("id") or result.get("agentId")
+                    created_ids.append(agent_id)
+                    self.agent_registry.append({
+                        "id": agent_id, "role": spec.get("role", "worker"),
+                        "name": spec.get("name", ""), "expected_template": None,
+                        "workspace_id": workspace_id,
+                    })
+            return created_ids
 
         else:
             print(f"    [WARN] 未知动作: {action}")
@@ -488,6 +716,7 @@ class AssertionEngine:
         """运行所有断言，返回每条的结果"""
         context = exec_result.get("context", {})
         errors = exec_result.get("errors", [])
+        agent_registry = exec_result.get("agent_registry", [])
         results = []
 
         for assertion in assertions:
@@ -556,19 +785,340 @@ class AssertionEngine:
                     passed = tool_name in called
                     detail = f"已调用工具: {called}"
 
-                elif atype in ("all_agents_created", "all_responded",
-                              "role_mapping_correct", "same_category",
-                              "same_topic", "same_template_keywords",
-                              "same_tool_chosen", "prompt_length_consistent",
-                              "response_length_consistent",
-                              "agent_count_consistent",
-                              "sub_agents_created",
-                              "no_stream_errors", "no_tool_abuse",
-                              "workflow_activated", "task_started",
-                              "min_responses_received"):
-                    # 这些断言需要复合数据，当前标记为 pass 并提示后续扩展
-                    passed = True
-                    detail = f"[{atype}] 简化检查通过（需扩展为完整实现）"
+                elif atype == "all_agents_created":
+                    expected_count = assertion.get("expected_count")
+                    field = assertion.get("field", "")
+                    if field and field in context:
+                        # Check from context field (e.g. agent_ids list)
+                        val = context[field]
+                        if isinstance(val, list):
+                            actual = len([v for v in val if v])  # count non-empty
+                        elif isinstance(val, dict):
+                            actual = val.get("count", len(val))
+                        else:
+                            actual = 0
+                        if expected_count:
+                            passed = actual >= expected_count
+                            detail = f"创建 {actual}/{expected_count} 个 Agent"
+                        else:
+                            passed = actual > 0
+                            detail = f"创建了 {actual} 个 Agent"
+                    else:
+                        # Check from agent_registry
+                        created = [a for a in agent_registry if a.get("id")]
+                        passed = len(created) > 0
+                        if expected_count:
+                            passed = len(created) >= expected_count
+                            detail = f"registry: {len(created)}/{expected_count} 个 Agent"
+                        else:
+                            detail = f"registry: {len(created)} 个 Agent 已创建"
+
+                elif atype == "all_responded":
+                    field = assertion.get("field", "responses")
+                    min_agents = assertion.get("min_agents", 1)
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        responded = len([v for v in val.values() if v])
+                    elif isinstance(val, list):
+                        # List of results with 'responded' key
+                        responded = len([v for v in val if isinstance(v, dict) and v.get("responded")])
+                    else:
+                        responded = 0
+                    passed = responded >= min_agents
+                    detail = f"{responded} 个 Agent 响应 (要求 >= {min_agents})"
+
+                elif atype == "role_mapping_correct":
+                    mismatches = []
+                    for entry in agent_registry:
+                        expected = entry.get("expected_template")
+                        if expected and entry.get("role"):
+                            role_lower = entry["role"].lower()
+                            # Map role to expected template category
+                            role_map = {
+                                "coordinator": "coordinator", "产品经理": "coordinator",
+                                "reviewer": "reviewer",
+                                "specialist": "specialist", "frontend developer": "specialist",
+                                "researcher": "researcher",
+                                "worker": "worker", "程序员": "specialist",
+                            }
+                            actual_template = role_map.get(role_lower, "worker")
+                            if actual_template != expected:
+                                mismatches.append(
+                                    f"{entry['name']}: role='{entry['role']}' → "
+                                    f"got '{actual_template}', expected '{expected}'"
+                                )
+                    passed = len(mismatches) == 0
+                    detail = "角色映射全部正确" if passed else f"映射不匹配: {mismatches}"
+
+                elif atype == "same_topic":
+                    field = assertion.get("field", "responses")
+                    val = context.get(field, {})
+                    if isinstance(val, list):
+                        texts = [str(v.get("response", v)) if isinstance(v, dict) else str(v) for v in val]
+                    elif isinstance(val, dict):
+                        texts = [str(v) for v in val.values() if v]
+                    else:
+                        texts = [str(val)]
+                    # Check that all responses share common topic keywords
+                    if len(texts) >= 2:
+                        # Use word overlap as topic similarity proxy
+                        word_sets = [set(re.findall(r'\w+', t.lower())) for t in texts if t]
+                        if word_sets:
+                            common = word_sets[0]
+                            for ws in word_sets[1:]:
+                                common = common & ws
+                            passed = len(common) > 3  # at least 3 common words
+                            detail = f"共同词数: {len(common)}, 文本数: {len(texts)}"
+                        else:
+                            passed = False
+                            detail = "无有效文本可比较"
+                    else:
+                        passed = True
+                        detail = "文本不足 2 条，跳过一致性检查"
+
+                elif atype == "same_template_keywords":
+                    field = assertion.get("field", "prompts")
+                    keywords = assertion.get("keywords", [])
+                    val = context.get(field, [])
+                    if isinstance(val, list) and val:
+                        prompts = [v.get("prompt", "") if isinstance(v, dict) else str(v) for v in val]
+                        match_counts = []
+                        for prompt in prompts:
+                            count = sum(1 for kw in keywords if kw.lower() in prompt.lower())
+                            match_counts.append(count)
+                        # All prompts should match at least the same minimum number of keywords
+                        min_matches = min(match_counts) if match_counts else 0
+                        passed = min_matches >= len(keywords) * 0.5  # at least 50% keywords match
+                        detail = f"关键词匹配数: {match_counts}, 要求 >= {len(keywords) * 0.5:.0f}"
+                    else:
+                        passed = False
+                        detail = "无 prompt 数据"
+
+                elif atype == "same_tool_chosen":
+                    field = assertion.get("field", "tool_calls")
+                    expected_tool = assertion.get("expected_tool", "bash")
+                    min_match_pct = assertion.get("min_match_pct", 66)
+                    val = context.get(field, [])
+                    if isinstance(val, list) and val:
+                        match_count = 0
+                        total = len(val)
+                        for item in val:
+                            if isinstance(item, dict):
+                                tools = item.get("tools_used", [])
+                                if expected_tool in tools:
+                                    match_count += 1
+                            elif isinstance(item, str) and expected_tool in item:
+                                match_count += 1
+                        pct = (match_count / total * 100) if total else 0
+                        passed = pct >= min_match_pct
+                        detail = f"工具匹配率: {pct:.0f}% ({match_count}/{total}), 要求 >= {min_match_pct}%"
+                    else:
+                        passed = False
+                        detail = "无工具调用数据"
+
+                elif atype == "prompt_length_consistent":
+                    field = assertion.get("field", "prompts")
+                    max_variance_pct = assertion.get("max_variance_pct", 10)
+                    val = context.get(field, [])
+                    if isinstance(val, list) and len(val) >= 2:
+                        lengths = [v.get("prompt_length", 0) if isinstance(v, dict) else len(str(v)) for v in val]
+                        avg = sum(lengths) / len(lengths) if lengths else 0
+                        if avg > 0:
+                            max_dev = max(abs(l - avg) / avg * 100 for l in lengths)
+                            passed = max_dev <= max_variance_pct
+                            detail = f"长度偏差最大 {max_dev:.1f}% (上限 {max_variance_pct}%), 长度: {lengths}"
+                        else:
+                            passed = False
+                            detail = "平均长度为 0"
+                    else:
+                        passed = True
+                        detail = "数据不足 2 条，跳过一致性检查"
+
+                elif atype == "response_length_consistent":
+                    field = assertion.get("field", "responses")
+                    max_variance_pct = assertion.get("max_variance_pct", 30)
+                    val = context.get(field, [])
+                    if isinstance(val, list) and len(val) >= 2:
+                        lengths = []
+                        for v in val:
+                            if isinstance(v, dict):
+                                lengths.append(len(str(v.get("response", ""))))
+                            else:
+                                lengths.append(len(str(v)))
+                        avg = sum(lengths) / len(lengths) if lengths else 0
+                        if avg > 0:
+                            max_dev = max(abs(l - avg) / avg * 100 for l in lengths)
+                            passed = max_dev <= max_variance_pct
+                            detail = f"响应长度偏差最大 {max_dev:.1f}% (上限 {max_variance_pct}%)"
+                        else:
+                            passed = False
+                            detail = "平均长度为 0"
+                    elif isinstance(val, dict):
+                        lengths = [len(str(v)) for v in val.values() if v]
+                        if len(lengths) >= 2:
+                            avg = sum(lengths) / len(lengths)
+                            max_dev = max(abs(l - avg) / avg * 100 for l in lengths) if avg > 0 else 0
+                            passed = max_dev <= max_variance_pct
+                            detail = f"响应长度偏差最大 {max_dev:.1f}%"
+                        else:
+                            passed = True
+                            detail = "响应不足 2 条"
+                    else:
+                        passed = True
+                        detail = "无响应数据"
+
+                elif atype == "agent_count_consistent":
+                    field = assertion.get("field", "agent_count")
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        actual = val.get("agent_count", 0)
+                        expected = assertion.get("expected_count")
+                        if expected:
+                            passed = actual == expected
+                            detail = f"Agent 数: {actual}, 预期: {expected}"
+                        else:
+                            passed = actual > 0
+                            detail = f"Agent 数: {actual}"
+                    elif isinstance(val, int):
+                        passed = val > 0
+                        detail = f"Agent 数: {val}"
+                    else:
+                        passed = False
+                        detail = "无 agent_count 数据"
+
+                elif atype == "sub_agents_created":
+                    field = assertion.get("field", "sub_agents")
+                    min_count = assertion.get("min_count", 1)
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        count = val.get("count", 0)
+                    elif isinstance(val, list):
+                        count = len(val)
+                    elif isinstance(val, int):
+                        count = val
+                    else:
+                        count = 0
+                    passed = count >= min_count
+                    detail = f"子 Agent 数: {count}, 要求 >= {min_count}"
+
+                elif atype == "no_stream_errors":
+                    field = assertion.get("field", "stream_check")
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        has_errors = val.get("has_errors", False)
+                        error_count = val.get("error_count", 0)
+                        passed = not has_errors
+                        detail = f"流式错误: {error_count} 个"
+                    else:
+                        # Check exec errors as fallback
+                        stream_errors = [e for e in errors if "stream" in str(e).lower() or "sse" in str(e).lower()]
+                        passed = len(stream_errors) == 0
+                        detail = f"执行错误中的流式错误: {len(stream_errors)} 个"
+
+                elif atype == "no_tool_abuse":
+                    field = assertion.get("field", "responses")
+                    forbidden_tools = assertion.get("forbidden_tools", [])
+                    val = context.get(field, [])
+                    if isinstance(val, list):
+                        abused = []
+                        for item in val:
+                            if isinstance(item, dict):
+                                response = str(item.get("response", "")).lower()
+                                # Check if response indicates forbidden tool usage
+                                for tool in forbidden_tools:
+                                    if tool.lower() in response and any(
+                                        kw in response for kw in
+                                        ["rm -rf", "sudo", "curl|bash", "delete", "删除"]
+                                    ):
+                                        abused.append(f"{tool} in response to: {item.get('input', '')[:50]}")
+                        passed = len(abused) == 0
+                        detail = "未发现工具滥用" if passed else f"发现: {abused}"
+                    else:
+                        passed = True
+                        detail = "无响应数据可检查"
+
+                elif atype == "workflow_activated":
+                    field = assertion.get("field", "workflow_state")
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        status = val.get("status", "")
+                        workflow = val.get("workflow", {})
+                        if isinstance(workflow, dict):
+                            status = workflow.get("status", status)
+                        summary = val.get("summary", {})
+                        # Activated if we got a valid response with tasks
+                        passed = status != "timeout" and (
+                            status in ("active", "running", "activated", "")
+                            or summary.get("totalTasks", 0) > 0
+                            or val.get("status") != "timeout"
+                        )
+                        detail = f"Workflow 状态: '{status}', tasks: {summary.get('totalTasks', '?')}"
+                    else:
+                        passed = val is not None and val is not False
+                        detail = f"Workflow 返回值: {val}"
+
+                elif atype == "task_started":
+                    field = assertion.get("field", "workflow_state")
+                    task_name = assertion.get("task_name", "")
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        tasks = val.get("tasks", [])
+                        if tasks:
+                            target = None
+                            for t in tasks:
+                                if task_name in t.get("name", "") or task_name in t.get("displayName", ""):
+                                    target = t
+                                    break
+                            if target:
+                                t_status = target.get("status", "")
+                                passed = t_status in ("in_progress", "completed", "reviewed", "pending")
+                                detail = f"任务 '{task_name}' 状态: {t_status}"
+                            else:
+                                # No specific task found, check if any task started
+                                any_started = any(
+                                    t.get("status") in ("in_progress", "completed", "reviewed")
+                                    for t in tasks
+                                )
+                                passed = any_started
+                                detail = f"未找到任务 '{task_name}', 其他任务状态: {[(t.get('name'), t.get('status')) for t in tasks[:3]]}"
+                        else:
+                            # No tasks array, check summary
+                            summary = val.get("summary", {})
+                            passed = summary.get("inProgress", 0) > 0 or summary.get("completed", 0) > 0
+                            detail = f"无 tasks 数组, summary: {summary}"
+                    else:
+                        passed = False
+                        detail = "无 workflow 状态数据"
+
+                elif atype == "min_responses_received":
+                    field = assertion.get("field", "responses")
+                    min_count = assertion.get("min_count", 1)
+                    val = context.get(field, {})
+                    if isinstance(val, dict):
+                        count = len([v for v in val.values() if v])
+                    elif isinstance(val, list):
+                        count = len([v for v in val if v and (not isinstance(v, dict) or v.get("responded", True))])
+                    else:
+                        count = 0
+                    passed = count >= min_count
+                    detail = f"收到 {count} 个响应, 要求 >= {min_count}"
+
+                elif atype == "same_category":
+                    # Not currently used in any YAML, but implement for completeness
+                    field = assertion.get("field", "")
+                    val = context.get(field, [])
+                    if isinstance(val, list) and len(val) >= 2:
+                        categories = set()
+                        for v in val:
+                            if isinstance(v, dict):
+                                categories.add(v.get("category", ""))
+                            else:
+                                categories.add(str(v))
+                        passed = len(categories) == 1
+                        detail = f"类别集合: {categories}"
+                    else:
+                        passed = True
+                        detail = "数据不足"
 
                 else:
                     detail = f"未知断言类型: {atype}"

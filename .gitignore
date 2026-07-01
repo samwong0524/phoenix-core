@@ -13,6 +13,7 @@ backend/tsconfig.tsbuildinfo
 backend/.agent_logs/
 backend/.agent_stream_logs/
 backend/.agent_llm_requests/
+backend/config/runtime-settings.json
 tmp/
 .gemini/
 .mcp.json

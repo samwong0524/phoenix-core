@@ -67,6 +67,10 @@ jobs:
         run: |
           cp backend/.env.example backend/.env.local
           echo "LLM_PROVIDER=freellmapi" >> backend/.env.local
+        env:
+          FREELLMAPI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          FREELLMAPI_URL: https://api.deepseek.com/v1
+          FREELLMAPI_MODEL: deepseek-v4-flash
 
       - name: Initialize database
         run: |
