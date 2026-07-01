@@ -47,6 +47,9 @@ import {
   historyHasSoul, historyHasSkills,
   compressHistory, mapOpenRouterMessages,
   setRuntimeSetting, getRuntimeSetting,
+  detectVerificationTool, isCodeModificationBash, isFileModificationTool,
+  parseVerificationResult, isCompletionMessage,
+  shouldBlockCompletion, shouldNudgeVerification,
 } from "./agent-helpers";
 
 import {
@@ -140,6 +143,8 @@ export class AgentRunner {
   private verificationErrorSummary = "";
   // Safety valve: count of verification gate blocks to prevent deadlock
   private verificationGateBlocks = 0;
+  // Auto-fix retry: tracks consecutive rounds where agent reported completion with pending errors
+  private verificationAutoFixCount = 0;
   // Dangerous command confirmation gate: commands awaiting user approval
   private _pendingConfirmCommands = new Set<string>();
   // Coordinator plan hint: injected once per wakeup to remind coordinator to output plan
@@ -1034,6 +1039,7 @@ export class AgentRunner {
     this.verificationHadErrors = false;
     this.verificationErrorSummary = "";
     this.verificationGateBlocks = 0;
+    this.verificationAutoFixCount = 0;
     this._coordinatorPlanHintInjected = false;
   }
 
@@ -1183,44 +1189,26 @@ export class AgentRunner {
         if (call.name === "bash" && ok) {
           const bashArgs = safeJsonParse<{ command?: string }>(call.argumentsText, {});
           const cmd = (bashArgs.command ?? "").trim();
-          // Track verification commands (tsc, vitest, jest, etc.)
-          const verifyMatch = cmd.match(/\b(npx\s+tsc|npx\s+vitest|tsc|vitest|jest|npm\s+test|npm\s+run\s+test|next\s+build|npm\s+run\s+build)\b/);
-          if (verifyMatch) {
-            this.verificationToolsCalled.add(verifyMatch[1]);
-            // Parse verification result for errors
+          // Track verification commands using extracted pure function (tsc, vitest, jest, playwright, next build, etc.)
+          const verifyTool = detectVerificationTool(cmd);
+          if (verifyTool) {
+            this.verificationToolsCalled.add(verifyTool);
+            // Parse verification result for errors using extracted pure function
             const resultStr = typeof result === "string" ? result : JSON.stringify(result);
-            const isTsc = /\btsc\b/.test(cmd);
-            const isVitest = /\bvitest\b|npm\s+(run\s+)?test\b/.test(cmd);
-            if (isTsc) {
-              // tsc: look for "error TS" or non-zero exit
-              const tscErrors = resultStr.match(/error TS\d+/g);
-              const exitCode = resultStr.match(/exit code[:\s]+(\d+)/i);
-              if (tscErrors && tscErrors.length > 0) {
-                this.verificationHadErrors = true;
-                this.verificationErrorSummary = `tsc: ${tscErrors.length} type error(s) — ${tscErrors.slice(0, 3).join(", ")}${tscErrors.length > 3 ? "..." : ""}`;
-              } else if (exitCode && parseInt(exitCode[1]) !== 0) {
-                this.verificationHadErrors = true;
-                this.verificationErrorSummary = `tsc: exited with code ${exitCode[1]}`;
-              }
-            }
-            if (isVitest) {
-              // vitest: look for failed tests
-              const failedMatch = resultStr.match(/(\d+)\s*failed/);
-              if (failedMatch && parseInt(failedMatch[1]) > 0) {
-                this.verificationHadErrors = true;
-                this.verificationErrorSummary = `vitest: ${failedMatch[1]} test(s) failed`;
-              }
+            const errorSummary = parseVerificationResult(cmd, resultStr);
+            if (errorSummary) {
+              this.verificationHadErrors = true;
+              this.verificationErrorSummary = errorSummary;
             }
           }
-          // Track code-modifying operations
-          if (/\b(sed\s+-i|tee\s|mkdir|npm\s+run\s+build|next\s+build)\b/.test(cmd) ||
-              /\b(echo\s+.*>|cat\s+.*>|printf\s+.*>|>>)/.test(cmd)) {
+          // Track code-modifying operations using extracted pure function
+          if (isCodeModificationBash(cmd)) {
             this.codeModificationsThisTurn = true;
             this.codeModificationCount++;
           }
         }
-        // Track file writing/editing tools (MCP or built-in)
-        if (call.name && (call.name === "write_file" || call.name === "edit_file" || call.name === "patch_file" || call.name === "create_backup")) {
+        // Track file writing/editing tools (MCP or built-in) using extracted pure function
+        if (call.name && isFileModificationTool(call.name)) {
           this.codeModificationsThisTurn = true;
           this.codeModificationCount++;
         }
@@ -1306,7 +1294,7 @@ export class AgentRunner {
 
       // === Cognitive Pipeline: Proactive Verification Loop ===
       // (a) After 3+ code modifications without verification, nudge agent to run checks now
-      if (input.isWorker && this.codeModificationCount >= 3 && this.verificationToolsCalled.size === 0) {
+      if (input.isWorker && shouldNudgeVerification(this.codeModificationCount, this.verificationToolsCalled.size)) {
         input.history.push({
           role: "system",
           content:
@@ -1314,6 +1302,7 @@ export class AgentRunner {
             `Please run verification now before continuing:\n` +
             `1. bash({ command: "npx tsc --noEmit" }) — type check\n` +
             `2. bash({ command: "npx vitest run" }) — unit tests\n` +
+            `3. bash({ command: "npm run build" }) — build check\n` +
             `Fix any failures before making more changes.`,
         });
       }
@@ -3281,13 +3270,19 @@ export class AgentRunner {
         return { ok: false, error: "Access denied" };
       }
 
-      // === Cognitive Pipeline Layer 3: Verification Gate ===
+      // === Cognitive Pipeline Layer 3: Verification Gate + Auto-Fix Loop ===
       // Block Worker agents from reporting task completion if they modified code but didn't run verification.
       // Safety valve: allow bypass after 2 blocks to prevent deadlock.
-      const isWorkerCtx = this.toolContext && !this.toolContext.isCoordinator && this.toolContext.hasActiveWorkflow;
-      const completionRe = /\b(done|complete|finished|completed|完成|已完成|搞定了|做好了|完毕)\b/i;
-      const isCompletionMsg = completionRe.test(content) && !this.pipelineContext;
-      if (isWorkerCtx && isCompletionMsg && this.codeModificationsThisTurn && this.verificationToolsCalled.size === 0) {
+      const isWorkerCtx = !!(this.toolContext && !this.toolContext.isCoordinator && this.toolContext.hasActiveWorkflow);
+      const isCompletionMsg = isCompletionMessage(content) && !this.pipelineContext;
+      const gateShouldBlock = shouldBlockCompletion(
+        isWorkerCtx,
+        !!this.toolContext?.hasActiveWorkflow,
+        isCompletionMsg,
+        this.codeModificationsThisTurn,
+        this.verificationToolsCalled.size > 0,
+      );
+      if (gateShouldBlock) {
         this.verificationGateBlocks++;
         if (this.verificationGateBlocks < 2) {
           console.warn(`[CognitivePipeline] verification gate blocked Worker ${this.agentId.slice(0, 8)} (block ${this.verificationGateBlocks}/2)`);
@@ -3299,12 +3294,40 @@ export class AgentRunner {
               `Before sending this message, you MUST run:\n` +
               `1. bash({ command: "npx tsc --noEmit" }) — type check\n` +
               `2. bash({ command: "npx vitest run" }) — unit tests\n` +
+              `3. bash({ command: "npm run build" }) — build verification\n` +
               `Run these, fix any failures, THEN send your completion message with the verification results.`,
           };
         }
         // Safety valve: allow send after 2 blocks, but log warning
         console.warn(`[CognitivePipeline] verification gate bypassed for ${this.agentId.slice(0, 8)} after 2 blocks`);
         this.verificationGateBlocks = 0;
+      }
+
+      // === Auto-Fix Retry Loop ===
+      // If Worker ran verification but still has errors and tries to complete,
+      // block and force another fix attempt (max 2 retries).
+      if (isWorkerCtx && isCompletionMsg && this.verificationHadErrors && this.verificationErrorSummary) {
+        this.verificationAutoFixCount++;
+        if (this.verificationAutoFixCount <= 2) {
+          console.warn(`[CognitivePipeline] auto-fix retry ${this.verificationAutoFixCount}/2 for Worker ${this.agentId.slice(0, 8)}: ${this.verificationErrorSummary}`);
+          emitToolDone(false);
+          return {
+            ok: false,
+            error:
+              `[Auto-Fix Required — attempt ${this.verificationAutoFixCount}/2]\n` +
+              `Verification still has errors: ${this.verificationErrorSummary}\n` +
+              `You MUST fix these errors and re-run verification before reporting completion.\n` +
+              `1. Fix the errors described above\n` +
+              `2. Re-run: bash({ command: "npx tsc --noEmit" }) and bash({ command: "npx vitest run" })\n` +
+              `3. Only then send your completion message.`,
+          };
+        }
+        // Max retries reached — log and allow through
+        console.warn(`[CognitivePipeline] auto-fix loop exhausted (${this.verificationAutoFixCount} attempts) for ${this.agentId.slice(0, 8)}, allowing completion with errors`);
+        this.verificationAutoFixCount = 0;
+      } else if (isWorkerCtx && isCompletionMsg && !this.verificationHadErrors) {
+        // Successful completion — reset auto-fix counter
+        this.verificationAutoFixCount = 0;
       }
 
       const result = await store.sendMessage({

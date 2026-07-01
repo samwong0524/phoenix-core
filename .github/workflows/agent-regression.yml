@@ -1,0 +1,108 @@
+# Agent 行为回归测试 — 在 prompts/runtime 变更时自动触发
+# AgentHound YAML 回归: smoke / consistency / boundary 三套件
+
+name: Agent Regression Test
+
+on:
+  pull_request:
+    paths:
+      - 'src/prompts/**'
+      - 'src/runtime/**'
+      - 'tests/automated/**'
+  push:
+    branches: [main]
+    paths:
+      - 'src/prompts/**'
+      - 'src/runtime/**'
+
+jobs:
+  regression:
+    name: AgentHound Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: phoenix_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd backend && bun install
+          pip install -r tests/requirements.txt
+
+      - name: Configure environment
+        run: |
+          cp backend/.env.example backend/.env.local
+          echo "LLM_PROVIDER=freellmapi" >> backend/.env.local
+
+      - name: Initialize database
+        run: |
+          cd backend
+          bun run db:migrate 2>/dev/null || true
+          curl -sf -X POST http://127.0.0.1:3100/api/admin/init-db 2>/dev/null || true
+
+      - name: Start Phoenix-Core
+        run: |
+          cd backend && bun dev &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3100/ > /dev/null; then
+              echo "Service ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Smoke Tests
+        run: |
+          python tests/agenthound_runner.py --suite smoke --compare --fail-fast
+
+      - name: Run Consistency Tests
+        if: success()
+        run: |
+          python tests/agenthound_runner.py --suite consistency --compare
+
+      - name: Run Boundary Tests
+        if: success()
+        run: |
+          python tests/agenthound_runner.py --suite boundary --compare
+
+      - name: Upload Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-report
+          path: evals/results/reports/
+          retention-days: 30
