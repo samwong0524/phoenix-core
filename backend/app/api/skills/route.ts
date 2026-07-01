@@ -161,6 +161,7 @@ export async function GET() {
         name: frontmatter.name,
         description: frontmatter.description,
         autoLoad: parseBoolean(frontmatter["auto-load"] ?? frontmatter.auto_load),
+        disabled: parseBoolean(frontmatter.disabled),
         roles,
         license: (frontmatter.license as string | undefined) ?? null,
         skillPath: file,
@@ -224,9 +225,13 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const skillName = body?.name;
   const autoLoad = body?.autoLoad;
+  const disabled = body?.disabled;
 
-  if (!skillName || typeof autoLoad !== "boolean") {
-    return NextResponse.json({ error: "Missing name or autoLoad" }, { status: 400 });
+  if (!skillName) {
+    return NextResponse.json({ error: "Missing name" }, { status: 400 });
+  }
+  if (typeof autoLoad !== "boolean" && typeof disabled !== "boolean") {
+    return NextResponse.json({ error: "Provide autoLoad and/or disabled" }, { status: 400 });
   }
   if (!/^[a-z0-9_-]+$/.test(skillName)) {
     return NextResponse.json({ error: "Invalid skill name" }, { status: 400 });
@@ -244,14 +249,37 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid skill file" }, { status: 500 });
   }
 
-  // Replace auto-load line in frontmatter
-  const newFrontmatter = match[1]
-    .replace(/^(auto-load|auto_load)\s*:.*$/im, `auto-load: ${autoLoad}`);
+  let newFrontmatter = match[1];
+
+  // Update auto-load if provided
+  if (typeof autoLoad === "boolean") {
+    if (/^(auto-load|auto_load)\s*:/im.test(newFrontmatter)) {
+      newFrontmatter = newFrontmatter.replace(
+        /^(auto-load|auto_load)\s*:.*$/im,
+        `auto-load: ${autoLoad}`
+      );
+    } else {
+      newFrontmatter += `\nauto-load: ${autoLoad}`;
+    }
+  }
+
+  // Update disabled if provided
+  if (typeof disabled === "boolean") {
+    if (/^disabled\s*:/im.test(newFrontmatter)) {
+      newFrontmatter = newFrontmatter.replace(
+        /^disabled\s*:.*$/im,
+        `disabled: ${disabled}`
+      );
+    } else {
+      newFrontmatter += `\ndisabled: ${disabled}`;
+    }
+  }
+
   const newContent = `---\n${newFrontmatter}\n---\n${match[2]}`;
 
   await fs.writeFile(skillPath, newContent, "utf-8");
   invalidateSkillCache();
-  return NextResponse.json({ ok: true, name: skillName, autoLoad });
+  return NextResponse.json({ ok: true, name: skillName, autoLoad, disabled });
 }
 
 export async function POST(req: NextRequest) {

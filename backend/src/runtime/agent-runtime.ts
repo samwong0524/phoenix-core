@@ -2334,7 +2334,24 @@ export class AgentRunner {
           }
 
           // Apply precise replacement
-          const patched = existingContent.replace(patchOld, patchNew);
+          let patched = existingContent.replace(patchOld, patchNew);
+
+          // Version bump: increment patch version in frontmatter (semver)
+          const versionRe = /^(version\s*:\s*)(\d+)\.(\d+)\.(\d+)\s*$/im;
+          const versionMatch = patched.match(versionRe);
+          if (versionMatch) {
+            const major = versionMatch[2];
+            const minor = versionMatch[3];
+            const patchV = Number(versionMatch[4]) + 1;
+            patched = patched.replace(versionRe, `$1${major}.${minor}.${patchV}`);
+          } else {
+            // No version line — add version: 1.0.1 after the description line
+            patched = patched.replace(
+              /^(description\s*:.*)$/im,
+              `$1\nversion: 1.0.1`
+            );
+          }
+
           await fs.writeFile(skillFilePath, patched, "utf-8");
         } else {
           const skillDirPath = path.join(skillsDir, proposal.skillName);
@@ -2348,6 +2365,7 @@ export class AgentRunner {
             "---",
             `name: ${proposal.skillName}`,
             `description: ${proposal.skillDescription}`,
+            "version: 1.0.0",
             "---",
             "",
             proposal.skillContent,

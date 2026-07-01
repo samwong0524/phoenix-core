@@ -8,6 +8,7 @@ export type SkillFrontmatter = {
   "allowed-tools"?: string[];
   "auto-load"?: string | boolean;
   auto_load?: string | boolean;
+  disabled?: string | boolean;
   metadata?: Record<string, unknown>;
   requires?: string[];
 };
@@ -21,6 +22,7 @@ export type Skill = {
   license?: string;
   allowedTools?: string[];
   autoLoad?: boolean;
+  disabled?: boolean;
   metadata?: Record<string, unknown>;
   requires?: string[];  // design doc §11.4: skill dependencies
 };
@@ -234,6 +236,9 @@ export class SkillLoader {
             (frontmatter as Record<string, unknown>)["auto-load"] ??
               (frontmatter as Record<string, unknown>)["auto_load"]
           );
+          const disabled = parseBoolean(
+            (frontmatter as Record<string, unknown>)["disabled"]
+          );
 
           // Parse requires from frontmatter (top-level key)
           const requiresRaw = (frontmatter as Record<string, unknown>)["requires"];
@@ -250,6 +255,7 @@ export class SkillLoader {
             license: frontmatter.license,
             allowedTools: frontmatter["allowed-tools"],
             autoLoad,
+            disabled,
             metadata: frontmatter.metadata,
             requires,
           };

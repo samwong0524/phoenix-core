@@ -79,7 +79,8 @@ export async function buildSkillsBlock(role?: string): Promise<string> {
       }
       return true;
     });
-    const roleFiltered = withDepsOk.filter((skill) => {
+    const enabledOnly = withDepsOk.filter((skill) => !skill.disabled);
+    const roleFiltered = enabledOnly.filter((skill) => {
       const skillRolesRaw = (skill.metadata as Record<string, unknown> | undefined)?.roles;
       const skillRoles: string[] | undefined =
         Array.isArray(skillRolesRaw)
