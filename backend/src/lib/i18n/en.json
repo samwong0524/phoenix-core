@@ -264,7 +264,9 @@
     "trending_title": "Trending",
     "categories_title": "Categories",
     "calls": "calls",
-    "loading_popular": "Loading popular skills..."
+    "loading_popular": "Loading popular skills...",
+    "translate_hint": "English skill repos are richer, try translating",
+    "search_in_english": "Search in English"
   },
   "pipeline": {
     "title": "Pipeline",

@@ -264,7 +264,9 @@
     "trending_title": "近期热门",
     "categories_title": "分类浏览",
     "calls": "次",
-    "loading_popular": "加载推荐技能..."
+    "loading_popular": "加载推荐技能...",
+    "translate_hint": "英文技能库更丰富，试试翻译搜索",
+    "search_in_english": "用英文搜索"
   },
   "pipeline": {
     "title": "流水线",

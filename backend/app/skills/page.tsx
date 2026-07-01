@@ -87,6 +87,130 @@ function timeAgo(date: string, t: (key: string, params?: Record<string, unknown>
   return t("skills.days_ago", { n: days });
 }
 
+// 检测是否包含中文
+function hasChineseQuery(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf]/.test(text);
+}
+
+// 中文→英文搜索词映射
+const ZH_TO_EN: Record<string, string> = {
+  "代码": "code",
+  "审查": "review",
+  "调试": "debug",
+  "测试": "test",
+  "前端": "frontend",
+  "后端": "backend",
+  "数据库": "database",
+  "部署": "deploy",
+  "监控": "monitor",
+  "日志": "logging",
+  "安全": "security",
+  "翻译": "translation",
+  "文档": "documentation",
+  "性能": "performance",
+  "优化": "optimization",
+  "爬虫": "web scraping",
+  "数据": "data",
+  "分析": "analysis",
+  "可视化": "visualization",
+  "接口": "api",
+  "接口设计": "api design",
+  "网页": "web",
+  "搜索": "search",
+  "抓取": "scraping",
+  "图片": "image",
+  "生成": "generation",
+  "设计": "design",
+  "界面": "ui",
+  "用户体验": "ux",
+  "运维": "devops",
+  "容器": "docker",
+  "编排": "orchestration",
+  "流水线": "pipeline",
+  "持续集成": "ci",
+  "持续部署": "cd",
+  "微服务": "microservices",
+  "架构": "architecture",
+  "重构": "refactoring",
+  "规划": "planning",
+  "写作": "writing",
+  "摘要": "summarizer",
+  "邮件": "email",
+  "简历": "resume",
+  "表格": "spreadsheet",
+  "文件": "file",
+  "转换": "converter",
+  "格式": "format",
+  "阿里": "alibaba",
+  "百炼": "bailian",
+  "钉钉": "dingtalk",
+  "通义": "tongyi",
+  "函数计算": "serverless",
+  "机器学习": "machine learning",
+  "深度学习": "deep learning",
+  "人工智能": "ai",
+  "大模型": "llm",
+  "智能体": "agent",
+  "知识库": "knowledge base",
+  "问答": "qa",
+  "聊天": "chat",
+  "对话": "conversation",
+  "语音": "voice",
+  "视频": "video",
+  "音频": "audio",
+  "浏览器": "browser",
+  "自动化": "automation",
+  "工作流": "workflow",
+  "脚本": "script",
+  "模板": "template",
+  "组件": "component",
+  "状态管理": "state management",
+  "路由": "routing",
+  "响应式": "responsive",
+  "动画": "animation",
+  "图表": "chart",
+  "表单": "form",
+  "登录": "login",
+  "认证": "auth",
+  "权限": "permission",
+  "缓存": "cache",
+  "队列": "queue",
+  "消息": "message",
+  "通知": "notification",
+  "存储": "storage",
+  "云": "cloud",
+  "服务器": "server",
+  "负载均衡": "load balancer",
+  "网关": "gateway",
+  "加密": "encryption",
+  "解密": "decryption",
+  "密钥": "secrets",
+  "漏洞": "vulnerability",
+  "审计": "audit",
+  "扫描": "scanner",
+  "备份": "backup",
+  "恢复": "recovery",
+  "迁移": "migration",
+  "升级": "upgrade",
+  "版本": "version",
+  "发布": "release",
+  "回滚": "rollback",
+};
+
+// 将中文搜索词翻译为英文
+function translateToEnglish(query: string): string {
+  let result = query;
+  // 按长度降序排列，优先匹配更长的词组
+  const sortedKeys = Object.keys(ZH_TO_EN).sort((a, b) => b.length - a.length);
+  for (const zh of sortedKeys) {
+    if (result.includes(zh)) {
+      result = result.replace(new RegExp(zh, "g"), ZH_TO_EN[zh]);
+    }
+  }
+  // 清理多余空格
+  return result.replace(/\s+/g, " ").trim();
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -453,41 +577,67 @@ function MarketplaceTab({
       )}
 
       {/* Search bar */}
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && onSearch()}
-          placeholder={t("skills.search_placeholder")}
-          style={{
-            flex: 1, padding: "10px 14px",
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)", color: "var(--text-primary)", fontSize: 13,
-            outline: "none",
-            transition: "border-color 0.2s",
-          }}
-          onFocus={e => { e.target.style.borderColor = "var(--green-vivid)"; }}
-          onBlur={e => { e.target.style.borderColor = "var(--border)"; }}
-        />
-        <button
-          onClick={onSearch}
-          disabled={searching || query.trim().length < 2}
-          style={{
-            padding: "10px 24px",
-            background: "var(--green-soft)",
-            border: "1px solid var(--green-mid)",
-            borderRadius: "var(--radius-md)",
-            color: "var(--green-text)",
-            cursor: searching || query.trim().length < 2 ? "not-allowed" : "pointer",
-            fontWeight: 600, fontSize: 13,
-            opacity: searching || query.trim().length < 2 ? 0.5 : 1,
-            transition: "background 0.15s",
-          }}
-        >
-          {searching ? t("skills.searching") : t("skills.search")}
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && onSearch()}
+            placeholder={t("skills.search_placeholder")}
+            style={{
+              flex: 1, padding: "10px 14px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)", color: "var(--text-primary)", fontSize: 13,
+              outline: "none",
+              transition: "border-color 0.2s",
+            }}
+            onFocus={e => { e.target.style.borderColor = "var(--green-vivid)"; }}
+            onBlur={e => { e.target.style.borderColor = "var(--border)"; }}
+          />
+          <button
+            onClick={onSearch}
+            disabled={searching || query.trim().length < 2}
+            style={{
+              padding: "10px 24px",
+              background: "var(--green-soft)",
+              border: "1px solid var(--green-mid)",
+              borderRadius: "var(--radius-md)",
+              color: "var(--green-text)",
+              cursor: searching || query.trim().length < 2 ? "not-allowed" : "pointer",
+              fontWeight: 600, fontSize: 13,
+              opacity: searching || query.trim().length < 2 ? 0.5 : 1,
+              transition: "background 0.15s",
+            }}
+          >
+            {searching ? t("skills.searching") : t("skills.search")}
+          </button>
+        </div>
+        {/* Chinese translation suggestion */}
+        {hasChineseQuery(query) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-secondary)" }}>
+            <span>{t("skills.translate_hint")}:</span>
+            <button
+              onClick={() => {
+                const translated = translateToEnglish(query);
+                setQuery(translated);
+              }}
+              style={{
+                padding: "2px 8px",
+                background: "var(--blue-soft)",
+                border: "1px solid var(--blue-muted)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--blue-text)",
+                cursor: "pointer",
+                fontSize: 12,
+                transition: "background 0.15s",
+              }}
+            >
+              "{translateToEnglish(query)}" → {t("skills.search_in_english")}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Results */}
