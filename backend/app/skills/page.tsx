@@ -198,9 +198,9 @@ export default function SkillsPage() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-void)", color: "var(--text-primary)" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-void)", color: "var(--text-primary)" }}>
       {/* Header */}
-      <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ padding: "24px 32px 0", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <PageHeader
             title={t("skills.title")}
@@ -213,10 +213,11 @@ export default function SkillsPage() {
 
       {/* Tabs */}
       <nav style={{
-        maxWidth: 1200, margin: "0 auto",
+        maxWidth: 1200, margin: "0 auto", width: "100%",
         padding: "0 32px",
         display: "flex", gap: 0,
         borderBottom: "1px solid var(--border)",
+        flexShrink: 0,
       }}>
         {tabs.map(tab => (
           <button
@@ -244,8 +245,8 @@ export default function SkillsPage() {
         ))}
       </nav>
 
-      {/* Content */}
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 32px" }}>
+      {/* Content - scrollable area */}
+      <main style={{ flex: 1, overflowY: "auto", maxWidth: 1200, width: "100%", margin: "0 auto", padding: "24px 32px" }}>
         {activeTab === "installed" && (
           <InstalledTab skills={skills} onDelete={handleDelete} t={t} />
         )}
