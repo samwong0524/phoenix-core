@@ -74,6 +74,8 @@
     "llm_done": "LLM 结束: {role}",
     "tool_start": "工具开始: {role} · {name}",
     "tool_done": "工具结束: {role} · {name}",
+    "working_start": "Agent 开始处理: {agent}",
+    "working_done": "Agent 处理完成: {agent}",
     "stop_all_event": "停止全部 Agent",
     "default_workspace": "Default Workspace",
     "new_workspace": "New Workspace",

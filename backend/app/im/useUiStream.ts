@@ -36,6 +36,7 @@ export function useUiStream(
   const agentRoleByIdRef = useRef<Map<string, string>>(new Map());
   const groupsRef = useRef<Group[]>([]);
   const beamTimeoutsRef = useRef<number[]>([]);
+  const workingAgentIdsRef = useRef<Set<string>>(new Set());
   const refreshQueueRef = useRef<{
     timer: number | null;
     pending: { groups: boolean; agents: boolean; messages: boolean; llmHistory: boolean };
@@ -234,6 +235,20 @@ export function useUiStream(
               });
             }
           }
+        } else if (payload.event === "ui.agent.working.start") {
+          const agentId = payload.data?.agentId as UUID | undefined;
+          if (agentId) {
+            workingAgentIdsRef.current.add(agentId);
+            setAgentStatusById((prev) => ({ ...prev, [agentId]: "BUSY" }));
+            pushVizEvent(payload, t("im.working_start", { agent: agentId.slice(0, 8) }), "agent");
+          }
+        } else if (payload.event === "ui.agent.working.done") {
+          const agentId = payload.data?.agentId as UUID | undefined;
+          if (agentId) {
+            workingAgentIdsRef.current.delete(agentId);
+            setAgentStatusById((prev) => ({ ...prev, [agentId]: "IDLE" }));
+            pushVizEvent(payload, t("im.working_done", { agent: agentId.slice(0, 8) }), "agent");
+          }
         } else if (payload.event === "ui.agent.llm.start" || payload.event === "ui.agent.llm.done") {
           const agentId = payload.data?.agentId as UUID | undefined;
           const role = agentId
@@ -244,10 +259,14 @@ export function useUiStream(
             : t("im.llm_done", { role });
           pushVizEvent(payload, label, "llm");
           if (agentId) {
-            setAgentStatusById((prev) => ({
-              ...prev,
-              [agentId]: payload.event === "ui.agent.llm.start" ? "BUSY" : "IDLE",
-            }));
+            if (payload.event === "ui.agent.llm.start") {
+              setAgentStatusById((prev) => ({ ...prev, [agentId]: "BUSY" }));
+            } else {
+              // Only set IDLE if agent is not in working state
+              if (!workingAgentIdsRef.current.has(agentId)) {
+                setAgentStatusById((prev) => ({ ...prev, [agentId]: "IDLE" }));
+              }
+            }
           }
         } else if (
           payload.event === "ui.agent.tool_call.start" ||
@@ -263,16 +282,26 @@ export function useUiStream(
             : t("im.tool_done", { role, name: toolName });
           pushVizEvent(payload, label, "tool");
           if (agentId) {
-            setAgentStatusById((prev) => ({
-              ...prev,
-              [agentId]: payload.event === "ui.agent.tool_call.start" ? "BUSY" : "IDLE",
-            }));
+            if (payload.event === "ui.agent.tool_call.start") {
+              setAgentStatusById((prev) => ({ ...prev, [agentId]: "BUSY" }));
+            } else {
+              // Only set IDLE if agent is not in working state
+              if (!workingAgentIdsRef.current.has(agentId)) {
+                setAgentStatusById((prev) => ({ ...prev, [agentId]: "IDLE" }));
+              }
+            }
           }
         } else if (payload.event === "ui.agent.interrupt_all") {
           pushVizEvent(payload, t("im.stop_all_event"), "agent");
           const ids = Array.isArray(payload.data?.agentIds)
             ? (payload.data.agentIds as UUID[])
             : [];
+          // Clear working state for interrupted agents
+          if (ids.length > 0) {
+            for (const id of ids) workingAgentIdsRef.current.delete(id);
+          } else {
+            workingAgentIdsRef.current.clear();
+          }
           setAgentStatusById((prev) => {
             const next = { ...prev };
             const targetIds = ids.length > 0 ? ids : Object.keys(next);

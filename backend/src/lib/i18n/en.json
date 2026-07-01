@@ -74,6 +74,8 @@
     "llm_done": "LLM done: {role}",
     "tool_start": "Tool start: {role} · {name}",
     "tool_done": "Tool done: {role} · {name}",
+    "working_start": "Agent working: {agent}",
+    "working_done": "Agent done: {agent}",
     "stop_all_event": "Stop all agents",
     "default_workspace": "Default Workspace",
     "new_workspace": "New Workspace",

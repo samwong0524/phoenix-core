@@ -374,16 +374,22 @@ export class AgentRunner {
     if (this.consumeInterruptRequest()) return false;
     let iterations = 0;
     let hadWork = false;
+    let workspaceId: string | null = null;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) return hadWork;
+      if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) break;
       iterations++;
-      if (this.consumeInterruptRequest()) return hadWork;
+      if (this.consumeInterruptRequest()) break;
       const batches = await store.listUnreadByGroup({ agentId: this.agentId });
       console.info(`[processUntilIdle] agent=${this.agentId} iterations=${iterations} batches=${batches.length}`);
       // Pipeline mode: check for pending pipeline instruction first (Phase 1 - deterministic execution)
       if (this.pipelineContext) {
         console.info(`[processUntilIdle] agent=${this.agentId} processing pipeline stage="${this.pipelineContext.stageName}"`);
+        // Emit working.start for pipeline mode
+        if (!workspaceId && batches.length > 0) {
+          workspaceId = await store.getGroupWorkspaceId({ groupId: batches[0].groupId });
+          getWorkspaceUIBus().emit(workspaceId, { event: "ui.agent.working.start", data: { workspaceId, agentId: this.agentId } });
+        }
         try {
           await this.processPipelineInstruction(this.pipelineContext.groupId, this.pipelineContext.instruction);
           hadWork = true;
@@ -391,10 +397,16 @@ export class AgentRunner {
           console.error(`[processUntilIdle] Pipeline processing failed:`, err);
         }
         this.pipelineContext = null; // clear after processing
-        return hadWork;
+        break;
       }
 
-      if (batches.length === 0) return hadWork;
+      if (batches.length === 0) break;
+
+      // Emit working.start on first batch with actual work
+      if (!workspaceId) {
+        workspaceId = await store.getGroupWorkspaceId({ groupId: batches[0].groupId });
+        getWorkspaceUIBus().emit(workspaceId, { event: "ui.agent.working.start", data: { workspaceId, agentId: this.agentId } });
+      }
 
       this.bus.emit(this.agentId, {
         event: "agent.unread",
@@ -409,7 +421,7 @@ export class AgentRunner {
 
       for (const batch of batches) {
         console.info(`[processUntilIdle] Processing batch group=${batch.groupId} messages=${batch.messages.length}`);
-        if (this.consumeInterruptRequest()) return hadWork;
+        if (this.consumeInterruptRequest()) break;
         try {
           await this.processGroupUnread(batch.groupId, batch.messages);
           hadWork = true;
@@ -417,9 +429,16 @@ export class AgentRunner {
           console.error(`[processUntilIdle] Error processing group=${batch.groupId}:`, err);
         }
         console.info(`[processUntilIdle] Done processing batch group=${batch.groupId}`);
-        if (this.consumeInterruptRequest()) return hadWork;
+        if (this.consumeInterruptRequest()) break;
       }
     }
+
+    // Emit working.done when processing cycle finishes
+    if (workspaceId) {
+      getWorkspaceUIBus().emit(workspaceId, { event: "ui.agent.working.done", data: { workspaceId, agentId: this.agentId } });
+    }
+
+    return hadWork;
   }
 
   private async processGroupUnread(
