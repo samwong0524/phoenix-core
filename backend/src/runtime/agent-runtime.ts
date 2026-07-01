@@ -309,7 +309,7 @@ export class AgentRunner {
   }
 
   private async loop() {
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       try {
         // Safety timeout: if no wakeup within 600s, agent is orphaned —stop
@@ -409,7 +409,7 @@ export class AgentRunner {
     let iterations = 0;
     let hadWork = false;
     let workspaceId: string | null = null;
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       if (iterations >= AgentRunner.MAX_PROCESS_ITERATIONS) break;
       iterations++;
@@ -5183,9 +5183,9 @@ export class AgentRuntime {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __agentWechatRuntime: AgentRuntime | undefined;
-  // eslint-disable-next-line no-var
+   
   var __agentWechatRuntimeVersion: number | undefined;
 }
 
