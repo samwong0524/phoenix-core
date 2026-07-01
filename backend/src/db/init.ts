@@ -242,4 +242,123 @@ export async function ensureSchema() {
       created_at timestamptz not null
     );
   `;
+
+  // ── Observability tables ──────────────────────────────────────
+
+  await sql/* sql */ `
+    create table if not exists llm_requests (
+      id uuid primary key default gen_random_uuid(),
+      request_id text not null,
+      agent_id uuid not null references agents(id),
+      group_id uuid references groups(id),
+      workspace_id uuid not null references workspaces(id),
+      provider text not null,
+      model text not null,
+      prompt_version text,
+      is_fallback boolean default false,
+      tokens_prompt integer not null default 0,
+      tokens_completion integer not null default 0,
+      tokens_total integer not null default 0,
+      tokens_cached integer default 0,
+      latency_ms integer not null,
+      ttft_ms integer,
+      queue_wait_ms integer default 0,
+      finish_reason text not null,
+      tool_call_count integer default 0,
+      error_message text,
+      http_status integer,
+      cost_usd decimal(10,6) default 0,
+      created_at timestamptz not null default now()
+    );
+  `;
+  await sql/* sql */ `create index if not exists idx_llm_requests_agent on llm_requests(agent_id);`;
+  await sql/* sql */ `create index if not exists idx_llm_requests_workspace on llm_requests(workspace_id);`;
+  await sql/* sql */ `create index if not exists idx_llm_requests_created on llm_requests(created_at desc);`;
+  await sql/* sql */ `create index if not exists idx_llm_requests_request_id on llm_requests(request_id);`;
+  await sql/* sql */ `create index if not exists idx_llm_requests_provider on llm_requests(provider);`;
+
+  await sql/* sql */ `
+    create table if not exists trace_spans (
+      id uuid primary key default gen_random_uuid(),
+      trace_id text not null,
+      span_id text not null,
+      parent_span_id text,
+      agent_id uuid references agents(id),
+      operation text not null,
+      span_name text not null,
+      status text not null default 'ok',
+      started_at timestamptz not null default now(),
+      duration_ms integer not null,
+      attributes jsonb default '{}',
+      events jsonb default '[]',
+      created_at timestamptz not null default now()
+    );
+  `;
+  await sql/* sql */ `create index if not exists idx_trace_spans_trace on trace_spans(trace_id);`;
+  await sql/* sql */ `create index if not exists idx_trace_spans_agent on trace_spans(agent_id);`;
+  await sql/* sql */ `create index if not exists idx_trace_spans_created on trace_spans(created_at desc);`;
+
+  await sql/* sql */ `
+    create table if not exists metrics_hourly (
+      id uuid primary key default gen_random_uuid(),
+      hour timestamptz not null,
+      workspace_id uuid references workspaces(id),
+      agent_id uuid references agents(id),
+      provider text,
+      request_count integer not null default 0,
+      success_count integer not null default 0,
+      error_count integer not null default 0,
+      timeout_count integer not null default 0,
+      fallback_count integer not null default 0,
+      latency_p50 integer,
+      latency_p90 integer,
+      latency_p95 integer,
+      latency_p99 integer,
+      latency_avg integer,
+      ttft_p50 integer,
+      ttft_p95 integer,
+      tokens_prompt_total bigint default 0,
+      tokens_completion_total bigint default 0,
+      tokens_total bigint default 0,
+      cost_total_usd decimal(12,6) default 0,
+      tool_call_total integer default 0,
+      tool_error_total integer default 0,
+      unique(hour, workspace_id, agent_id, provider)
+    );
+  `;
+  await sql/* sql */ `create index if not exists idx_metrics_hourly_hour on metrics_hourly(hour desc);`;
+  await sql/* sql */ `create index if not exists idx_metrics_hourly_ws on metrics_hourly(workspace_id, hour desc);`;
+
+  await sql/* sql */ `
+    create table if not exists alert_events (
+      id uuid primary key default gen_random_uuid(),
+      alert_name text not null,
+      severity text not null,
+      metric_name text not null,
+      metric_value decimal(12,4),
+      threshold decimal(12,4),
+      condition_desc text,
+      context jsonb default '{}',
+      resolved boolean default false,
+      resolved_at timestamptz,
+      created_at timestamptz not null default now()
+    );
+  `;
+  await sql/* sql */ `create index if not exists idx_alert_events_created on alert_events(created_at desc);`;
+  await sql/* sql */ `create index if not exists idx_alert_events_severity on alert_events(severity);`;
+
+  await sql/* sql */ `
+    create table if not exists cost_daily (
+      id uuid primary key default gen_random_uuid(),
+      date date not null,
+      workspace_id uuid references workspaces(id),
+      provider text not null,
+      model text not null,
+      request_count integer not null default 0,
+      tokens_total bigint not null default 0,
+      cost_usd decimal(12,6) not null default 0,
+      unique(date, workspace_id, provider, model)
+    );
+  `;
+  await sql/* sql */ `create index if not exists idx_cost_daily_date on cost_daily(date desc);`;
 }
