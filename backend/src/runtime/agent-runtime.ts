@@ -925,10 +925,16 @@ export class AgentRunner {
         content: [
           `[Coordinator — Plan Confirmation Required]`,
           `Before creating agents (hire_agent) or assigning tasks (assign_agent), you MUST:`,
-          `1. Output your task decomposition plan: what tasks, who handles what, dependencies.`,
+          `1. Output your task decomposition plan using the heading "## 执行方案" followed by a task list.`,
           `2. Wait for the user to confirm or adjust the plan.`,
           `3. Only proceed with agent creation after explicit approval.`,
           `Do NOT silently create agents — the user must see and approve the work distribution.`,
+          ``,
+          `Required output format:`,
+          `## 执行方案`,
+          `- 任务1: description → assigned agent/role`,
+          `- 任务2: description → assigned agent/role`,
+          `- ...`,
         ].join("\n"),
       });
     }
@@ -4154,6 +4160,25 @@ export class AgentRunner {
       this.pendingUserQuestion = true;
       emitToolDone(true);
       return { ok: true, status: "waiting_for_user", message: "Question sent to user. Waiting for response." };
+    }
+
+    // ── todo_write: structured todo list for TaskMonitor visibility ──
+    if (name === "todo_write") {
+      const args = safeJsonParse<{
+        todos?: Array<{ description?: string; status?: string }>;
+      }>(input.call.argumentsText, {});
+      const todos = (args.todos ?? []).filter((t) => t?.description?.trim());
+      if (todos.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing required field: todos (array of {description, status})" };
+      }
+      const validStatuses = new Set(["pending", "in_progress", "completed", "cancelled"]);
+      const normalised = todos.map((t) => ({
+        description: t.description!.trim(),
+        status: validStatuses.has(t.status ?? "") ? t.status! : "pending",
+      }));
+      emitToolDone(true);
+      return { ok: true, todos: normalised };
     }
 
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);

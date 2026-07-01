@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useIMStore } from "./store";
 
 export interface TodoItem {
-  status: "completed" | "in_progress" | "pending";
+  status: "completed" | "in_progress" | "pending" | "cancelled";
   content: string;
 }
 
@@ -73,6 +73,20 @@ export function useTaskMonitorData(): TaskMonitorData {
             ? `${args.taskId}: ${args.result}`
             : args.taskId;
           todoMap.set(args.taskId, { status, content });
+        }
+
+        // ── Todo: todo_write (agent self-tracked todo list) ──
+        // Each call replaces the entire todo list with the latest snapshot.
+        if (fnName === "todo_write" && Array.isArray(args.todos)) {
+          todoMap.clear();
+          const validStatuses = new Set(["pending", "in_progress", "completed", "cancelled"]);
+          for (const [idx, item] of (args.todos as Array<Record<string, unknown>>).entries()) {
+            const desc = typeof item.description === "string" ? item.description.trim() : "";
+            if (!desc) continue;
+            const rawStatus = typeof item.status === "string" ? item.status : "pending";
+            const status = validStatuses.has(rawStatus) ? (rawStatus as TodoItem["status"]) : "pending";
+            todoMap.set(`todo-${idx}`, { status, content: desc });
+          }
         }
 
         // ── Artifacts: bash file output ──

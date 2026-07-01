@@ -124,4 +124,11 @@ export type SkillSuggestion = {
   createdAt: number;
 };
 
+export type BlockedCommand = {
+  id: string;
+  command: string;
+  kind: "dangerous" | "git";
+  dismissed: boolean;
+};
+
 export type BootStatus = "boot" | "groups" | "messages" | "send" | "idle";

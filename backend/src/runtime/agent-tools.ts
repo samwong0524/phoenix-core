@@ -776,6 +776,37 @@ export const AGENT_TOOLS_INTERACTION = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "todo_write",
+      description:
+        "[Interaction] Write or update a structured todo list visible to the user in the TaskMonitor panel. Call this to show progress on multi-step tasks. Each call replaces the entire list.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          todos: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                description: { type: "string", description: "Task description" },
+                status: {
+                  type: "string",
+                  enum: ["pending", "in_progress", "completed", "cancelled"],
+                  description: "Current status of the task",
+                },
+              },
+              required: ["description", "status"],
+            },
+            description: "Complete list of todo items (replaces previous list)",
+          },
+        },
+        required: ["todos"],
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------

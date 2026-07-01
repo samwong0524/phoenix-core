@@ -18,7 +18,7 @@ type GroupInfo = { id: string; name: string | null; memberIds: string[]; context
 type VizEventItem = { id: string; kind: string; label: string; at: number };
 
 /** TodoWrite 条目 */
-type TodoItem = { status: "completed" | "in_progress" | "pending"; content: string };
+type TodoItem = { status: "completed" | "in_progress" | "pending" | "cancelled"; content: string };
 
 /** 产物文件 */
 type ArtifactFile = { path: string; type: "text" | "binary" | "directory" };
@@ -121,7 +121,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
             todoItems.map((item, i) => (
               <div key={i} style={todoItemStyle}>
                 <span style={todoCheckStyle(item.status)}>
-                  {item.status === "completed" ? "✅" : item.status === "in_progress" ? "🔄" : "⏳"}
+                  {item.status === "completed" ? "✅" : item.status === "in_progress" ? "🔄" : item.status === "cancelled" ? "🚫" : "⏳"}
                 </span>
                 <span style={todoTextStyle(item.status)}>{item.content}</span>
               </div>
@@ -340,12 +340,12 @@ const todoItemStyle: React.CSSProperties = {
 };
 
 const todoCheckStyle = (status: string): React.CSSProperties => ({
-  fontSize: 12, flexShrink: 0, opacity: status === "completed" ? 0.5 : 1,
+  fontSize: 12, flexShrink: 0, opacity: status === "completed" || status === "cancelled" ? 0.5 : 1,
 });
 
 const todoTextStyle = (status: string): React.CSSProperties => ({
-  fontSize: 12, color: status === "completed" ? "var(--text-dim)" : "var(--text-secondary)",
-  textDecoration: status === "completed" ? "line-through" : "none",
+  fontSize: 12, color: status === "completed" || status === "cancelled" ? "var(--text-dim)" : "var(--text-secondary)",
+  textDecoration: status === "completed" || status === "cancelled" ? "line-through" : "none",
 });
 
 // Artifacts
