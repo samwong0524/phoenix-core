@@ -83,6 +83,8 @@ export interface IMState {
   setReasoningStream: (content: string | ((prev: string) => string)) => void;
   setToolStream: (content: string | ((prev: string) => string)) => void;
   setLlmHistory: (history: string) => void;
+  /** Batch-reset all stream buffers + agentError in a single store write. */
+  resetStreams: () => void;
 
   // ── UI actions ────────────────────────────────────────────
   setStatus: (status: BootStatus) => void;
@@ -263,6 +265,15 @@ export const useIMStore = create<IMState>()(
     setLlmHistory: (history) =>
       set((state) => {
         state.llmHistory = history;
+      }),
+
+    resetStreams: () =>
+      set((state) => {
+        state.llmHistory = "";
+        state.contentStream = "";
+        state.reasoningStream = "";
+        state.toolStream = "";
+        state.agentError = null;
       }),
 
     // ── UI actions ────────────────────────────────────────

@@ -11,8 +11,8 @@ import { useI18n } from "@/lib/i18n/context";
 export function useAgentStream(streamAgentId: string | null) {
   const { t } = useI18n();
   const {
-    activeGroupId, agentError,
-    setLlmHistory, setContentStream, setReasoningStream, setToolStream,
+    activeGroupId,
+    resetStreams, setLlmHistory, setContentStream, setReasoningStream, setToolStream,
     setAgentError, setAgentActivity, setAgentActivityTool,
     setMessages, setGroups,
   } = useIMStore();
@@ -91,11 +91,7 @@ export function useAgentStream(streamAgentId: string | null) {
       streamAgentIdRef.current = agentId;
 
       esRef.current?.close();
-      setLlmHistory("");
-      setContentStream("");
-      setReasoningStream("");
-      setToolStream("");
-      setAgentError(null);
+      resetStreams();
       toolCallBuffersRef.current = new Map();
       toolResultBuffersRef.current = new Map();
 
@@ -108,7 +104,7 @@ export function useAgentStream(streamAgentId: string | null) {
         try {
           const payload = JSON.parse(evt.data) as AgentStreamEvent;
           if (payload.event === "agent.stream") {
-            if (agentError) setAgentError(null);
+            if (useIMStore.getState().agentError) setAgentError(null);
             const chunk = payload.data.delta;
             if (chunk) {
               if (payload.data.kind === "content") {
@@ -180,7 +176,7 @@ export function useAgentStream(streamAgentId: string | null) {
       es.onerror = () => setAgentError(t("im.sse_disconnected"));
     },
     [
-      agentError, setLlmHistory, setContentStream, setReasoningStream, setToolStream,
+      resetStreams, setLlmHistory, setContentStream, setReasoningStream, setToolStream,
       setAgentError, setActivityDebounced, refreshMessages, refreshGroups, refreshLlmHistory, t,
     ],
   );

@@ -72,7 +72,7 @@ export function useImActions(
     async (
       s: WorkspaceDefaults,
       groupId: string,
-      opts?: { markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean; scrollToBottom?: boolean }
+      opts?: { markRead?: boolean; silent?: boolean; scrollToBottom?: boolean }
     ) => {
       // Debounce: skip if called too recently for this groupId
       const now = Date.now();
@@ -106,14 +106,13 @@ export function useImActions(
         }
       }
       if (!opts?.silent) setStatus("idle");
-      if (!opts?.skipGroupRefresh) {
-        void refreshGroups(s, { silent: opts?.silent });
-      }
+      // Note: caller is responsible for firing refreshGroups in parallel if needed.
+      // Previously this was chained here causing a waterfall (messages → groups sequential).
       if (opts?.scrollToBottom ?? messages.length > prev.length) {
         queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
       }
     },
-    [refreshGroups, bottomRef, messagesRef],
+    [bottomRef, messagesRef],
   );
 
   const refreshLlmHistory = useCallback(

@@ -306,10 +306,13 @@ function IMPageInner() {
 
   useEffect(() => {
     if (!activeGroupId || !session) return;
-    void refreshMessages(session, activeGroupId, { markRead: true }).catch((e) =>
+    // Parallel: messages + groups fire simultaneously (no waterfall)
+    // Silent: no status flicker during switch
+    void refreshMessages(session, activeGroupId, { markRead: true, silent: true }).catch((e) =>
       setError(e instanceof Error ? e.message : String(e))
     );
-  }, [activeGroupId, refreshMessages, session]);
+    void refreshGroups(session, { silent: true });
+  }, [activeGroupId, refreshMessages, refreshGroups, session]);
 
   // ── Mid-stack resize (hook) ──
   const { midStackRef, midChatHeight, handleMidResizeStart, handleMidMouseDown, handleMidTouchStart } = useMidResize();

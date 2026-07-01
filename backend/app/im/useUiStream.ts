@@ -19,7 +19,7 @@ export function useUiStream(
     groups: (s: WorkspaceDefaults, opts?: { silent?: boolean }) => Promise<void>;
     agents: (s: WorkspaceDefaults) => Promise<void>;
     messages: (s: WorkspaceDefaults, groupId: string, opts?: {
-      markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean; scrollToBottom?: boolean;
+      markRead?: boolean; silent?: boolean; scrollToBottom?: boolean;
     }) => Promise<void>;
     llmHistory: (agentId: string) => Promise<void>;
   },
@@ -126,7 +126,6 @@ export function useUiStream(
           void refresh.messages(session, activeGroupIdRef.current, {
             markRead: false,
             silent: true,
-            skipGroupRefresh: true,
             scrollToBottom: false,
           });
         }
