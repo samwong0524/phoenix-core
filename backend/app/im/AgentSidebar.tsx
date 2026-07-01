@@ -104,7 +104,7 @@ export function AgentSidebar(props: AgentSidebarProps) {
   );
 
   const { rows: agentTreeRows, groupByAgentId } = useAgentTreeLayout(
-    agents, groups, collapsedAgents, session?.humanAgentId ?? null, !!session
+    agents, groups, collapsedAgents, session?.humanAgentId ?? null, !!session, session?.defaultGroupId ?? null
   );
 
   const extraGroups = useMemo(() => {

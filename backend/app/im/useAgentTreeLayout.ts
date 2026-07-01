@@ -28,16 +28,33 @@ export function useAgentTreeLayout(
   collapsedAgents: Record<string, boolean>,
   humanAgentId: string | null,
   sessionExists: boolean,
+  defaultGroupId?: string | null,
 ): AgentTreeResult {
   return useMemo(() => {
     const groupByAgentId = new Map<string, Group>();
     if (!sessionExists) return { rows: [], groupByAgentId };
 
     // Build group lookup — exclude humanAgentId from memberIds
+    // First pass: 1:1 P2P groups (human + exactly 1 other)
     for (const g of groups) {
       if (humanAgentId && !g.memberIds.includes(humanAgentId)) continue;
       const others = g.memberIds.filter((id) => id !== humanAgentId);
       if (others.length === 1) groupByAgentId.set(others[0], g);
+    }
+
+    // Second pass: map assistant to default P2P group if not already mapped
+    if (defaultGroupId) {
+      const defaultGroup = groups.find((g) => g.id === defaultGroupId);
+      if (defaultGroup) {
+        const others = defaultGroup.memberIds.filter((id) => id !== humanAgentId);
+        // Map the first non-human agent (assistant) to the default group if it has no 1:1 group
+        for (const agentId of others) {
+          if (!groupByAgentId.has(agentId)) {
+            groupByAgentId.set(agentId, defaultGroup);
+            break; // Only map one agent to the default group
+          }
+        }
+      }
     }
 
     const byId = new Map(agents.map((a) => [a.id, a]));
@@ -84,5 +101,5 @@ export function useAgentTreeLayout(
     roots.forEach((root, index) => walk(root, 0, [], index === roots.length - 1));
 
     return { rows, groupByAgentId };
-  }, [agents, groups, collapsedAgents, humanAgentId, sessionExists]);
+  }, [agents, groups, collapsedAgents, humanAgentId, sessionExists, defaultGroupId]);
 }
