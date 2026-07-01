@@ -303,6 +303,7 @@ export const store = {
       await tx.insert(workspaces).values({
         id: workspaceId,
         name: input.name,
+        ownerId: null,
         createdAt,
       });
 
@@ -420,7 +421,7 @@ export const store = {
 
     await db.transaction(async (tx) => {
       // 1. Workspace
-      await tx.insert(workspaces).values({ id: workspaceId, name, createdAt });
+      await tx.insert(workspaces).values({ id: workspaceId, name, ownerId: null, createdAt });
 
       // 2. Agents (human + all template agents)
       await tx.insert(agents).values([
