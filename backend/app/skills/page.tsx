@@ -37,14 +37,16 @@ type RemoteSkill = {
 };
 
 type PopularSkill = {
-  skillName: string;
+  name: string;
+  description: string;
   totalCalls: number;
 };
 
 type TrendingSkill = {
-  skillName: string;
-  recentCalls: number;
-  growth: string;
+  name: string;
+  description: string;
+  callsLast7Days: number;
+  growth?: string;
 };
 
 type CategorySkill = {
@@ -560,40 +562,40 @@ function PopularSection({
           <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
             <span>🔥</span> {t("skills.popular_title")}
           </h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
             {data.popular.map((skill) => (
-              <div
-                key={skill.skillName}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  fontSize: 13,
-                }}
+              <Card
+                key={skill.name}
+                hoverable
+                hoverBorderColor="var(--green-mid)"
+                padding={12}
+                borderRadius="var(--radius-md)"
+                style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
               >
-                <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{skill.skillName}</span>
-                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>({skill.totalCalls} {t("skills.calls")})</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{skill.name}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 8 }}>{skill.totalCalls} {t("skills.calls")}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4, marginBottom: 8, minHeight: "1.8em" }}>
+                  {skill.description}
+                </div>
                 <button
-                  onClick={() => onInstall(skill.skillName, "")}
-                  disabled={installing === skill.skillName}
+                  onClick={() => onInstall(skill.name, "")}
+                  disabled={installing === skill.name}
                   style={{
-                    padding: "2px 8px",
+                    padding: "4px 10px",
                     borderRadius: "var(--radius-sm)",
-                    background: installing === skill.skillName ? "var(--bg-hover)" : "var(--green-soft)",
+                    background: installing === skill.name ? "var(--bg-hover)" : "var(--green-soft)",
                     border: "1px solid var(--green-muted)",
-                    color: installing === skill.skillName ? "var(--text-secondary)" : "var(--green-text)",
-                    cursor: installing === skill.skillName ? "wait" : "pointer",
+                    color: installing === skill.name ? "var(--text-secondary)" : "var(--green-text)",
+                    cursor: installing === skill.name ? "wait" : "pointer",
                     fontSize: 11,
                     fontWeight: 500,
                   }}
                 >
-                  {installing === skill.skillName ? t("skills.installing") : "+"}
+                  {installing === skill.name ? t("skills.installing") : t("skills.install")}
                 </button>
-              </div>
+              </Card>
             ))}
           </div>
         </div>
@@ -605,40 +607,42 @@ function PopularSection({
           <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
             <span>📈</span> {t("skills.trending_title")}
           </h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
             {data.trending.map((skill) => (
-              <div
-                key={skill.skillName}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  fontSize: 13,
-                }}
+              <Card
+                key={skill.name}
+                hoverable
+                hoverBorderColor="var(--cyan)"
+                padding={12}
+                borderRadius="var(--radius-md)"
+                style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
               >
-                <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{skill.skillName}</span>
-                <span style={{ fontSize: 11, color: "var(--cyan)", fontWeight: 500 }}>{skill.growth}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{skill.name}</span>
+                  <span style={{ fontSize: 11, color: "var(--cyan)", fontWeight: 500, marginLeft: 8 }}>
+                    {skill.growth || `+${skill.callsLast7Days}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4, marginBottom: 8, minHeight: "1.8em" }}>
+                  {skill.description}
+                </div>
                 <button
-                  onClick={() => onInstall(skill.skillName, "")}
-                  disabled={installing === skill.skillName}
+                  onClick={() => onInstall(skill.name, "")}
+                  disabled={installing === skill.name}
                   style={{
-                    padding: "2px 8px",
+                    padding: "4px 10px",
                     borderRadius: "var(--radius-sm)",
-                    background: installing === skill.skillName ? "var(--bg-hover)" : "var(--green-soft)",
+                    background: installing === skill.name ? "var(--bg-hover)" : "var(--green-soft)",
                     border: "1px solid var(--green-muted)",
-                    color: installing === skill.skillName ? "var(--text-secondary)" : "var(--green-text)",
-                    cursor: installing === skill.skillName ? "wait" : "pointer",
+                    color: installing === skill.name ? "var(--text-secondary)" : "var(--green-text)",
+                    cursor: installing === skill.name ? "wait" : "pointer",
                     fontSize: 11,
                     fontWeight: 500,
                   }}
                 >
-                  {installing === skill.skillName ? t("skills.installing") : "+"}
+                  {installing === skill.name ? t("skills.installing") : t("skills.install")}
                 </button>
-              </div>
+              </Card>
             ))}
           </div>
         </div>
