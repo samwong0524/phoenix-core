@@ -925,10 +925,16 @@ export class AgentRunner {
         content: [
           `[Coordinator — Plan Confirmation Required]`,
           `Before creating agents (hire_agent) or assigning tasks (assign_agent), you MUST:`,
-          `1. Output your task decomposition plan: what tasks, who handles what, dependencies.`,
+          `1. Output your task decomposition plan using the heading "## 执行方案" followed by a task list.`,
           `2. Wait for the user to confirm or adjust the plan.`,
           `3. Only proceed with agent creation after explicit approval.`,
           `Do NOT silently create agents — the user must see and approve the work distribution.`,
+          ``,
+          `Required output format:`,
+          `## 执行方案`,
+          `- 任务1: description → assigned agent/role`,
+          `- 任务2: description → assigned agent/role`,
+          `- ...`,
         ].join("\n"),
       });
     }

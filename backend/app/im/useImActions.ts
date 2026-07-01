@@ -350,6 +350,24 @@ export function useImActions(
     setStatus("send");
     setError(null);
 
+    // ── Auto-interrupt busy agents before sending (silent, no confirm) ──
+    const { agentStatusById: statusMap } = useIMStore.getState();
+    const hasBusy = Object.values(statusMap).some((s) => s === "BUSY");
+    if (hasBusy) {
+      try {
+        const res = await api<{ ok: boolean; interrupted: number; agentIds: string[] }>(
+          `/api/agents/interrupt-all`,
+          { method: "POST", body: JSON.stringify({ workspaceId: session.workspaceId }) },
+        );
+        setAgentStatusById((prev) => {
+          const next = { ...prev };
+          const ids = res.agentIds.length > 0 ? res.agentIds : agents.map((a) => a.id);
+          for (const id of ids) next[id] = "IDLE";
+          return next;
+        });
+      } catch { /* interrupt is best-effort; proceed with message send */ }
+    }
+
     const optimistic: Message = {
       id: `optimistic-${Date.now()}`,
       senderId: session.humanAgentId,
@@ -375,6 +393,7 @@ export function useImActions(
     void refreshGroups(session, { silent: true });
   }, [
     activeGroupId,
+    agents,
     connectAgentStream,
     draft,
     refreshAgents,
@@ -382,6 +401,7 @@ export function useImActions(
     refreshMessages,
     session,
     bottomRef,
+    setAgentStatusById,
   ]);
 
   // ── File upload ──────────────────────────────────────────────

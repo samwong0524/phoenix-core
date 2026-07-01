@@ -16,6 +16,7 @@ import { FileCard } from "./FileCard";
 const MarkdownContent = dynamic(() => import("./MarkdownContent").then(m => ({ default: m.MarkdownContent })), { ssr: false });
 import { QuestionCard } from "./QuestionCard";
 import { CommandConfirmCard } from "./CommandConfirmCard";
+import { PlanApprovalCard } from "./PlanApprovalCard";
 import { statusColor } from "./colors";
 import { useAgentStream } from "./useAgentStream";
 import { useUiStream } from "./useUiStream";
@@ -539,8 +540,61 @@ function IMPageInner() {
         }
       } catch { /* fallthrough */ }
     }
-    return <MarkdownContent content={content} />;
-  }, [answeredQuestions]);
+    // ── Detect plan marker ("## 执行方案") → render markdown + approval card ──
+    const hasPlan = /##\s*执行方案/.test(content);
+    const planApproved = hasPlan && !!message?.id && answeredQuestions.has(`plan:${message.id}`);
+
+    const sendPlanResponse = (text: string) => {
+      if (!session || !activeGroupId) return;
+      if (message?.id) {
+        setAnsweredQuestions((prev) => new Set(prev).add(`plan:${message.id}`));
+      }
+      const optimistic: Message = {
+        id: `optimistic-${Date.now()}`,
+        senderId: session.humanAgentId,
+        content: text,
+        contentType: "text",
+        sendTime: new Date().toISOString(),
+      };
+      setMessages((m) => [...m, optimistic]);
+      queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+      void api(`/api/groups/${activeGroupId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
+      });
+    };
+
+    return (
+      <>
+        <MarkdownContent
+          content={content}
+          onSuggestionClick={(text) => {
+            if (!session || !activeGroupId) return;
+            const optimistic: Message = {
+              id: `optimistic-${Date.now()}`,
+              senderId: session.humanAgentId,
+              content: text,
+              contentType: "text",
+              sendTime: new Date().toISOString(),
+            };
+            setMessages((m) => [...m, optimistic]);
+            queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+            void api(`/api/groups/${activeGroupId}/messages`, {
+              method: "POST",
+              body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
+            });
+          }}
+        />
+        {hasPlan && (
+          <PlanApprovalCard
+            approved={planApproved}
+            onApprove={() => sendPlanResponse("确认方案，请开始执行")}
+            onModify={() => sendPlanResponse("需要调整方案")}
+          />
+        )}
+      </>
+    );
+  }, [answeredQuestions, session, activeGroupId, setMessages, setAnsweredQuestions]);
 
   return (
     <IMShell
