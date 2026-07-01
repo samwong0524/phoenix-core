@@ -122,6 +122,8 @@ export class AgentRunner {
     skillContent: string;
     createdAt: string;
     source: "nudge" | "workflow";
+    patchOld?: string;  // precise find string for patch mode
+    patchNew?: string;  // precise replace string for patch mode
   }>();
   // Pipeline context: when agent is woken via pipeline (not group message), store the instruction here
   private pipelineContext: { groupId: string; instruction: string; stageName: string } | null = null;
@@ -869,16 +871,25 @@ export class AgentRunner {
     // === Skill Proposal Approval Gate: notify agent about pending proposals ===
     const pendingProposal = AgentRunner._pendingProposals.get(this.agentId);
     if (pendingProposal) {
-      const preview = pendingProposal.skillContent.slice(0, 300).replace(/\n/g, " ");
+      const detailLines: string[] = [];
+      if (pendingProposal.action === "patch" && pendingProposal.patchOld) {
+        const oldPreview = pendingProposal.patchOld.slice(0, 200).replace(/\n/g, "\\n");
+        const newPreview = (pendingProposal.patchNew ?? "").slice(0, 200).replace(/\n/g, "\\n");
+        detailLines.push(`- Find:    "${oldPreview}"`);
+        detailLines.push(`- Replace: "${newPreview}"`);
+      } else {
+        const preview = pendingProposal.skillContent.slice(0, 300).replace(/\n/g, " ");
+        detailLines.push(`- Content preview: ${preview}...`);
+      }
       history.push({
         role: "system",
         content: [
           `[Skill Proposal — Pending User Approval]`,
-          `The system identified a reusable pattern and prepared a skill ${pendingProposal.action === "patch" ? "update" : "creation"}:`,
+          `The system identified a reusable pattern and prepared a skill ${pendingProposal.action === "patch" ? "update (precise patch)" : "creation"}:`,
           `- Name: "${pendingProposal.skillName}"`,
           `- Description: ${pendingProposal.skillDescription}`,
           `- Source: ${pendingProposal.source === "workflow" ? "completed workflow" : "conversation analysis"}`,
-          `- Content preview: ${preview}...`,
+          ...detailLines,
           ``,
           `IMPORTANT: Do NOT create/patch this skill automatically.`,
           `1. Relay this proposal to the user via send_group_message.`,
@@ -1563,17 +1574,19 @@ export class AgentRunner {
         "Respond with a JSON object only (no markdown, no extra text):",
         JSON.stringify({
           hasPattern: false,
-          action: "create", // "create" for new skill, "patch" to update existing, null if no pattern
+          action: "create",
           skillName: "kebab-case-name-or-null",
           skillDescription: "one-line summary or null",
-          skillContent: "full markdown content or null",
+          skillContent: "full markdown content for create, or null for patch",
+          patchOld: "exact text to find in existing skill (patch only, null for create)",
+          patchNew: "replacement text (patch only, null for create)",
           patchSummary: "what changed or null",
         }),
         "",
         "Only set hasPattern=true if you found a genuinely reusable pattern.",
-        "skillContent should be concise, actionable markdown (< 1000 chars).",
+        "For action='create': provide skillContent (concise, actionable markdown < 1000 chars).",
+        'For action="patch": provide patchOld (exact text to find) and patchNew (replacement). The old_string must match exactly in the existing SKILL.md body.',
         'When action is "patch", skillName must match an existing skill name exactly.',
-        'When action is "patch", the existing skill\'s SKILL.md will be fully replaced with your skillContent.',
         "Prefer patching an existing skill over creating a new one when the pattern relates to known knowledge.",
         'If no pattern found, respond with {"hasPattern":false}.',
         existingSkillsBlock,
@@ -1682,12 +1695,18 @@ export class AgentRunner {
         skillName?: string | null;
         skillDescription?: string | null;
         skillContent?: string | null;
+        patchOld?: string | null;
+        patchNew?: string | null;
         patchSummary?: string | null;
       } | null;
 
-      if (!result || !result.hasPattern || !result.skillContent) return;
+      if (!result || !result.hasPattern) return;
 
       const action = result.action === "patch" ? "patch" : "create";
+
+      // Validate: create needs skillContent, patch needs patchOld
+      if (action === "create" && !result.skillContent) return;
+      if (action === "patch" && !result.patchOld) return;
 
       // === Approval Gate: store as proposal instead of direct execution ===
       // The agent will be notified and must get user confirmation before creating/patching.
@@ -1698,7 +1717,9 @@ export class AgentRunner {
             action: "patch",
             skillName: existingSkill.name,
             skillDescription: (result.skillDescription ?? existingSkill.description).slice(0, 200),
-            skillContent: result.skillContent,
+            skillContent: "",  // not used for precise patch
+            patchOld: result.patchOld ?? "",
+            patchNew: result.patchNew ?? "",
             createdAt: new Date().toISOString(),
             source: "nudge",
           });
@@ -1721,7 +1742,7 @@ export class AgentRunner {
         action: "create",
         skillName,
         skillDescription: (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200),
-        skillContent: result.skillContent,
+        skillContent: result.skillContent ?? "",
         createdAt: new Date().toISOString(),
         source: "nudge",
       });
@@ -2289,17 +2310,32 @@ export class AgentRunner {
             emitToolDone(false);
             return { ok: false, error: `Skill "${proposal.skillName}" not found for patching.` };
           }
-          const patchVersion = new Date().toISOString().slice(0, 10);
-          const frontmatter = [
-            "---",
-            `name: ${existingSkill.name}`,
-            `description: ${proposal.skillDescription}`,
-            `version: ${patchVersion}`,
-            "---",
-            "",
-            proposal.skillContent,
-          ].join("\n");
-          await fs.writeFile(path.join(existingSkill.skillDir, "SKILL.md"), frontmatter, "utf-8");
+
+          // Precise find-replace: read existing SKILL.md, find patchOld, replace with patchNew
+          const skillFilePath = path.join(existingSkill.skillDir, "SKILL.md");
+          const existingContent = await fs.readFile(skillFilePath, "utf-8");
+          const patchOld = proposal.patchOld ?? "";
+          const patchNew = proposal.patchNew ?? "";
+
+          if (!patchOld) {
+            emitToolDone(false);
+            return { ok: false, error: "Patch proposal is missing patchOld (find string)." };
+          }
+
+          // Uniqueness check: patchOld must appear exactly once
+          const occurrences = existingContent.split(patchOld).length - 1;
+          if (occurrences === 0) {
+            emitToolDone(false);
+            return { ok: false, error: `patchOld not found in SKILL.md. The skill may have been modified since the proposal was created.` };
+          }
+          if (occurrences > 1) {
+            emitToolDone(false);
+            return { ok: false, error: `patchOld matched ${occurrences} times — must be unique. Provide more context to disambiguate.` };
+          }
+
+          // Apply precise replacement
+          const patched = existingContent.replace(patchOld, patchNew);
+          await fs.writeFile(skillFilePath, patched, "utf-8");
         } else {
           const skillDirPath = path.join(skillsDir, proposal.skillName);
           const existing = existsSync(skillDirPath);
