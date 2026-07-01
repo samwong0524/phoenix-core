@@ -325,8 +325,10 @@ export function useUiStream(
         }
       }
 
-      // any change in workspace => refresh only what changed (not agents/history)
-      scheduleWorkspaceRefresh({ groups: true, agents: false, messages: true, llmHistory: false });
+      // any change in workspace => refresh only what changed
+      // Refresh llmHistory on tool_call.done so task monitor stays current during agent runs
+      const shouldRefreshLlmHistory = payload?.event === "ui.agent.tool_call.done";
+      scheduleWorkspaceRefresh({ groups: true, agents: false, messages: true, llmHistory: shouldRefreshLlmHistory });
     };
     es.onerror = () => {
       // tolerate disconnects; user can refresh manually

@@ -22,12 +22,23 @@ export interface TaskMonitorData {
   usedSkills: SkillItem[];
 }
 
+// Phoenix-Core task status → TodoItem status mapping
+const TASK_STATUS_MAP: Record<string, TodoItem["status"]> = {
+  done: "completed",
+  approved: "completed",
+  failed: "completed",
+  rejected: "completed",
+  in_progress: "in_progress",
+  review: "in_progress",
+  blocked: "pending",
+};
+
 /** Parse llmHistory JSON → structured data for TaskMonitor panels. */
 export function useTaskMonitorData(): TaskMonitorData {
   const llmHistory = useIMStore((s) => s.llmHistory);
 
   return useMemo(() => {
-    const todos: TodoItem[] = [];
+    const todoMap = new Map<string, TodoItem>();
     const artifactSet = new Map<string, "text" | "binary" | "directory">();
     const skillSet = new Map<string, "skill" | "mcp">();
 
@@ -54,39 +65,60 @@ export function useTaskMonitorData(): TaskMonitorData {
           /* ignore parse errors */
         }
 
-        // TodoWrite → latest wins
-        if (fnName === "TodoWrite" && Array.isArray(args.todos)) {
-          todos.length = 0;
-          for (const t of args.todos as Array<Record<string, unknown>>) {
-            if (typeof t?.content === "string" && typeof t?.status === "string") {
-              todos.push({ status: t.status as TodoItem["status"], content: t.content });
+        // ── Todo: update_task (workflow task status tracking) ──
+        if (fnName === "update_task" && typeof args.taskId === "string") {
+          const rawStatus = (args.status as string) ?? "pending";
+          const status = TASK_STATUS_MAP[rawStatus] ?? "pending";
+          const content = typeof args.result === "string" && args.result
+            ? `${args.taskId}: ${args.result}`
+            : args.taskId;
+          todoMap.set(args.taskId, { status, content });
+        }
+
+        // ── Artifacts: bash file output ──
+        if (fnName === "bash" && typeof args.command === "string") {
+          // Detect file writes: > file, tee file, cp/mv to file, cat > file, etc.
+          const writePatterns = [
+            /(?:>\s*|tee\s+)([^\s;|&]+\.\w+)/g,
+            /\b(?:cp|mv)\s+\S+\s+([^\s;|&]+\.\w+)/g,
+            /\b(?:mkdir)\s+(?:-p\s+)?([^\s;|&]+)/g,
+          ];
+          for (const pattern of writePatterns) {
+            let m: RegExpExecArray | null;
+            while ((m = pattern.exec(args.command as string)) !== null) {
+              if (m[1]) {
+                const isDir = m[0].startsWith("mkdir");
+                artifactSet.set(m[1], isDir ? "directory" : "text");
+              }
             }
           }
         }
 
-        // Write / Edit / NotebookEdit → file artifact
-        if (fnName === "Write" && typeof args.file_path === "string") {
-          artifactSet.set(args.file_path, "text");
-        }
-        if (fnName === "Edit" && typeof args.file_path === "string") {
-          artifactSet.set(args.file_path, "text");
-        }
-        if (fnName === "NotebookEdit" && typeof args.notebook_path === "string") {
-          artifactSet.set(args.notebook_path, "text");
+        // ── Artifacts: read_file ──
+        if (fnName === "read_file" && typeof args.path === "string") {
+          artifactSet.set(args.path, "text");
         }
 
-        // Bash → output files (heuristic)
-        if (fnName === "Bash" && typeof args.command === "string") {
-          const m = (args.command as string).match(/(?:>\s*|tee\s+)([^\s;|&]+\.\w+)/);
-          if (m) artifactSet.set(m[1], "text");
+        // ── Artifacts: create_skill ──
+        if (fnName === "create_skill" && typeof args.name === "string") {
+          artifactSet.set(`skills/${args.name}`, "text");
         }
 
-        // Skill usage
-        if (fnName === "Skill" && typeof args.skill === "string") {
-          skillSet.set(args.skill, "skill");
+        // ── Skills: get_skill / create_skill / search_skill / install_skill ──
+        if (fnName === "get_skill" && typeof args.skill_name === "string") {
+          skillSet.set(args.skill_name, "skill");
+        }
+        if (fnName === "create_skill" && typeof args.name === "string") {
+          skillSet.set(args.name, "skill");
+        }
+        if (fnName === "search_skill" && typeof args.query === "string") {
+          skillSet.set(`search: ${args.query}`, "skill");
+        }
+        if (fnName === "install_skill" && typeof args.name === "string") {
+          skillSet.set(args.name, "skill");
         }
 
-        // MCP tools (mcp__ prefix)
+        // ── MCP tools (mcp__ prefix) ──
         if (fnName.startsWith("mcp__")) {
           const parts = fnName.split("__");
           const serverName = parts[1] ?? fnName;
@@ -96,7 +128,7 @@ export function useTaskMonitorData(): TaskMonitorData {
     }
 
     return {
-      todoItems: todos,
+      todoItems: Array.from(todoMap.values()),
       artifacts: Array.from(artifactSet).map(([path, type]) => ({ path, type })),
       usedSkills: Array.from(skillSet).map(([name, type]) => ({ name, type })),
     };
