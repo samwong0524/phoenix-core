@@ -50,6 +50,8 @@ import {
   detectVerificationTool, isCodeModificationBash, isFileModificationTool,
   parseVerificationResult, isCompletionMessage,
   shouldBlockCompletion, shouldNudgeVerification,
+  estimatePromptTokens, getToolTimeout, withTimeout,
+  getToolCacheKey, lookupToolCache, setToolCache, clearToolCache,
 } from "./agent-helpers";
 
 import {
@@ -1094,6 +1096,17 @@ export class AgentRunner {
         content: `[turn ${round}] ${senderHint}. One action per message.`,
       });
 
+      // Pre-flight token budget: estimate and emergency-trim if over limit
+      const TOKEN_BUDGET = Number(process.env.TOKEN_BUDGET) || 120_000;
+      const estimatedTokens = estimatePromptTokens(input.history);
+      if (estimatedTokens > TOKEN_BUDGET * 0.9) {
+        const sys = input.history.filter((m) => m.role === "system");
+        const conv = input.history.filter((m) => m.role !== "system");
+        const keep = Math.max(6, Math.floor(conv.length * (TOKEN_BUDGET / estimatedTokens) * 0.7));
+        input.history = [...sys, ...conv.slice(-keep)];
+        console.warn(`[AgentRunner] Token budget: ${estimatedTokens} est. tokens > ${TOKEN_BUDGET} budget, trimmed to ${input.history.length} msgs`);
+      }
+
       const res = await this.callLlmStreaming(input.history, {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
@@ -1130,7 +1143,36 @@ export class AgentRunner {
           : "";
         const isBlocked = !!(call.name && this.blockedTools.has(callKey));
         const isSend = !!(call.name && SEND_TOOL_NAMES.has(call.name));
-        const result = isBlocked ? null : await this.executeToolCall({ groupId: input.groupId, call });
+        if (isBlocked) return { callKey, isBlocked, isSend, result: null };
+
+        // Tool result cache: lookup for idempotent read-only tools
+        const cacheKey = call.name ? getToolCacheKey(call.name, call.argumentsText) : null;
+        if (cacheKey) {
+          const cached = lookupToolCache(cacheKey);
+          if (cached !== null) {
+            return { callKey, isBlocked, isSend, result: { ...(cached as Record<string, unknown>), cached: true } };
+          }
+        }
+
+        // Tool-level timeout: per-tool configurable
+        const timeoutMs = call.name ? getToolTimeout(call.name) : 60_000;
+        let result: unknown;
+        try {
+          result = await withTimeout(
+            this.executeToolCall({ groupId: input.groupId, call }),
+            timeoutMs,
+            call.name ?? "unknown",
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          result = { ok: false, error: msg };
+        }
+
+        // Cache successful results for cacheable tools
+        if (cacheKey && result && (result as Record<string, unknown>).ok !== false) {
+          setToolCache(cacheKey, result);
+        }
+
         return { callKey, isBlocked, isSend, result };
       };
 

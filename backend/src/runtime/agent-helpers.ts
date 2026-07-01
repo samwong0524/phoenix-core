@@ -497,3 +497,136 @@ export function shouldNudgeVerification(
 ): boolean {
   return codeModificationCount >= 3 && verificationToolsCalledSize === 0;
 }
+
+// ─── Pre-flight Token Budget ──────────────────────────────────────────────────
+
+/**
+ * Estimate the number of tokens in a text string.
+ * Uses a heuristic: ~4 chars/token for English, ~2 chars/token for CJK.
+ * Good enough for budget gating (not billing-grade).
+ */
+export function estimatePromptTokens(history: HistoryMessage[]): number {
+  let total = 0;
+  for (const msg of history) {
+    if (typeof msg.content === "string") {
+      const cjkChars = (msg.content.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g) || []).length;
+      const otherChars = msg.content.length - cjkChars;
+      total += Math.ceil(cjkChars / 1.5) + Math.ceil(otherChars / 4);
+    }
+    // Add ~4 tokens overhead per message for role/delimiters
+    total += 4;
+  }
+  return total;
+}
+
+// ─── Tool-level Timeout ───────────────────────────────────────────────────────
+
+/** Default timeouts per tool (ms). Tools not listed use TOOL_DEFAULT_TIMEOUT. */
+export const TOOL_TIMEOUTS: Record<string, number> = {
+  bash: 120_000,
+  read_file: 15_000,
+  edit_file: 30_000,
+  write_file: 30_000,
+  search_files: 15_000,
+  search_content: 20_000,
+  search_skill: 15_000,
+  install_skill: 30_000,
+  create_skill: 10_000,
+  get_skill: 5_000,
+  memory_search: 10_000,
+  memory_add: 5_000,
+  memory_replace: 5_000,
+  memory_remove: 5_000,
+  session_search: 15_000,
+  create_backup: 30_000,
+  list_backups: 5_000,
+  restore_backup: 30_000,
+  create_workflow: 10_000,
+  update_task: 10_000,
+  get_workflow_status: 5_000,
+  dispatch_pipeline: 15_000,
+  list_agents: 5_000,
+  list_groups: 5_000,
+  list_group_members: 5_000,
+};
+
+/** Fallback timeout for tools without explicit config (60s). */
+export const TOOL_DEFAULT_TIMEOUT = 60_000;
+
+/** Get the timeout for a given tool, falling back to default. */
+export function getToolTimeout(toolName: string): number {
+  return TOOL_TIMEOUTS[toolName] ?? TOOL_DEFAULT_TIMEOUT;
+}
+
+/**
+ * Race a promise against a timeout. Rejects with a descriptive error on timeout.
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Tool "${label}" timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+// ─── Tool Result Cache ────────────────────────────────────────────────────────
+
+/** Tools whose results are safe to cache (idempotent, read-only). */
+export const CACHEABLE_TOOLS = new Set([
+  "read_file", "search_files", "search_content", "get_skill",
+  "search_skill", "list_agents", "list_groups", "list_group_members",
+  "get_workflow_status", "list_backups", "memory_search", "session_search",
+]);
+
+interface CacheEntry { result: unknown; ts: number; }
+
+const toolCache = new Map<string, CacheEntry>();
+const TOOL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const TOOL_CACHE_MAX = 200;
+
+/** Build a cache key from tool name + arguments. */
+export function getToolCacheKey(toolName: string, argsJson: string): string | null {
+  if (!CACHEABLE_TOOLS.has(toolName)) return null;
+  try {
+    const parsed = JSON.parse(argsJson || "{}");
+    return `${toolName}::${JSON.stringify(parsed)}`;
+  } catch {
+    return `${toolName}::${argsJson}`;
+  }
+}
+
+/** Look up a cached tool result. Returns null on miss or expiry. */
+export function lookupToolCache(key: string): unknown | null {
+  const entry = toolCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > TOOL_CACHE_TTL) {
+    toolCache.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
+/** Store a tool result in cache with LRU-half eviction on overflow. */
+export function setToolCache(key: string, result: unknown): void {
+  toolCache.set(key, { result, ts: Date.now() });
+  if (toolCache.size > TOOL_CACHE_MAX) {
+    const entries = [...toolCache.entries()];
+    entries.sort((a, b) => a[1].ts - b[1].ts);
+    const toRemove = entries.slice(0, Math.floor(entries.length / 2));
+    for (const [k] of toRemove) toolCache.delete(k);
+  }
+}
+
+/** Clear all cached tool results (for testing or turn reset). */
+export function clearToolCache(): void {
+  toolCache.clear();
+}

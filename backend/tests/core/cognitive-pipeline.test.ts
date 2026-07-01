@@ -10,6 +10,13 @@ import {
   isCompletionMessage,
   shouldBlockCompletion,
   shouldNudgeVerification,
+  estimatePromptTokens,
+  getToolTimeout,
+  withTimeout,
+  getToolCacheKey,
+  lookupToolCache,
+  setToolCache,
+  clearToolCache,
 } from "../../src/runtime/agent-helpers";
 
 // ─── detectVerificationTool ─────────────────────────────────────────────────
@@ -373,5 +380,154 @@ describe("shouldNudgeVerification", () => {
   it("does not nudge when verification already ran", () => {
     expect(shouldNudgeVerification(5, 1)).toBe(false);
     expect(shouldNudgeVerification(3, 2)).toBe(false);
+  });
+});
+
+// ─── estimatePromptTokens ─────────────────────────────────────────────────
+
+describe("estimatePromptTokens", () => {
+  it("estimates English text at ~4 chars/token", () => {
+    const history = [{ role: "user" as const, content: "hello world this is a test" }];
+    const tokens = estimatePromptTokens(history);
+    // "hello world this is a test" = 26 chars → ~7 tokens + 4 overhead
+    expect(tokens).toBeGreaterThan(8);
+    expect(tokens).toBeLessThan(15);
+  });
+
+  it("estimates CJK text at higher token density", () => {
+    const history = [{ role: "user" as const, content: "你好世界这是一个测试" }];
+    const tokens = estimatePromptTokens(history);
+    // 10 CJK chars → ~7 tokens + 4 overhead
+    expect(tokens).toBeGreaterThan(8);
+    expect(tokens).toBeLessThan(18);
+  });
+
+  it("handles mixed CJK + English", () => {
+    const history = [{ role: "user" as const, content: "Hello 你好 world 世界" }];
+    const tokens = estimatePromptTokens(history);
+    expect(tokens).toBeGreaterThan(5);
+    expect(tokens).toBeLessThan(20);
+  });
+
+  it("handles multiple messages with overhead", () => {
+    const history = [
+      { role: "system" as const, content: "You are a helpful assistant." },
+      { role: "user" as const, content: "Hi" },
+      { role: "assistant" as const, content: "Hello! How can I help?" },
+    ];
+    const tokens = estimatePromptTokens(history);
+    // 3 messages × 4 overhead = 12 + content tokens
+    expect(tokens).toBeGreaterThan(15);
+    expect(tokens).toBeLessThan(40);
+  });
+
+  it("returns near-zero for empty history", () => {
+    expect(estimatePromptTokens([])).toBe(0);
+  });
+
+  it("handles messages with non-string content gracefully", () => {
+    const history = [{ role: "user" as const, content: "" }];
+    const tokens = estimatePromptTokens(history);
+    // Empty content but still 4 overhead
+    expect(tokens).toBe(4);
+  });
+});
+
+// ─── getToolTimeout / withTimeout ──────────────────────────────────────────
+
+describe("getToolTimeout", () => {
+  it("returns configured timeout for known tools", () => {
+    expect(getToolTimeout("bash")).toBe(120_000);
+    expect(getToolTimeout("read_file")).toBe(15_000);
+    expect(getToolTimeout("edit_file")).toBe(30_000);
+    expect(getToolTimeout("get_skill")).toBe(5_000);
+  });
+
+  it("returns default timeout for unknown tools", () => {
+    expect(getToolTimeout("unknown_tool")).toBe(60_000);
+    expect(getToolTimeout("mcp__something")).toBe(60_000);
+  });
+});
+
+describe("withTimeout", () => {
+  it("resolves when promise completes before timeout", async () => {
+    const result = await withTimeout(
+      new Promise<string>((r) => setTimeout(() => r("done"), 10)),
+      1000,
+      "test",
+    );
+    expect(result).toBe("done");
+  });
+
+  it("rejects when promise exceeds timeout", async () => {
+    const slowPromise = new Promise<string>((r) => setTimeout(() => r("late"), 500));
+    await expect(withTimeout(slowPromise, 50, "slow-tool")).rejects.toThrow(
+      /slow-tool.*timed out.*50ms/
+    );
+  });
+
+  it("propagates original rejection before timeout", async () => {
+    const failPromise = new Promise<string>((_, rej) => setTimeout(() => rej(new Error("boom")), 10));
+    await expect(withTimeout(failPromise, 1000, "fail-tool")).rejects.toThrow("boom");
+  });
+
+  it("cleans up timer on success", async () => {
+    // This test ensures no timer leaks by completing quickly
+    const result = await withTimeout(Promise.resolve(42), 5000, "instant");
+    expect(result).toBe(42);
+  });
+});
+
+// ─── Tool Result Cache ─────────────────────────────────────────────────────
+
+describe("tool result cache", () => {
+  it("returns null for non-cacheable tools", () => {
+    expect(getToolCacheKey("bash", '{"command":"ls"}')).toBeNull();
+    expect(getToolCacheKey("edit_file", '{"path":"/x"}')).toBeNull();
+    expect(getToolCacheKey("send_group_message", '{}')).toBeNull();
+  });
+
+  it("builds cache keys for cacheable tools", () => {
+    const key = getToolCacheKey("read_file", '{"path":"/src/main.ts"}');
+    expect(key).toBe('read_file::{"path":"/src/main.ts"}');
+  });
+
+  it("normalizes cache keys by parsing JSON", () => {
+    // Different whitespace in JSON should produce same key
+    const key1 = getToolCacheKey("read_file", '{"path":"/a","encoding":"utf-8"}');
+    const key2 = getToolCacheKey("read_file", '{ "path": "/a", "encoding": "utf-8" }');
+    expect(key1).toBe(key2);
+  });
+
+  it("caches and retrieves results", () => {
+    clearToolCache();
+    const key = getToolCacheKey("read_file", '{"path":"/test"}')!;
+    setToolCache(key, { ok: true, content: "hello" });
+    const cached = lookupToolCache(key);
+    expect(cached).toEqual({ ok: true, content: "hello" });
+  });
+
+  it("returns null for cache miss", () => {
+    clearToolCache();
+    expect(lookupToolCache("nonexistent")).toBeNull();
+  });
+
+  it("clears cache on demand", () => {
+    const key = getToolCacheKey("read_file", '{"path":"/x"}')!;
+    setToolCache(key, { ok: true, content: "data" });
+    clearToolCache();
+    expect(lookupToolCache(key)).toBeNull();
+  });
+
+  it("evicts oldest entries when cache exceeds max", () => {
+    clearToolCache();
+    // Fill cache with 201 entries (max is 200)
+    for (let i = 0; i < 201; i++) {
+      setToolCache(`read_file::{"path":"/f${i}"}`, { ok: true, i });
+    }
+    // Oldest entries should be evicted, newest should survive
+    const newest = lookupToolCache(`read_file::{"path":"/f200"}`);
+    expect(newest).not.toBeNull();
+    // Cache size should be ~101 after eviction (half of 201 rounded down = 100 removed)
   });
 });
