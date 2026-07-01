@@ -1100,11 +1100,12 @@ export class AgentRunner {
         reasoning_content: res.assistantThinking || undefined,
       });
 
-      // Phase 1: Execute tool calls — parallel for non-bash tools, sequential when bash is present
-      const hasBash = res.toolCalls.some((c) => c.name === "bash");
+      // Phase 1: Execute tool calls — optimised parallel strategy
+      // Strategy: split bash (sequential) from non-bash (parallel), run both groups concurrently.
+      // This allows edit_file/read_file/search_content to run in parallel with bash commands.
 
       type ToolExecItem = { call: ToolCall; callKey: string; isBlocked: boolean; isSend: boolean; result: unknown };
-      let toolExecs: ToolExecItem[];
+      const toolExecs: ToolExecItem[] = new Array(res.toolCalls.length);
 
       const executeOne = async (call: ToolCall): Promise<{ callKey: string; isBlocked: boolean; isSend: boolean; result: unknown }> => {
         const callKey = call.name
@@ -1116,30 +1117,45 @@ export class AgentRunner {
         return { callKey, isBlocked, isSend, result };
       };
 
-      if (hasBash) {
-        // Bash present — execute sequentially for safety (shell state must not overlap)
-        toolExecs = [];
-        for (const call of res.toolCalls) {
-          const { callKey, isBlocked, isSend, result } = await executeOne(call);
-          toolExecs.push({ call, callKey, isBlocked, isSend, result });
+      const settleOne = (call: ToolCall, settled: PromiseSettledResult<{ callKey: string; isBlocked: boolean; isSend: boolean; result: unknown }>): ToolExecItem => {
+        if (settled.status === "fulfilled") {
+          return { call, ...settled.value };
         }
-      } else {
-        // No bash — execute independent tools in parallel via allSettled
-        const settled = await Promise.allSettled(res.toolCalls.map((call) => executeOne(call)));
-        toolExecs = settled.map((s, i) => {
-          if (s.status === "fulfilled") {
-            return { call: res.toolCalls[i], ...s.value };
-          }
-          // Tool threw — surface error as result so Phase 2 guardrails still track it
-          return {
-            call: res.toolCalls[i],
-            callKey: "",
-            isBlocked: false,
-            isSend: false,
-            result: { ok: false, error: s.reason instanceof Error ? s.reason.message : String(s.reason) },
-          };
-        });
+        return {
+          call,
+          callKey: "",
+          isBlocked: false,
+          isSend: false,
+          result: { ok: false, error: settled.reason instanceof Error ? settled.reason.message : String(settled.reason) },
+        };
+      };
+
+      // Partition tool calls into bash indices and non-bash indices
+      const bashIndices: number[] = [];
+      const nonBashIndices: number[] = [];
+      for (let i = 0; i < res.toolCalls.length; i++) {
+        if (res.toolCalls[i].name === "bash") bashIndices.push(i);
+        else nonBashIndices.push(i);
       }
+
+      // Run both groups concurrently
+      const [bashResults, nonBashSettled] = await Promise.all([
+        // Bash group: sequential for safety (shell state must not overlap)
+        (async () => {
+          const results: ToolExecItem[] = [];
+          for (const idx of bashIndices) {
+            const { callKey, isBlocked, isSend, result } = await executeOne(res.toolCalls[idx]);
+            results.push({ call: res.toolCalls[idx], callKey, isBlocked, isSend, result });
+          }
+          return results;
+        })(),
+        // Non-bash group: parallel via allSettled
+        Promise.allSettled(nonBashIndices.map((idx) => executeOne(res.toolCalls[idx]))),
+      ]);
+
+      // Merge results back into original call order
+      bashIndices.forEach((origIdx, i) => { toolExecs[origIdx] = bashResults[i]; });
+      nonBashIndices.forEach((origIdx, i) => { toolExecs[origIdx] = settleOne(res.toolCalls[origIdx], nonBashSettled[i]); });
 
       // Phase 2: Process results serially (guardrails, events, history)
       for (const { call, callKey, isBlocked, isSend, result } of toolExecs) {
