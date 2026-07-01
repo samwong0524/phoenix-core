@@ -4162,6 +4162,25 @@ export class AgentRunner {
       return { ok: true, status: "waiting_for_user", message: "Question sent to user. Waiting for response." };
     }
 
+    // ── todo_write: structured todo list for TaskMonitor visibility ──
+    if (name === "todo_write") {
+      const args = safeJsonParse<{
+        todos?: Array<{ description?: string; status?: string }>;
+      }>(input.call.argumentsText, {});
+      const todos = (args.todos ?? []).filter((t) => t?.description?.trim());
+      if (todos.length === 0) {
+        emitToolDone(false);
+        return { ok: false, error: "Missing required field: todos (array of {description, status})" };
+      }
+      const validStatuses = new Set(["pending", "in_progress", "completed", "cancelled"]);
+      const normalised = todos.map((t) => ({
+        description: t.description!.trim(),
+        status: validStatuses.has(t.status ?? "") ? t.status! : "pending",
+      }));
+      emitToolDone(true);
+      return { ok: true, todos: normalised };
+    }
+
     const mcp = await getMcpRegistry(BUILTIN_TOOL_NAMES);
     if (mcp.hasTool(name)) {
       const args = safeJsonParse<Record<string, unknown>>(input.call.argumentsText, {});
