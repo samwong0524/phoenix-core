@@ -323,3 +323,109 @@ export function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<s
     return mapped;
   });
 }
+
+// ── Cognitive Pipeline: pure decision functions ───────────────
+
+/** Verification command regex — matches tsc, vitest, jest, next build, etc. */
+const VERIFICATION_CMD_RE = /\b(npx\s+tsc|npx\s+vitest|tsc|vitest|jest|npm\s+test|npm\s+run\s+test|next\s+build|npm\s+run\s+build)\b/;
+
+/** Detect if a bash command is a verification tool. Returns matched tool name or null. */
+export function detectVerificationTool(command: string): string | null {
+  const m = command.match(VERIFICATION_CMD_RE);
+  return m ? m[1] : null;
+}
+
+/** Check if a bash command modifies code/files. */
+export function isCodeModificationBash(command: string): boolean {
+  return /\b(sed\s+-i|tee\s|mkdir|npm\s+run\s+build|next\s+build)\b/.test(command) ||
+         /\b(echo\s+.*>|cat\s+.*>|printf\s+.*>|>>)/.test(command);
+}
+
+/** File-writing tool names that count as code modifications. */
+const FILE_MOD_TOOLS = new Set(["write_file", "edit_file", "patch_file", "create_backup"]);
+
+/** Check if a tool name is a file-modification tool. */
+export function isFileModificationTool(toolName: string): boolean {
+  return FILE_MOD_TOOLS.has(toolName);
+}
+
+/** Parse verification output for errors (tsc type errors, vitest failures). */
+export function parseVerificationResult(command: string, resultStr: string): { hadErrors: boolean; summary: string } {
+  const isTsc = /\btsc\b/.test(command);
+  const isVitest = /\bvitest\b|npm\s+(run\s+)?test\b/.test(command);
+
+  if (isTsc) {
+    const tscErrors = resultStr.match(/error TS\d+/g);
+    const exitCode = resultStr.match(/exit code[:\s]+(\d+)/i);
+    if (tscErrors && tscErrors.length > 0) {
+      return {
+        hadErrors: true,
+        summary: `tsc: ${tscErrors.length} type error(s) — ${tscErrors.slice(0, 3).join(", ")}${tscErrors.length > 3 ? "..." : ""}`,
+      };
+    }
+    if (exitCode && parseInt(exitCode[1]) !== 0) {
+      return { hadErrors: true, summary: `tsc: exited with code ${exitCode[1]}` };
+    }
+  }
+
+  if (isVitest) {
+    const failedMatch = resultStr.match(/(\d+)\s*failed/);
+    if (failedMatch && parseInt(failedMatch[1]) > 0) {
+      return { hadErrors: true, summary: `vitest: ${failedMatch[1]} test(s) failed` };
+    }
+  }
+
+  return { hadErrors: false, summary: "" };
+}
+
+/** Plan indicator keywords — agent should state plan before executing. */
+const PLAN_INDICATORS_RE = /\b(plan|steps?|approach|strategy|classify|task type|risk|complexity|assessment|will|going to)\b/i;
+
+/** Check if assistant output contains plan indicators (requires >80 chars of text). */
+export function hasPlanIndicators(text: string): boolean {
+  return text.length > 80 && PLAN_INDICATORS_RE.test(text);
+}
+
+/** High-risk indicator keywords — triggers decision routing alert. */
+const HIGH_RISK_RE = /\b(high\s*(risk|complexity)|complex|risk\s*[:=]\s*high|dangerous|critical|5\+\s*files)\b|\b(database|db)\s+migrat/i;
+
+/** Check if assistant output indicates high risk/complexity assessment. */
+export function hasHighRiskIndicators(text: string): boolean {
+  return HIGH_RISK_RE.test(text);
+}
+
+/** Communication tool names used for Clarify/Escalate decision routes. */
+const COMM_TOOLS = new Set(["ask_user", "send_group_message", "send_direct_message"]);
+
+/** Check if any tool call is a communication tool. */
+export function hasCommunicationTool(toolNames: string[]): boolean {
+  return toolNames.some((n) => COMM_TOOLS.has(n));
+}
+
+/** Completion keywords in multiple languages. Note: \b doesn't work with CJK, so we use unanchored match. */
+const COMPLETION_RE = /(done|complete|finished|completed|已完成|搞定了|做好了|完毕)/i;
+
+/** Check if message content indicates task completion. */
+export function isCompletionMessage(content: string): boolean {
+  return COMPLETION_RE.test(content);
+}
+
+/**
+ * Should the verification gate block a Worker from reporting completion?
+ * Blocks if: isWorker + hasWorkflow + completionMsg + codeModified + noVerificationRun.
+ * Safety valve tracked externally (caller manages blockCount).
+ */
+export function shouldBlockCompletion(
+  isWorker: boolean,
+  hasWorkflow: boolean,
+  isCompletion: boolean,
+  codeModifiedThisTurn: boolean,
+  verificationRan: boolean,
+): boolean {
+  return isWorker && hasWorkflow && isCompletion && codeModifiedThisTurn && !verificationRan;
+}
+
+/** Should we nudge the agent to run verification? (3+ code mods without any verification) */
+export function shouldNudgeVerification(codeModificationCount: number, verificationToolsCalledSize: number): boolean {
+  return codeModificationCount >= 3 && verificationToolsCalledSize === 0;
+}
