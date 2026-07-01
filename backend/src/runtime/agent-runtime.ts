@@ -732,7 +732,15 @@ export class AgentRunner {
           `   - **Direct** (complexity=simple AND risk=low): proceed with tool calls immediately.\n` +
           `   - **Clarify** (task is ambiguous, missing key info, or requirements unclear): call ask_user or send_group_message to the coordinator BEFORE executing.\n` +
           `   - **Escalate** (risk=high, scope=5+ files, involves DB migration, or beyond your role): send_group_message to the coordinator explaining why, and wait for guidance.\n` +
-          `Output your assessment + chosen route, THEN proceed accordingly.`,
+          `Output your assessment + chosen route, THEN proceed accordingly.\n` +
+          `\n` +
+          `[Completion Reporting]\n` +
+          `When reporting task completion (via send_group_message to coordinator), you MUST include a verification summary.\n` +
+          `Required format at the end of your completion message:\n` +
+          `\n` +
+          `**验证结果:** tsc: 0 errors, vitest: N passed / 0 failed, build: success\n` +
+          `\n` +
+          `Replace N with actual numbers from your verification runs. If a step was skipped, state why (e.g. "tsc: skipped — no TS files modified").`,
       });
     }
 
@@ -922,20 +930,29 @@ export class AgentRunner {
       });
     }
 
-    // === Coordinator Plan Confirmation: require plan output before hiring agents ===
+    // === Coordinator Plan Confirmation: require classification + plan output before hiring agents ===
     if (isCoordinator && !this._coordinatorPlanHintInjected) {
       this._coordinatorPlanHintInjected = true;
       history.push({
         role: "system",
         content: [
-          `[Coordinator — Plan Confirmation Required]`,
+          `[Coordinator — Task Classification & Plan Confirmation]`,
           `Before creating agents (hire_agent) or assigning tasks (assign_agent), you MUST:`,
-          `1. Output your task decomposition plan using the heading "## 执行方案" followed by a task list.`,
-          `2. Wait for the user to confirm or adjust the plan.`,
-          `3. Only proceed with agent creation after explicit approval.`,
+          ``,
+          `Step 1 — Classify the overall request:`,
+          `1. **Request Type:** feature | bugfix | refactor | analysis | multi-task`,
+          `2. **Complexity:** simple (1 file, <50 lines) | moderate (2-5 files) | complex (6+ files or cross-module)`,
+          `3. **Risk Level:** low (no DB, no breaking changes) | medium (config changes, 3+ files) | high (DB migration, public API, 10+ files)`,
+          ``,
+          `Step 2 — Output your execution plan:`,
+          `Use the heading "## 执行方案" followed by a task list based on your classification.`,
+          `Wait for the user to confirm or adjust the plan.`,
+          `Only proceed with agent creation after explicit approval.`,
           `Do NOT silently create agents — the user must see and approve the work distribution.`,
           ``,
           `Required output format:`,
+          `**分类:** type=feature, complexity=complex, risk=medium`,
+          ``,
           `## 执行方案`,
           `- 任务1: description → assigned agent/role`,
           `- 任务2: description → assigned agent/role`,
