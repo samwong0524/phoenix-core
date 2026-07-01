@@ -45,6 +45,8 @@
     "human_label": "human:",
     "assistant_label": "assistant:",
     "no_groups": "暂无群组",
+    "hire_sub_agent": "雇佣子 Agent",
+    "delete_agent": "删除此 Agent",
     "group": "群组",
     "p2p_human": "P2P 人类↔助手",
     "p2p_with_role": "P2P 人类↔{role}",

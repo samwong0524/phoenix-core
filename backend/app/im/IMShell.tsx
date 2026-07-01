@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, PanelRight, X } from "lucide-react";
 import { useIsMobile } from "@/lib/use-media-query";
@@ -13,6 +13,15 @@ type IMShellProps = {
 };
 
 const DRAWER_WIDTH = 280;
+
+/* ── Panel resize constants ──────────────────────────────────── */
+const LEFT_DEFAULT = 220;
+const LEFT_MIN = 140;
+const LEFT_MAX = 360;
+const RIGHT_DEFAULT = 280;
+const RIGHT_MIN = 200;
+const RIGHT_MAX = 420;
+const STORAGE_KEY = "phoenix-panel-widths";
 
 /* Shared floating-button style factory */
 const floatBtn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
@@ -29,10 +38,194 @@ const floatBtn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
   ...extra,
 });
 
+/* ── usePanelResize hook ─────────────────────────────────────── */
+function usePanelResize() {
+  const [leftWidth, setLeftWidth] = useState(() => {
+    if (typeof window === "undefined") return LEFT_DEFAULT;
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      return s ? JSON.parse(s).left ?? LEFT_DEFAULT : LEFT_DEFAULT;
+    } catch {
+      return LEFT_DEFAULT;
+    }
+  });
+  const [rightWidth, setRightWidth] = useState(() => {
+    if (typeof window === "undefined") return RIGHT_DEFAULT;
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      return s ? JSON.parse(s).right ?? RIGHT_DEFAULT : RIGHT_DEFAULT;
+    } catch {
+      return RIGHT_DEFAULT;
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+
+  const persist = useCallback((l: number, r: number) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ left: l, right: r }));
+    } catch { /* quota exceeded — ignore */ }
+  }, []);
+
+  return { leftWidth, rightWidth, setLeftWidth, setRightWidth, dragging, setDragging, persist };
+}
+
+/* ── Splitter component ──────────────────────────────────────── */
+function Splitter({
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  dragging,
+}: {
+  onDragStart: (clientX: number) => void;
+  onDragMove: (clientX: number) => void;
+  onDragEnd: () => void;
+  dragging: boolean;
+}) {
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      startX.current = e.clientX;
+      onDragStart(e.clientX);
+      startWidth.current = 0; // set by parent via closure
+
+      const move = (ev: PointerEvent) => onDragMove(ev.clientX);
+      const up = () => {
+        onDragEnd();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [onDragStart, onDragMove, onDragEnd],
+  );
+
+  return (
+    <div
+      onPointerDown={handlePointerDown}
+      style={{
+        width: 6,
+        cursor: "col-resize",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        zIndex: 10,
+        position: "relative",
+        touchAction: "none",
+      }}
+    >
+      {/* Visible divider line */}
+      <div
+        style={{
+          width: 1,
+          height: "100%",
+          background: dragging
+            ? "var(--color-primary)"
+            : "var(--border)",
+          transition: dragging ? "none" : "background 0.15s",
+        }}
+      />
+      {/* Hover highlight overlay */}
+      {!dragging && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: 6,
+            background: "transparent",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget.previousElementSibling as HTMLElement).style.background =
+              "var(--color-primary-dim)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget.previousElementSibling as HTMLElement).style.background =
+              "var(--border)";
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── IMShell ─────────────────────────────────────────────────── */
 export function IMShell({ left, mid, right }: IMShellProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  /* Panel resize state */
+  const resize = usePanelResize();
+  const leftStartX = useRef(0);
+  const rightStartX = useRef(0);
+  const leftStartW = useRef(0);
+  const rightStartW = useRef(0);
+
+  /* Refs for latest widths — dragEnd reads from these to avoid stale closures */
+  const leftWidthRef = useRef(resize.leftWidth);
+  const rightWidthRef = useRef(resize.rightWidth);
+  leftWidthRef.current = resize.leftWidth;
+  rightWidthRef.current = resize.rightWidth;
+
+  /* Prevent text selection while dragging */
+  useEffect(() => {
+    if (!resize.dragging) return;
+    const prev = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    return () => {
+      document.body.style.userSelect = prev;
+      document.body.style.cursor = "";
+    };
+  }, [resize.dragging]);
+
+  /* Left splitter handlers */
+  const handleLeftDragStart = useCallback(
+    (clientX: number) => {
+      leftStartX.current = clientX;
+      leftStartW.current = leftWidthRef.current;
+      resize.setDragging(true);
+    },
+    [resize.setDragging],
+  );
+  const handleLeftDragMove = useCallback(
+    (clientX: number) => {
+      const delta = clientX - leftStartX.current;
+      const w = Math.max(LEFT_MIN, Math.min(LEFT_MAX, leftStartW.current + delta));
+      resize.setLeftWidth(w);
+    },
+    [resize.setLeftWidth],
+  );
+  const handleLeftDragEnd = useCallback(() => {
+    resize.setDragging(false);
+    resize.persist(leftWidthRef.current, rightWidthRef.current);
+  }, [resize.setDragging, resize.persist]);
+
+  /* Right splitter handlers */
+  const handleRightDragStart = useCallback(
+    (clientX: number) => {
+      rightStartX.current = clientX;
+      rightStartW.current = rightWidthRef.current;
+      resize.setDragging(true);
+    },
+    [resize.setDragging],
+  );
+  const handleRightDragMove = useCallback(
+    (clientX: number) => {
+      const delta = clientX - rightStartX.current;
+      const w = Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, rightStartW.current - delta));
+      resize.setRightWidth(w);
+    },
+    [resize.setRightWidth],
+  );
+  const handleRightDragEnd = useCallback(() => {
+    resize.setDragging(false);
+    resize.persist(leftWidthRef.current, rightWidthRef.current);
+  }, [resize.setDragging, resize.persist]);
 
   /* ── Mobile (< 768 px): drawer sidebar + bottom-sheet task monitor ── */
   if (isMobile) {
@@ -137,11 +330,29 @@ export function IMShell({ left, mid, right }: IMShellProps) {
     );
   }
 
-  /* ── Desktop / Tablet (≥ 768 px): CSS grid 3-column layout ── */
+  /* ── Desktop / Tablet (≥ 768 px): resizable 3-column layout ── */
   return (
-    <div className="app" style={{ background: "var(--bg-panel)" }}>
+    <div
+      className="app"
+      style={{
+        background: "var(--bg-panel)",
+        gridTemplateColumns: `${resize.leftWidth}px auto 1fr auto ${resize.rightWidth}px`,
+      }}
+    >
       {left}
+      <Splitter
+        onDragStart={handleLeftDragStart}
+        onDragMove={handleLeftDragMove}
+        onDragEnd={handleLeftDragEnd}
+        dragging={resize.dragging}
+      />
       {mid}
+      <Splitter
+        onDragStart={handleRightDragStart}
+        onDragMove={handleRightDragMove}
+        onDragEnd={handleRightDragEnd}
+        dragging={resize.dragging}
+      />
       {right}
     </div>
   );

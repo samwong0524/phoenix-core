@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { sql } from "drizzle-orm";
 

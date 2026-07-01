@@ -1,4 +1,4 @@
-﻿// ── Canonical IM types ─────────────────────────────────────────
+// ── Canonical IM types ─────────────────────────────────────────
 // Single source of truth for page.tsx, store.ts, hooks, and components.
 
 export type UUID = string;

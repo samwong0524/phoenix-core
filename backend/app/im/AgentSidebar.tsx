@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 import { useAgentTreeLayout } from "./useAgentTreeLayout";
 import { ErrorBoundary } from "../_components/error-boundary";
@@ -41,6 +42,13 @@ export interface AgentSidebarProps {
   setDirBrowseEntries: (v: DirEntry[]) => void;
   setDirBrowseParent: (v: string | null) => void;
   setWorkingDir: (v: string) => void;
+  // Workspace & agent management
+  onCreateWorkspace: () => void;
+  onSwitchWorkspace: (id: string) => void;
+  onDeleteWorkspace: () => void;
+  onHireSubAgent: () => void;
+  onDeleteAgent: (agentId: string) => void;
+  workspaces: Array<{ id: string; name: string; createdAt: string }>;
 }
 
 // ── Component ──
@@ -54,7 +62,11 @@ export function AgentSidebar(props: AgentSidebarProps) {
     setActiveGroupId, setCollapsedAgents, setDetailsCollapsed,
     setShowDirInput, setDirBrowsePath, setDirBrowseLoading, setDirBrowseEntries, setDirBrowseParent,
     setWorkingDir,
+    onCreateWorkspace, onSwitchWorkspace, onDeleteWorkspace, onHireSubAgent, onDeleteAgent,
+    workspaces,
   } = props;
+
+  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
 
   // Read store values directly to avoid excessive prop drilling
   const agentStatusById = useIMStore((s) => s.agentStatusById);
@@ -224,6 +236,16 @@ export function AgentSidebar(props: AgentSidebarProps) {
             <span className={cx("status-dot", status)} aria-label={status} />
             <span className="group-name">{getGroupLabel(g)}</span>
             {g.unreadCount > 0 && <span className="badge phoenix">{g.unreadCount}</span>}
+            {agentId && agentId !== session?.humanAgentId && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteAgent(agentId); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onDeleteAgent(agentId); } }}
+                title={t("im.delete_agent")}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 1, display: "flex", alignItems: "center", opacity: 0.6, marginLeft: "auto", flexShrink: 0 }}
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
           </div>
           {!isCollapsed && !isDetailCollapsed ? (
             <div className="group-detail">
@@ -290,8 +312,49 @@ export function AgentSidebar(props: AgentSidebarProps) {
           <div className="logo-text">PHOENIX CORE</div>
         </div>
         <div className="ws-info">
-          <div className="ws-title">{t("im.workspace")}</div>
-          <div className="ws-id">{session?.workspaceId ?? "-"}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div className="ws-title">{t("im.workspace")}</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button
+                onClick={onCreateWorkspace}
+                title={t("im.new_workspace")}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 2, display: "flex", alignItems: "center" }}
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 2, display: "flex", alignItems: "center" }}
+              >
+                <ChevronDown size={14} style={{ transform: wsDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              </button>
+              <button
+                onClick={onDeleteWorkspace}
+                title={t("workspace.delete_tooltip", { name: "" })}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", padding: 2, display: "flex", alignItems: "center" }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+          {wsDropdownOpen && workspaces.length > 1 && (
+            <div style={{ marginTop: 6, maxHeight: 120, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-elevated)" }}>
+              {workspaces.filter((w) => w.id !== session?.workspaceId).map((w) => (
+                <div
+                  key={w.id}
+                  onClick={() => { onSwitchWorkspace(w.id); setWsDropdownOpen(false); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { onSwitchWorkspace(w.id); setWsDropdownOpen(false); } }}
+                  role="button"
+                  tabIndex={0}
+                  style={{ padding: "6px 8px", cursor: "pointer", fontSize: 11, borderBottom: "1px solid var(--border)" }}
+                >
+                  <div style={{ fontWeight: 500 }}>{w.name}</div>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>{w.id.slice(0, 12)}…</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="ws-id" style={{ marginTop: 4 }}>{session?.workspaceId ?? "-"}</div>
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
             <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 4 }}>{t("im.dir_working_dir")}</div>
             {showDirInput ? (
@@ -350,7 +413,17 @@ export function AgentSidebar(props: AgentSidebarProps) {
           </div>
         </div>
         <div className="agent-scroll">
-          <div className="section-label">{t("im.agents")}</div>
+          <div className="section-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>{t("im.agents")}</span>
+            <button
+              onClick={onHireSubAgent}
+              disabled={!session}
+              title={t("im.hire_sub_agent")}
+              style={{ background: "none", border: "none", cursor: session ? "pointer" : "not-allowed", color: "var(--cyan)", padding: 2, display: "flex", alignItems: "center", opacity: session ? 1 : 0.4 }}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
           {agentTreeRows.length === 0 && extraGroups.length === 0 ? (
             <div style={{ padding: 16 }} className="muted">
               {t("im.no_groups")}

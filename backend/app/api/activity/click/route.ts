@@ -1,4 +1,4 @@
-﻿export const runtime = 'nodejs';
+export const runtime = 'nodejs';
 
 import { recordSlotClick } from '@/runtime/activity-slots';
 

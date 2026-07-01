@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Briefcase, Code2, Network, User } from "lucide-react";
 import { ErrorBoundary } from "../_components/error-boundary";
@@ -148,13 +148,74 @@ function IMPageInner() {
 
   const {
     refreshAgents, refreshGroups, refreshMessages, refreshLlmHistory,
-    bootstrap,
-    onInterruptAllAgents,
+    bootstrap, createWorkspace,
+    hireSubAgent, onInterruptAllAgents,
     onSend, uploadFile,
     filteredSkills, handleDraftChange, selectSkill, handleSkillKeyDown,
   } = useImActions(connectAgentStream, bottomRef, messagesRef);
 
   const taskMonitorData = useTaskMonitorData();
+
+  // Workspace list for switcher dropdown
+  const [workspaceList, setWorkspaceList] = useState<Array<{ id: string; name: string; createdAt: string }>>([]);
+  const refreshWorkspaceList = useCallback(() => {
+    api<{ workspaces: Array<{ id: string; name: string; createdAt: string }> }>("/api/workspaces")
+      .then((r) => setWorkspaceList(r.workspaces))
+      .catch(() => {});
+  }, []);
+
+  // Switch workspace handler
+  const handleSwitchWorkspace = useCallback((id: string) => {
+    void bootstrap(id).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void refreshWorkspaceList();
+  }, [bootstrap, setError, refreshWorkspaceList]);
+
+  // Create workspace handler
+  const handleCreateWorkspace = useCallback(() => {
+    void createWorkspace().then(() => refreshWorkspaceList()).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [createWorkspace, refreshWorkspaceList, setError]);
+
+  // Delete workspace handler
+  const handleDeleteWorkspace = useCallback(async () => {
+    if (!session) return;
+    if (workspaceList.length <= 1) {
+      toast.error("Cannot delete the only workspace");
+      return;
+    }
+    const name = workspaceList.find((w) => w.id === session.workspaceId)?.name ?? session.workspaceId.slice(0, 8);
+    if (!window.confirm(`Delete workspace "${name}" and all its data?`)) return;
+    try {
+      await api(`/api/workspaces/${encodeURIComponent(session.workspaceId)}`, { method: "DELETE" });
+      toast.success("Workspace deleted");
+      // Switch to the most recent remaining workspace
+      const remaining = workspaceList.filter((w) => w.id !== session.workspaceId);
+      if (remaining.length > 0) {
+        void bootstrap(remaining[0]!.id);
+      }
+      void refreshWorkspaceList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [session, workspaceList, bootstrap, refreshWorkspaceList, setError]);
+
+  // Delete agent handler
+  const handleDeleteAgent = useCallback(async (agentId: string) => {
+    if (!session) return;
+    const agent = agents.find((a) => a.id === agentId);
+    const label = agent?.role ?? agentId.slice(0, 8);
+    if (!window.confirm(`Delete agent "${label}"? This will remove its conversation history.`)) return;
+    try {
+      await api(`/api/agents/${encodeURIComponent(agentId)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ workspaceId: session.workspaceId }),
+      });
+      toast.success(`Agent "${label}" deleted`);
+      void refreshAgents(session);
+      void refreshGroups(session);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [session, agents, refreshAgents, refreshGroups, setError]);
 
   // Models remain separate via /api/models (FreeLLMAPI, may be slow)
   // NOTE: workspace-init is handled by bootstrap() in useImActions.
@@ -197,7 +258,8 @@ function IMPageInner() {
     void bootstrap(workspaceOverrideId).catch((e) =>
       setError(e instanceof Error ? e.message : String(e))
     );
-  }, [bootstrap, workspaceOverrideId]);
+    void refreshWorkspaceList();
+  }, [bootstrap, workspaceOverrideId, refreshWorkspaceList]);
 
   useEffect(() => {
     activeGroupIdRef.current = activeGroupId;
@@ -456,6 +518,12 @@ function IMPageInner() {
           setDirBrowseEntries={useIMStore((s) => s.setDirBrowseEntries)}
           setDirBrowseParent={useIMStore((s) => s.setDirBrowseParent)}
           setWorkingDir={setWorkingDir}
+          onCreateWorkspace={handleCreateWorkspace}
+          onSwitchWorkspace={handleSwitchWorkspace}
+          onDeleteWorkspace={handleDeleteWorkspace}
+          onHireSubAgent={() => void hireSubAgent()}
+          onDeleteAgent={(id) => void handleDeleteAgent(id)}
+          workspaces={workspaceList}
         />
       }
       mid={

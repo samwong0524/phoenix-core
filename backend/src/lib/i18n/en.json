@@ -45,6 +45,8 @@
     "human_label": "human:",
     "assistant_label": "assistant:",
     "no_groups": "No groups yet.",
+    "hire_sub_agent": "Hire Sub-Agent",
+    "delete_agent": "Delete this Agent",
     "group": "Group",
     "p2p_human": "P2P Human↔Assistant",
     "p2p_with_role": "P2P Human↔{role}",

@@ -282,7 +282,7 @@ function StatusDot({ color, count, label }: { color: string; count: number; labe
 
 const monitorStyle: React.CSSProperties = {
   display: "flex", flexDirection: "column", height: "100%",
-  background: "var(--bg-panel)", borderLeft: "1px solid var(--border)",
+  background: "var(--bg-panel)",
   fontFamily: "var(--font-body)", overflow: "hidden",
 };
 

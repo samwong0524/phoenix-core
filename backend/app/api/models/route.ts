@@ -1,4 +1,4 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 // Cache models for 60s to avoid hitting FreeLLMAPI on every page load
 let modelsCache: Array<{ id: string; displayName: string; platform: string }> | null = null;

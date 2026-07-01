@@ -1,4 +1,4 @@
-﻿import "./globals.css";
+import "./globals.css";
 import { cookies } from "next/headers";
 import { RegisterSW } from "./register-sw";
 import { I18nProvider } from "@/lib/i18n/context";
