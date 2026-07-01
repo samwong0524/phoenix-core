@@ -38,7 +38,13 @@ export function useImActions(
     const { agents } = await api<{ agents: AgentMeta[] }>(
       `/api/agents?workspaceId=${encodeURIComponent(s.workspaceId)}&meta=true`
     );
-    setAgents(agents);
+    // Merge: preserve any optimistic entries not yet in the API response
+    setAgents((prev) => {
+      const apiIds = new Set(agents.map((a) => a.id));
+      const optimisticOnly = prev.filter((a) => !apiIds.has(a.id));
+      if (optimisticOnly.length === 0 && agents.length === prev.length) return agents;
+      return [...agents, ...optimisticOnly];
+    });
   }, []);
 
   const refreshGroups = useCallback(async (s: WorkspaceDefaults, opts?: { silent?: boolean }) => {

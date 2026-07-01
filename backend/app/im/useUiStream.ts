@@ -29,7 +29,7 @@ export function useUiStream(
   const { t } = useI18n();
   const {
     setVizEvents, setVizBeams, setVizDebug, setAgentStatusById,
-    setAgents, addSkillSuggestion,
+    setAgents, setGroups, addSkillSuggestion,
   } = useIMStore();
 
   // Internal refs (only used by UI stream logic)
@@ -175,6 +175,24 @@ export function useUiStream(
               const next: Record<string, AgentStatus> = { ...prev };
               delete next[agentId];
               return next;
+            });
+          }
+        } else if (payload.event === "ui.group.created") {
+          // Optimistic update: insert new group immediately so agents become visible
+          const groupData = payload.data?.group as { id: string; name: string; memberIds: string[] } | undefined;
+          if (groupData?.id) {
+            setGroups((prev) => {
+              if (prev.some((g) => g.id === groupData.id)) return prev; // dedup
+              const now = new Date().toISOString();
+              return [...prev, {
+                id: groupData.id as UUID,
+                name: groupData.name,
+                memberIds: (groupData.memberIds ?? []) as UUID[],
+                unreadCount: 0,
+                contextTokens: 0,
+                updatedAt: now,
+                createdAt: now,
+              }];
             });
           }
         } else if (payload.event === "ui.message.created") {
