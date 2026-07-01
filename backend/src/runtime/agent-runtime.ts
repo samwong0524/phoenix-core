@@ -116,6 +116,19 @@ export class AgentRunner {
   private static _SEARCH_CACHE_MAX = 100;
   // Pipeline context: when agent is woken via pipeline (not group message), store the instruction here
   private pipelineContext: { groupId: string; instruction: string; stageName: string } | null = null;
+  // === Cognitive Pipeline: per-turn tracking for verification gate ===
+  // Tracks bash commands that look like verification (tsc, vitest, etc.)
+  private verificationToolsCalled = new Set<string>();
+  // Tracks whether any code-modifying operations happened this turn
+  private codeModificationsThisTurn = false;
+  // Cumulative count of code modifications across all rounds (for proactive nudge)
+  private codeModificationCount = 0;
+  // Tracks if verification was run but had errors (for "fix before continuing" injection)
+  private verificationHadErrors = false;
+  // Stores the last verification error summary for injection
+  private verificationErrorSummary = "";
+  // Safety valve: count of verification gate blocks to prevent deadlock
+  private verificationGateBlocks = 0;
 
   /**
    * Record a structured decision event for self-learning.
@@ -682,6 +695,27 @@ export class AgentRunner {
       }
     }
 
+    // === Cognitive Pipeline Layer 1: Task Classification + Risk Assessment + Decision Routing ===
+    // For Worker agents (non-coordinator in active workflow), inject structured thinking guide
+    // This ensures each Worker goes through classification → risk assessment → decision routing before executing
+    const isWorker = !isCoordinator && !isFreeMode;
+    if (isWorker && !hasHumanSender) {
+      history.push({
+        role: "system",
+        content:
+          `[Cognitive Pipeline — Task Intake & Decision Routing]\n` +
+          `Before executing any tools, output a brief structured assessment:\n` +
+          `1. **Task Type:** modify | create | analyze | debug | review\n` +
+          `2. **Complexity:** simple | moderate | complex\n` +
+          `3. **Risk Level:** low | medium | high (consider: file count, dangerous ops, DB writes)\n` +
+          `4. **Decision Route** — choose ONE based on your assessment:\n` +
+          `   - **Direct** (complexity=simple AND risk=low): proceed with tool calls immediately.\n` +
+          `   - **Clarify** (task is ambiguous, missing key info, or requirements unclear): call ask_user or send_group_message to the coordinator BEFORE executing.\n` +
+          `   - **Escalate** (risk=high, scope=5+ files, involves DB migration, or beyond your role): send_group_message to the coordinator explaining why, and wait for guidance.\n` +
+          `Output your assessment + chosen route, THEN proceed accordingly.`,
+      });
+    }
+
     const lastId = unreadMessages[unreadMessages.length - 1]?.id;
 
     // === Cascade prevention: per-group agent turn counter ===
@@ -712,6 +746,7 @@ export class AgentRunner {
         workspaceId,
         history,
         hasHumanSender,
+        isWorker,
       });
       assistantText = result.assistantText;
       assistantThinking = result.assistantThinking;
@@ -910,6 +945,13 @@ export class AgentRunner {
     this.memoryCache.clear();
     this._searchCountThisTurn = 0;
     this.pendingUserQuestion = false;
+    // Cognitive Pipeline: reset per-turn tracking
+    this.verificationToolsCalled.clear();
+    this.codeModificationsThisTurn = false;
+    this.codeModificationCount = 0;
+    this.verificationHadErrors = false;
+    this.verificationErrorSummary = "";
+    this.verificationGateBlocks = 0;
   }
 
   private async runWithTools(input: {
@@ -918,6 +960,7 @@ export class AgentRunner {
     history: HistoryMessage[];
     hasHumanSender?: boolean; // when true, agent MUST reply to the human
     isPipeline?: boolean; // when true, pipeline mode: direct execution, no group messages
+    isWorker?: boolean; // when true, agent is a Worker in an active workflow (cognitive pipeline)
   }) {
     const maxToolRounds = 10;
     let assistantText = "";
@@ -1053,6 +1096,52 @@ export class AgentRunner {
         const ok = (result as Record<string, unknown> | undefined)?.ok ?? true;
         if (call.name) void this.recordSkillUsage(call.name, ok === true);
 
+        // === Cognitive Pipeline: track verification & code modification tools ===
+        if (call.name === "bash" && ok) {
+          const bashArgs = safeJsonParse<{ command?: string }>(call.argumentsText, {});
+          const cmd = (bashArgs.command ?? "").trim();
+          // Track verification commands (tsc, vitest, jest, etc.)
+          const verifyMatch = cmd.match(/\b(npx\s+tsc|npx\s+vitest|tsc|vitest|jest|npm\s+test|npm\s+run\s+test|next\s+build|npm\s+run\s+build)\b/);
+          if (verifyMatch) {
+            this.verificationToolsCalled.add(verifyMatch[1]);
+            // Parse verification result for errors
+            const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+            const isTsc = /\btsc\b/.test(cmd);
+            const isVitest = /\bvitest\b|npm\s+(run\s+)?test\b/.test(cmd);
+            if (isTsc) {
+              // tsc: look for "error TS" or non-zero exit
+              const tscErrors = resultStr.match(/error TS\d+/g);
+              const exitCode = resultStr.match(/exit code[:\s]+(\d+)/i);
+              if (tscErrors && tscErrors.length > 0) {
+                this.verificationHadErrors = true;
+                this.verificationErrorSummary = `tsc: ${tscErrors.length} type error(s) — ${tscErrors.slice(0, 3).join(", ")}${tscErrors.length > 3 ? "..." : ""}`;
+              } else if (exitCode && parseInt(exitCode[1]) !== 0) {
+                this.verificationHadErrors = true;
+                this.verificationErrorSummary = `tsc: exited with code ${exitCode[1]}`;
+              }
+            }
+            if (isVitest) {
+              // vitest: look for failed tests
+              const failedMatch = resultStr.match(/(\d+)\s*failed/);
+              if (failedMatch && parseInt(failedMatch[1]) > 0) {
+                this.verificationHadErrors = true;
+                this.verificationErrorSummary = `vitest: ${failedMatch[1]} test(s) failed`;
+              }
+            }
+          }
+          // Track code-modifying operations
+          if (/\b(sed\s+-i|tee\s|mkdir|npm\s+run\s+build|next\s+build)\b/.test(cmd) ||
+              /\b(echo\s+.*>|cat\s+.*>|printf\s+.*>|>>)/.test(cmd)) {
+            this.codeModificationsThisTurn = true;
+            this.codeModificationCount++;
+          }
+        }
+        // Track file writing/editing tools (MCP or built-in)
+        if (call.name && (call.name === "write_file" || call.name === "edit_file" || call.name === "patch_file" || call.name === "create_backup")) {
+          this.codeModificationsThisTurn = true;
+          this.codeModificationCount++;
+        }
+
         // Emit tool result event (streaming to UI)
         this.bus.emit(this.agentId, {
           event: "agent.stream",
@@ -1089,6 +1178,76 @@ export class AgentRunner {
           try { compressHistory(input.history); } catch { /* best-effort */ }
           void this.autoCreateSkillFromWorkflow(input.groupId);
         }
+      }
+
+      // === Cognitive Pipeline Layer 2: Execution Plan Check ===
+      // On first round, if Worker jumped into tools without outputting a plan, nudge for next round
+      if (round === 0 && input.isWorker && res.toolCalls.length > 0) {
+        const planIndicators = /\b(plan|steps?|approach|strategy|classify|task type|risk|complexity|assessment|will|going to)\b/i;
+        const hasPlan = assistantText.length > 80 && planIndicators.test(assistantText);
+        if (!hasPlan) {
+          input.history.push({
+            role: "system",
+            content:
+              `[Cognitive Pipeline — Plan Required]\n` +
+              `You jumped into tool calls without outputting an execution plan. ` +
+              `Before your next tool call, briefly state:\n` +
+              `1. What you are trying to accomplish\n` +
+              `2. The steps you will take\n` +
+              `3. How you will verify success\n` +
+              `This helps the coordinator review your approach before you invest effort.`,
+          });
+        }
+
+        // === Decision Routing Check ===
+        // If Worker assessed high risk/complex but used only execution tools (no ask_user, no send to coordinator),
+        // nudge them to consider Clarify or Escalate paths
+        const highRiskIndicators = /\b(high\s*(risk|complexity)|complex|risk\s*[:=]\s*high|dangerous|critical|5\+\s*files|database\s*migrat|db\s*migrat)\b/i;
+        const assessedHighRisk = highRiskIndicators.test(assistantText);
+        const hasCommTool = res.toolCalls.some((c) =>
+          c.name === "ask_user" || c.name === "send_group_message" || c.name === "send_direct_message"
+        );
+        if (assessedHighRisk && !hasCommTool) {
+          input.history.push({
+            role: "system",
+            content:
+              `[Cognitive Pipeline — Decision Routing Alert]\n` +
+              `Your assessment indicates high risk or complexity, but you jumped directly into execution tools.\n` +
+              `Consider your decision route:\n` +
+              `- **Clarify**: If requirements are ambiguous, call ask_user or send_group_message to coordinator.\n` +
+              `- **Escalate**: If risk is high (DB migration, 5+ files, irreversible ops), send_group_message to coordinator explaining concerns and wait for guidance.\n` +
+              `Only choose **Direct** if you are confident the task is well-defined and within your role scope.`,
+          });
+        }
+      }
+
+      // === Cognitive Pipeline: Proactive Verification Loop ===
+      // (a) After 3+ code modifications without verification, nudge agent to run checks now
+      if (input.isWorker && this.codeModificationCount >= 3 && this.verificationToolsCalled.size === 0) {
+        input.history.push({
+          role: "system",
+          content:
+            `[Verification Reminder] You have made ${this.codeModificationCount} code modifications without running any verification.\n` +
+            `Please run verification now before continuing:\n` +
+            `1. bash({ command: "npx tsc --noEmit" }) — type check\n` +
+            `2. bash({ command: "npx vitest run" }) — unit tests\n` +
+            `Fix any failures before making more changes.`,
+        });
+      }
+      // (b) Verification was run but had errors — block further tool calls until fixed
+      if (this.verificationHadErrors && this.verificationErrorSummary) {
+        input.history.push({
+          role: "system",
+          content:
+            `[Verification Failed — Fix Required]\n` +
+            `${this.verificationErrorSummary}\n` +
+            `You MUST fix these errors before continuing with more changes or reporting completion.\n` +
+            `Do NOT make additional code modifications until the above errors are resolved.\n` +
+            `After fixing, re-run the verification command to confirm the fix.`,
+        });
+        // Reset so we don't keep injecting on subsequent rounds if agent fixes it
+        this.verificationHadErrors = false;
+        this.verificationErrorSummary = "";
       }
 
       // ask_user pause check: if agent sent a structured question, stop the loop
@@ -2331,6 +2490,189 @@ export class AgentRunner {
       }
     }
 
+    // === edit_file: precise string replacement (aligned with QoderWork CN Edit tool) ===
+    if (name === "edit_file") {
+      const args = safeJsonParse<{ path?: string; old_string?: string; new_string?: string; replace_all?: boolean }>(
+        input.call.argumentsText, {}
+      );
+      const filePath = (args.path ?? "").trim();
+      const oldStr = args.old_string ?? "";
+      const newStr = args.new_string ?? "";
+      const replaceAll = args.replace_all === true;
+
+      if (!filePath) { emitToolDone(false); return { ok: false, error: "Missing path" }; }
+      if (oldStr === "") { emitToolDone(false); return { ok: false, error: "old_string cannot be empty" }; }
+
+      const workDir = process.env.AGENT_WORKDIR || process.cwd();
+      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(workDir, filePath);
+      if (!resolvedPath.startsWith(workDir)) {
+        emitToolDone(false);
+        return { ok: false, error: "Path traversal not allowed" };
+      }
+
+      try {
+        const content = await fs.readFile(resolvedPath, "utf-8");
+        const occurrences = content.split(oldStr).length - 1;
+
+        if (occurrences === 0) {
+          emitToolDone(false);
+          return { ok: false, error: `old_string not found in file. Make sure it matches exactly (including whitespace and indentation).` };
+        }
+        if (!replaceAll && occurrences > 1) {
+          emitToolDone(false);
+          return { ok: false, error: `old_string found ${occurrences} times. It must be unique, or set replace_all=true to replace all.` };
+        }
+
+        const newContent = replaceAll ? content.split(oldStr).join(newStr) : content.replace(oldStr, newStr);
+        await fs.writeFile(resolvedPath, newContent, "utf-8");
+
+        // Calculate modified region for response
+        const beforeLines = content.split("\n");
+        const afterLines = newContent.split("\n");
+        const firstChangeIdx = beforeLines.findIndex((l) => oldStr.includes(l.trim()) || oldStr.split("\n")[0] === l);
+        const startLine = Math.max(1, (firstChangeIdx >= 0 ? firstChangeIdx : 0));
+        const contextLines = 3;
+        const regionStart = Math.max(0, startLine - contextLines);
+        const regionEnd = Math.min(afterLines.length, startLine + newStr.split("\n").length + contextLines);
+        const region = afterLines.slice(regionStart, regionEnd)
+          .map((line, i) => `${regionStart + i + 1}\t${line}`).join("\n");
+
+        emitToolDone(true);
+        return {
+          ok: true,
+          message: `Successfully ${replaceAll ? `replaced all ${occurrences} occurrences` : "replaced"} in ${path.basename(resolvedPath)}`,
+          modifiedRegion: region,
+          linesChanged: afterLines.length - beforeLines.length,
+        };
+      } catch (err: any) {
+        emitToolDone(false);
+        return { ok: false, error: err.message ?? "Failed to edit file" };
+      }
+    }
+
+    // === write_file: create or overwrite file with auto mkdir ===
+    if (name === "write_file") {
+      const args = safeJsonParse<{ path?: string; content?: string }>(input.call.argumentsText, {});
+      const filePath = (args.path ?? "").trim();
+      const content = args.content ?? "";
+
+      if (!filePath) { emitToolDone(false); return { ok: false, error: "Missing path" }; }
+
+      const workDir = process.env.AGENT_WORKDIR || process.cwd();
+      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(workDir, filePath);
+      if (!resolvedPath.startsWith(workDir)) {
+        emitToolDone(false);
+        return { ok: false, error: "Path traversal not allowed" };
+      }
+
+      try {
+        // Auto-create parent directories
+        const dir = path.dirname(resolvedPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(resolvedPath, content, "utf-8");
+
+        const lines = content.split("\n").length;
+        const sizeBytes = Buffer.byteLength(content, "utf-8");
+        emitToolDone(true);
+        return {
+          ok: true,
+          message: `Wrote ${lines} lines (${sizeBytes} bytes) to ${path.relative(workDir, resolvedPath) || path.basename(resolvedPath)}`,
+          path: resolvedPath,
+          lines,
+          sizeBytes,
+        };
+      } catch (err: any) {
+        emitToolDone(false);
+        return { ok: false, error: err.message ?? "Failed to write file" };
+      }
+    }
+
+    // === search_files: glob pattern file search ===
+    if (name === "search_files") {
+      const args = safeJsonParse<{ pattern?: string; cwd?: string; maxResults?: number }>(
+        input.call.argumentsText, {}
+      );
+      const pattern = (args.pattern ?? "").trim();
+      const maxResults = Math.min(200, Math.max(1, args.maxResults ?? 50));
+
+      if (!pattern) { emitToolDone(false); return { ok: false, error: "Missing pattern" }; }
+
+      const workDir = process.env.AGENT_WORKDIR || process.cwd();
+      const searchRoot = args.cwd
+        ? (path.isAbsolute(args.cwd) ? args.cwd : path.resolve(workDir, args.cwd))
+        : workDir;
+      if (!searchRoot.startsWith(workDir)) {
+        emitToolDone(false);
+        return { ok: false, error: "Path traversal not allowed" };
+      }
+
+      try {
+        // Use find command with -name for glob matching, sorted by mtime
+        const { execSync } = await import("node:child_process");
+        const escapedPattern = pattern.replace(/'/g, "'\\''");
+        const cmd = `find '${searchRoot}' -path '*/node_modules' -prune -o -path '*/.git' -prune -o -name '${escapedPattern}' -print 2>/dev/null | head -${maxResults}`;
+        const output = execSync(cmd, { encoding: "utf-8", timeout: 10000, maxBuffer: 1024 * 512 }).trim();
+        const files = output ? output.split("\n").filter(Boolean) : [];
+
+        emitToolDone(true);
+        return {
+          ok: true,
+          files,
+          count: files.length,
+          truncated: files.length >= maxResults,
+        };
+      } catch (err: any) {
+        emitToolDone(false);
+        return { ok: false, error: err.message ?? "search_files failed" };
+      }
+    }
+
+    // === search_content: regex content search (like grep -rn) ===
+    if (name === "search_content") {
+      const args = safeJsonParse<{ pattern?: string; path?: string; include?: string; caseSensitive?: boolean; maxResults?: number }>(
+        input.call.argumentsText, {}
+      );
+      const searchPattern = (args.pattern ?? "").trim();
+      const maxResults = Math.min(200, Math.max(1, args.maxResults ?? 50));
+
+      if (!searchPattern) { emitToolDone(false); return { ok: false, error: "Missing pattern" }; }
+
+      const workDir = process.env.AGENT_WORKDIR || process.cwd();
+      const searchPath = args.path
+        ? (path.isAbsolute(args.path) ? args.path : path.resolve(workDir, args.path))
+        : workDir;
+      if (!searchPath.startsWith(workDir)) {
+        emitToolDone(false);
+        return { ok: false, error: "Path traversal not allowed" };
+      }
+
+      try {
+        const { execSync } = await import("node:child_process");
+        const caseFlag = args.caseSensitive === false ? "-i" : "";
+        const includeFlag = args.include ? `--include='${args.include.replace(/'/g, "'\\''")}'` : "";
+        const escapedPattern = searchPattern.replace(/'/g, "'\\''").replace(/"/g, '\\"');
+        const cmd = `grep -rn ${caseFlag} ${includeFlag} --exclude-dir=node_modules --exclude-dir=.git -m 5 '${escapedPattern}' '${searchPath}' 2>/dev/null | head -${maxResults}`;
+        const output = execSync(cmd, { encoding: "utf-8", timeout: 15000, maxBuffer: 1024 * 512 }).trim();
+        const matches = output ? output.split("\n").filter(Boolean) : [];
+
+        emitToolDone(true);
+        return {
+          ok: true,
+          matches,
+          count: matches.length,
+          truncated: matches.length >= maxResults,
+        };
+      } catch (err: any) {
+        // grep returns exit code 1 when no matches found — that's not an error
+        if (err.status === 1) {
+          emitToolDone(true);
+          return { ok: true, matches: [], count: 0, truncated: false };
+        }
+        emitToolDone(false);
+        return { ok: false, error: err.message ?? "search_content failed" };
+      }
+    }
+
     if (name === "create") {
       const args = safeJsonParse<{ role?: string; guidance?: string }>(input.call.argumentsText, {});
       const role = (args.role ?? "").trim();
@@ -2751,6 +3093,32 @@ export class AgentRunner {
       if (!members.includes(this.agentId)) {
         emitToolDone(false);
         return { ok: false, error: "Access denied" };
+      }
+
+      // === Cognitive Pipeline Layer 3: Verification Gate ===
+      // Block Worker agents from reporting task completion if they modified code but didn't run verification.
+      // Safety valve: allow bypass after 2 blocks to prevent deadlock.
+      const isWorkerCtx = this.toolContext && !this.toolContext.isCoordinator && this.toolContext.hasActiveWorkflow;
+      const completionRe = /\b(done|complete|finished|completed|完成|已完成|搞定了|做好了|完毕)\b/i;
+      const isCompletionMsg = completionRe.test(content) && !this.pipelineContext;
+      if (isWorkerCtx && isCompletionMsg && this.codeModificationsThisTurn && this.verificationToolsCalled.size === 0) {
+        this.verificationGateBlocks++;
+        if (this.verificationGateBlocks < 2) {
+          console.warn(`[CognitivePipeline] verification gate blocked Worker ${this.agentId.slice(0, 8)} (block ${this.verificationGateBlocks}/2)`);
+          emitToolDone(false);
+          return {
+            ok: false,
+            error:
+              `[Verification Gate] You are reporting task completion after modifying code, but have NOT run verification.\n` +
+              `Before sending this message, you MUST run:\n` +
+              `1. bash({ command: "npx tsc --noEmit" }) — type check\n` +
+              `2. bash({ command: "npx vitest run" }) — unit tests\n` +
+              `Run these, fix any failures, THEN send your completion message with the verification results.`,
+          };
+        }
+        // Safety valve: allow send after 2 blocks, but log warning
+        console.warn(`[CognitivePipeline] verification gate bypassed for ${this.agentId.slice(0, 8)} after 2 blocks`);
+        this.verificationGateBlocks = 0;
       }
 
       const result = await store.sendMessage({

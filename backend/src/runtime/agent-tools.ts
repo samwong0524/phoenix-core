@@ -377,6 +377,86 @@ export const AGENT_TOOLS_EXECUTION = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "edit_file",
+      description:
+        "[Edit] Perform exact string replacement in a file. Finds old_string and replaces with new_string. " +
+        "More precise than sed/awk — no regex escaping needed, won't accidentally modify other lines. " +
+        "old_string must be unique in the file (or set replace_all=true for all occurrences). " +
+        "Returns the modified region with line numbers.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "File path (relative to workspace root or absolute)" },
+          old_string: { type: "string", description: "Exact text to find (must match precisely, including whitespace)" },
+          new_string: { type: "string", description: "Replacement text" },
+          replace_all: { type: "boolean", description: "Replace all occurrences instead of requiring uniqueness (default false)" },
+        },
+        required: ["path", "old_string", "new_string"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "write_file",
+      description:
+        "[Write] Create or overwrite a file with the given content. Automatically creates parent directories. " +
+        "Use for creating new files. For modifying existing files, prefer edit_file for precision.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "File path (relative to workspace root or absolute)" },
+          content: { type: "string", description: "File content to write" },
+        },
+        required: ["path", "content"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_files",
+      description:
+        "[Search] Find files matching a glob pattern. Returns matching file paths sorted by modification time. " +
+        'Example patterns: "**/*.ts", "src/components/**/*.tsx", "*.config.js"',
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          pattern: { type: "string", description: 'Glob pattern (e.g. "**/*.ts", "src/**/*.tsx")' },
+          cwd: { type: "string", description: "Search root directory (default: workspace root)" },
+          maxResults: { type: "number", description: "Maximum results to return (default 50, max 200)" },
+        },
+        required: ["pattern"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_content",
+      description:
+        "[Search] Search file contents using regex pattern (like grep -rn). Returns matching lines with file paths and line numbers. " +
+        "Use for finding specific code patterns, function names, or strings across the codebase.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          pattern: { type: "string", description: "Regex pattern to search for" },
+          path: { type: "string", description: "Directory or file to search in (default: workspace root)" },
+          include: { type: "string", description: 'File glob filter (e.g. "*.ts", "*.{ts,tsx}")' },
+          caseSensitive: { type: "boolean", description: "Case-sensitive search (default true)" },
+          maxResults: { type: "number", description: "Maximum results to return (default 50, max 200)" },
+        },
+        required: ["pattern"],
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
