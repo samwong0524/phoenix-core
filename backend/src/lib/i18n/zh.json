@@ -259,7 +259,12 @@
     "minutes_ago": "{n} 分钟前",
     "hours_ago": "{n} 小时前",
     "days_ago": "{n} 天前",
-    "no_data": "无数据"
+    "no_data": "无数据",
+    "popular_title": "热门推荐",
+    "trending_title": "近期热门",
+    "categories_title": "分类浏览",
+    "calls": "次",
+    "loading_popular": "加载推荐技能..."
   },
   "pipeline": {
     "title": "流水线",

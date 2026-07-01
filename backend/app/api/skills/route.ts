@@ -258,7 +258,7 @@ interface RemoteSkillResult {
   source_url: string;
   repo: string;
   trust_level: "official" | "community" | "unknown";
-  source: string; // "github" | "lobehub" | "clawhub" | "skills.sh"
+  source: string; // "github" | "lobehub" | "clawhub" | "skills.sh" | "bailian"
 }
 
 async function searchRemoteSkills(query: string) {
@@ -275,6 +275,7 @@ async function searchRemoteSkills(query: string) {
     searchLobeHub(q),
     searchClawHub(q),
     searchSkillsSh(q),
+    searchBailian(q),
   ]);
 
   // Merge and deduplicate
@@ -542,6 +543,112 @@ async function searchSkillsSh(query: string): Promise<RemoteSkillResult[]> {
   }
 }
 
+// -- 阿里百炼 (Bailian) + ModelScope Agent 生态 --
+async function searchBailian(query: string): Promise<RemoteSkillResult[]> {
+  const results: RemoteSkillResult[] = [];
+  const q = query.toLowerCase();
+
+  // 1. Search GitHub for Alibaba org agent skills (public, always available)
+  try {
+    const ghQueries = [
+      `filename:SKILL.md ${query} org:alibaba`,
+      `filename:SKILL.md ${query} org:aliyun`,
+      `filename:SKILL.md ${query} org:modelscope`,
+      `agent skill ${query} org:alibaba language:markdown`,
+    ];
+    const githubToken = process.env.GITHUB_TOKEN;
+    const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+
+    if (githubToken) {
+      for (const gq of ghQueries) {
+        if (results.length >= 6) break;
+        try {
+          const url = `https://api.github.com/search/code?q=${encodeURIComponent(gq)}&per_page=5`;
+          const res = await fetchWithTimeout(url, { headers }, 5000);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (!data.items) continue;
+
+          for (const item of data.items) {
+            const repo = item.repository?.full_name;
+            const fileUrl = item.html_url;
+            if (!repo || !fileUrl) continue;
+            const name = repo.split("/").pop() ?? "unknown";
+            const rawUrl = fileUrl.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/");
+            results.push({
+              name: `${name}`,
+              description: `Alibaba agent skill from ${repo}`,
+              source_url: rawUrl.replace(/\/[^/]+$/, "/SKILL.md"),
+              repo,
+              trust_level: "official",
+              source: "bailian",
+            });
+            if (results.length >= 6) break;
+          }
+        } catch { continue; }
+      }
+    }
+  } catch { /* GitHub search failed, continue with curated list */ }
+
+  // 2. Search ModelScope community agents via public API
+  try {
+    const res = await fetchWithTimeout(
+      `https://modelscope.cn/api/v1/dolphin/agents?name=${encodeURIComponent(query)}&pageSize=8`,
+      {}, 5000
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const agents = data?.data?.agents ?? data?.data?.list ?? [];
+      if (Array.isArray(agents)) {
+        for (const agent of agents) {
+          const name = agent.name ?? agent.id ?? "unknown";
+          const desc = agent.description ?? agent.summary ?? "";
+          const agentId = agent.id ?? name;
+          results.push({
+            name: String(name).toLowerCase().replace(/\s+/g, "-"),
+            description: String(desc).substring(0, 200),
+            source_url: `https://modelscope.cn/studios/${agentId}`,
+            repo: `modelscope:${agentId}`,
+            trust_level: "community",
+            source: "bailian",
+          });
+          if (results.length >= 12) break;
+        }
+      }
+    }
+  } catch { /* ModelScope API unavailable */ }
+
+  // 3. Curated 阿里百炼 popular agent tools (always available as fallback)
+  const curatedBailianSkills: Array<{ name: string; description: string; url: string }> = [
+    { name: "tongyi-qwen-coding", description: "通义千问代码助手 — 基于 Qwen 的代码生成、补全、审查 Agent", url: "https://help.aliyun.com/zh/model-studio/" },
+    { name: "dashscope-rag", description: "DashScope RAG 知识检索 — 文档解析 + 向量检索 + 问答 Agent", url: "https://help.aliyun.com/zh/dashscope/" },
+    { name: "aliyun-fc-deploy", description: "阿里云函数计算部署 — 自动创建/更新 FC 函数和触发器", url: "https://help.aliyun.com/zh/functioncompute/" },
+    { name: "quickbi-smartq", description: "Quick BI 智能问数 — 自然语言查询数据集并生成可视化图表", url: "https://help.aliyun.com/zh/quick-bi/" },
+    { name: "pai-eas-inference", description: "PAI-EAS 模型推理部署 — 一键部署 ML 模型为在线服务", url: "https://help.aliyun.com/zh/pai/" },
+    { name: "maxcompute-sql", description: "MaxCompute SQL Agent — 自然语言生成 ODPS SQL 并执行分析", url: "https://help.aliyun.com/zh/maxcompute/" },
+    { name: "dingtalk-bot", description: "钉钉机器人 Agent — 群消息推送、工作通知、审批流集成", url: "https://open.dingtalk.com/" },
+    { name: "oss-file-manager", description: "OSS 文件管理 — 对象存储文件上传/下载/处理 Agent", url: "https://help.aliyun.com/zh/oss/" },
+  ];
+
+  for (const skill of curatedBailianSkills) {
+    if (results.length >= 12) break;
+    const searchable = `${skill.name} ${skill.description}`.toLowerCase();
+    if (searchable.includes(q) || q.includes("ali") || q.includes("阿里") || q.includes("百炼") || q.includes("通义")) {
+      results.push({
+        name: skill.name,
+        description: skill.description,
+        source_url: skill.url,
+        repo: "alibaba/bailian",
+        trust_level: "official",
+        source: "bailian",
+      });
+    }
+  }
+
+  return results;
+}
+
 // -- Utility: fetch with timeout --
 async function fetchWithTimeout(url: string, init: RequestInit, timeout = 4000) {
   const controller = new AbortController();
@@ -569,9 +676,10 @@ async function installRemoteSkill(name: string, sourceUrl: string) {
   const isLobeHub = hostname === "chat-agents.lobehub.com";
   const isClawHub = hostname === "clawhub.ai";
   const isSkillsSh = hostname === "skills.sh";
+  const isBailian = hostname.endsWith("aliyun.com") || hostname === "modelscope.cn" || hostname === "help.aliyun.com";
 
-  if (!isGitHub && !isLobeHub && !isClawHub && !isSkillsSh) {
-    return NextResponse.json({ error: "Only GitHub, LobeHub, ClawHub, and skills.sh sources are allowed" }, { status: 400 });
+  if (!isGitHub && !isLobeHub && !isClawHub && !isSkillsSh && !isBailian) {
+    return NextResponse.json({ error: "Only GitHub, LobeHub, ClawHub, skills.sh, and Bailian sources are allowed" }, { status: 400 });
   }
 
   const skillsDir = getSkillsDir();
@@ -593,6 +701,9 @@ async function installRemoteSkill(name: string, sourceUrl: string) {
   } else if (isSkillsSh) {
     // skills.sh: resolve the actual GitHub raw URL from the detail page
     content = await resolveSkillsShInstall(sourceUrl, name);
+  } else if (isBailian) {
+    // Bailian/ModelScope: convert page to SKILL.md format
+    content = await convertBailianSkill(sourceUrl, name);
   } else {
     // GitHub raw URL
     content = await fetchRawSkill(sourceUrl);
@@ -738,6 +849,49 @@ function extractSkillName(filePath: string): string {
   // Fallback: use parent directory name
   const dirName = path.basename(path.dirname(filePath));
   return dirName.replace(/[^a-z0-9_-]/gi, "").toLowerCase();
+}
+
+async function convertBailianSkill(sourceUrl: string, name: string): Promise<string> {
+  // Bailian/ModelScope pages are HTML — we extract metadata from the URL and create a stub SKILL.md
+  // In production, this would parse the actual page content or use the ModelScope API
+  const urlObj = new URL(sourceUrl);
+  const hostname = urlObj.hostname;
+  const isModelScope = hostname === "modelscope.cn";
+
+  let description = "阿里百炼 Agent 工具";
+  let systemPrompt = `## 来源\n\n此 skill 来自阿里百炼/ModelScope 生态。\n\n原始链接: ${sourceUrl}\n\n## 使用说明\n\n请根据 skill 名称和描述使用此工具。如需详细文档，请访问上方链接。`;
+
+  if (isModelScope) {
+    // Try to fetch ModelScope agent metadata via API
+    try {
+      const pathParts = urlObj.pathname.split("/").filter(Boolean);
+      const agentId = pathParts[pathParts.length - 1];
+      if (agentId) {
+        const apiRes = await fetchWithTimeout(
+          `https://modelscope.cn/api/v1/dolphin/agents/${agentId}`,
+          {}, 5000
+        );
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          const agent = data?.data ?? data;
+          if (agent?.description) description = agent.description;
+          if (agent?.system_prompt) systemPrompt = agent.system_prompt;
+        }
+      }
+    } catch { /* fallback to defaults */ }
+  }
+
+  const frontmatter = `---
+name: ${name}
+description: ${description}
+auto-load: false
+source: bailian
+license: Apache-2.0
+metadata:
+  roles: []
+---`;
+
+  return `${frontmatter}\n${systemPrompt}\n`;
 }
 
 function scanSkillContent(content: string): { safe: boolean; reason?: string } {

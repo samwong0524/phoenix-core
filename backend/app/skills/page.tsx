@@ -36,6 +36,36 @@ type RemoteSkill = {
   source: string;
 };
 
+type PopularSkill = {
+  skillName: string;
+  totalCalls: number;
+};
+
+type TrendingSkill = {
+  skillName: string;
+  recentCalls: number;
+  growth: string;
+};
+
+type CategorySkill = {
+  name: string;
+  description: string;
+  source_url: string;
+};
+
+type Category = {
+  id: string;
+  name: string;
+  icon: string;
+  skills: CategorySkill[];
+};
+
+type PopularData = {
+  popular: PopularSkill[];
+  trending: TrendingSkill[];
+  categories: Category[];
+};
+
 type TabKey = "installed" | "stats" | "marketplace";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +98,8 @@ export default function SkillsPage() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [popularData, setPopularData] = useState<PopularData | null>(null);
+  const [popularLoading, setPopularLoading] = useState(true);
 
   // Initial data load
   useEffect(() => {
@@ -80,6 +112,13 @@ export default function SkillsPage() {
     Promise.all([fetchStats, fetchSkills])
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+
+    // Fetch popular recommendations separately (non-blocking)
+    fetch("/api/skills/popular")
+      .then((r) => { if (!r.ok) throw new Error("Failed"); return r.json(); })
+      .then(setPopularData)
+      .catch(() => setPopularData(null))
+      .finally(() => setPopularLoading(false));
   }, []);
 
   const handleSearch = async () => {
@@ -220,6 +259,8 @@ export default function SkillsPage() {
             results={searchResults}
             installing={installing}
             onInstall={handleInstall}
+            popularData={popularData}
+            popularLoading={popularLoading}
             t={t}
           />
         )}
@@ -385,16 +426,27 @@ function StatsTab({ data, t }: { data: SkillStatsData; t: (key: string, params?:
 // ---------------------------------------------------------------------------
 
 function MarketplaceTab({
-  query, setQuery, onSearch, searching, results, installing, onInstall, t,
+  query, setQuery, onSearch, searching, results, installing, onInstall, popularData, popularLoading, t,
 }: {
   query: string; setQuery: (v: string) => void;
   onSearch: () => void; searching: boolean;
   results: RemoteSkill[]; installing: string | null;
   onInstall: (name: string, url: string) => void;
+  popularData: PopularData | null; popularLoading: boolean;
   t: (key: string, params?: Record<string, unknown>) => string;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Popular Recommendations Section */}
+      {!popularLoading && popularData && (
+        <PopularSection data={popularData} installing={installing} onInstall={onInstall} t={t} />
+      )}
+      {popularLoading && (
+        <div style={{ padding: "16px", textAlign: "center", color: "var(--text-secondary)", fontSize: 13 }}>
+          {t("skills.loading_popular")}
+        </div>
+      )}
+
       {/* Search bar */}
       <div style={{ display: "flex", gap: 8 }}>
         <input
@@ -480,6 +532,186 @@ function MarketplaceTab({
               </div>
             </Card>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Popular Recommendations Section
+// ---------------------------------------------------------------------------
+
+function PopularSection({
+  data, installing, onInstall, t,
+}: {
+  data: PopularData;
+  installing: string | null;
+  onInstall: (name: string, url: string) => void;
+  t: (key: string, params?: Record<string, unknown>) => string;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 8 }}>
+      {/* Popular Skills */}
+      {data.popular.length > 0 && (
+        <div>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>🔥</span> {t("skills.popular_title")}
+          </h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {data.popular.map((skill) => (
+              <div
+                key={skill.skillName}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{skill.skillName}</span>
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>({skill.totalCalls} {t("skills.calls")})</span>
+                <button
+                  onClick={() => onInstall(skill.skillName, "")}
+                  disabled={installing === skill.skillName}
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius-sm)",
+                    background: installing === skill.skillName ? "var(--bg-hover)" : "var(--green-soft)",
+                    border: "1px solid var(--green-muted)",
+                    color: installing === skill.skillName ? "var(--text-secondary)" : "var(--green-text)",
+                    cursor: installing === skill.skillName ? "wait" : "pointer",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {installing === skill.skillName ? t("skills.installing") : "+"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trending Skills */}
+      {data.trending.length > 0 && (
+        <div>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>📈</span> {t("skills.trending_title")}
+          </h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {data.trending.map((skill) => (
+              <div
+                key={skill.skillName}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{skill.skillName}</span>
+                <span style={{ fontSize: 11, color: "var(--cyan)", fontWeight: 500 }}>{skill.growth}</span>
+                <button
+                  onClick={() => onInstall(skill.skillName, "")}
+                  disabled={installing === skill.skillName}
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius-sm)",
+                    background: installing === skill.skillName ? "var(--bg-hover)" : "var(--green-soft)",
+                    border: "1px solid var(--green-muted)",
+                    color: installing === skill.skillName ? "var(--text-secondary)" : "var(--green-text)",
+                    cursor: installing === skill.skillName ? "wait" : "pointer",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {installing === skill.skillName ? t("skills.installing") : "+"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Categories */}
+      {data.categories.length > 0 && (
+        <div>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>📂</span> {t("skills.categories_title")}
+          </h3>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {data.categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 9999,
+                  background: selectedCategory === cat.id ? "var(--green-soft)" : "var(--bg-card)",
+                  border: selectedCategory === cat.id ? "1px solid var(--green-mid)" : "1px solid var(--border)",
+                  color: selectedCategory === cat.id ? "var(--green-text)" : "var(--text-secondary)",
+                  fontSize: 12,
+                  fontWeight: selectedCategory === cat.id ? 600 : 400,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  transition: "all 0.15s",
+                }}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.name}</span>
+              </button>
+            ))}
+          </div>
+          {selectedCategory && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+              {data.categories
+                .find((c) => c.id === selectedCategory)
+                ?.skills.map((skill) => (
+                  <Card
+                    key={skill.name}
+                    hoverable
+                    hoverBorderColor="var(--green-mid)"
+                    padding={12}
+                    borderRadius="var(--radius-md)"
+                    style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{skill.name}</span>
+                      <button
+                        onClick={() => onInstall(skill.name, skill.source_url)}
+                        disabled={installing === skill.name}
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: "var(--radius-sm)",
+                          background: installing === skill.name ? "var(--bg-hover)" : "var(--green-soft)",
+                          border: "1px solid var(--green-muted)",
+                          color: installing === skill.name ? "var(--text-secondary)" : "var(--green-text)",
+                          cursor: installing === skill.name ? "wait" : "pointer",
+                          fontSize: 11,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {installing === skill.name ? t("skills.installing") : t("skills.install")}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>{skill.description}</div>
+                  </Card>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </div>

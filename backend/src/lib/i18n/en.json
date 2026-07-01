@@ -259,7 +259,12 @@
     "minutes_ago": "{n}m ago",
     "hours_ago": "{n}h ago",
     "days_ago": "{n}d ago",
-    "no_data": "No data"
+    "no_data": "No data",
+    "popular_title": "Popular",
+    "trending_title": "Trending",
+    "categories_title": "Categories",
+    "calls": "calls",
+    "loading_popular": "Loading popular skills..."
   },
   "pipeline": {
     "title": "Pipeline",
