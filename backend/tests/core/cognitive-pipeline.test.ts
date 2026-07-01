@@ -120,12 +120,36 @@ describe("isFileModificationTool", () => {
 // ─── parseVerificationResult ────────────────────────────────────────────────
 
 describe("parseVerificationResult", () => {
-  it("detects tsc type errors", () => {
+  it("detects tsc type errors with file location", () => {
     const result = parseVerificationResult("tsc --noEmit", "src/app.ts(10,5): error TS2322: Type 'string' is not assignable");
     expect(result).toMatch(/tsc: 1 type error/);
+    expect(result).toContain("src/app.ts:10");
+    expect(result).toContain("TS2322");
   });
 
-  it("detects multiple tsc errors", () => {
+  it("extracts multiple tsc error locations", () => {
+    const input = [
+      "src/a.ts(12,3): error TS2345: Argument mismatch",
+      "src/b.ts(44,1): error TS2322: Type error",
+      "src/c.ts(7,8): error TS2304: Cannot find name",
+    ].join("\n");
+    const result = parseVerificationResult("tsc --noEmit", input);
+    expect(result).toMatch(/tsc: 3 type error/);
+    expect(result).toContain("src/a.ts:12");
+    expect(result).toContain("src/b.ts:44");
+    expect(result).toContain("src/c.ts:7");
+  });
+
+  it("caps tsc location extraction at 5", () => {
+    const lines = Array.from({ length: 8 }, (_, i) =>
+      `src/file${i}.ts(${i + 1},1): error TS2322: err${i}`
+    ).join("\n");
+    const result = parseVerificationResult("tsc", lines);
+    expect(result).toMatch(/tsc: 8 type error/);
+    expect(result).toContain("(+3 more)");
+  });
+
+  it("falls back to error code summary without locations", () => {
     const result = parseVerificationResult("npx tsc", "error TS2322 a\nerror TS2345 b\nerror TS2304 c\nerror TS2307 d");
     expect(result).toMatch(/tsc: 4 type error/);
     expect(result).toContain("...");
@@ -140,25 +164,46 @@ describe("parseVerificationResult", () => {
     expect(parseVerificationResult("tsc --noEmit", "No errors found")).toBeNull();
   });
 
-  it("detects vitest failures", () => {
-    const result = parseVerificationResult("npx vitest run", "Tests: 2 failed, 10 passed");
+  it("detects vitest failures with test locations", () => {
+    const input = "Tests: 2 failed, 10 passed\n❯ tests/core/foo.test.ts:15:20\n❯ tests/core/bar.test.ts:42:5";
+    const result = parseVerificationResult("npx vitest run", input);
     expect(result).toMatch(/vitest: 2 test\(s\) failed/);
+    expect(result).toContain("tests/core/foo.test.ts:15");
+    expect(result).toContain("tests/core/bar.test.ts:42");
+  });
+
+  it("detects vitest failures with FAIL lines", () => {
+    const input = "Tests: 1 failed\nFAIL  tests/auth.test.ts > should login correctly";
+    const result = parseVerificationResult("vitest run", input);
+    expect(result).toMatch(/vitest: 1 test\(s\) failed/);
+    expect(result).toContain("tests/auth.test.ts");
+    expect(result).toContain("should login correctly");
   });
 
   it("returns null for clean vitest", () => {
     expect(parseVerificationResult("vitest run", "Tests: 0 failed, 25 passed")).toBeNull();
   });
 
-  it("detects playwright failures", () => {
-    const result = parseVerificationResult("npx playwright test", "3 failed, 12 passed");
+  it("detects playwright failures with locations", () => {
+    const input = "3 failed, 12 passed\n1) tests/e2e/auth.spec.ts:23:5 › login › should redirect\n2) tests/e2e/nav.spec.ts:10:3 › nav › should show menu";
+    const result = parseVerificationResult("npx playwright test", input);
     expect(result).toMatch(/playwright: 3 test\(s\) failed/);
+    expect(result).toContain("tests/e2e/auth.spec.ts:23");
+    expect(result).toContain("should redirect");
   });
 
   it("returns null for clean playwright", () => {
     expect(parseVerificationResult("playwright test", "15 passed, 0 failed")).toBeNull();
   });
 
-  it("detects next build errors", () => {
+  it("detects next build errors with file and line", () => {
+    const input = "./src/pages/api/users.ts\nType error: Cannot find module\n  12 | const x = require('missing')";
+    const result = parseVerificationResult("next build", input);
+    expect(result).toContain("src/pages/api/users.ts");
+    expect(result).toContain(":12");
+  });
+
+  it("falls back for build without file info", () => {
     const result = parseVerificationResult("next build", "Failed to compile. Type error: Cannot find module");
     expect(result).toMatch(/build: compilation error/);
   });

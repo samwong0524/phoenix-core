@@ -365,6 +365,19 @@ export function parseVerificationResult(command: string, resultStr: string): str
   const isBuild = /\bnext\s+build\b|npm\s+run\s+build\b/.test(command);
 
   if (isTsc) {
+    // tsc format: src/file.ts(12,5): error TS2345: message
+    const tscErrorRe = /(\S+?\.\w+)\((\d+),(\d+)\):\s*(error TS\d+:\s*[^\n]+)/g;
+    const locations: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = tscErrorRe.exec(resultStr)) !== null && locations.length < 5) {
+      locations.push(`${m[1]}:${m[2]} — ${m[4]}`);
+    }
+    if (locations.length > 0) {
+      const total = (resultStr.match(/error TS\d+/g) || []).length;
+      const suffix = total > 5 ? ` (+${total - 5} more)` : "";
+      return `tsc: ${total} type error(s)\n${locations.join("\n")}${suffix}`;
+    }
+    // Fallback: match error codes without locations
     const tscErrors = resultStr.match(/error TS\d+/g);
     const exitCode = resultStr.match(/exit code[:\s]+(\d+)/i);
     if (tscErrors && tscErrors.length > 0) {
@@ -377,16 +390,50 @@ export function parseVerificationResult(command: string, resultStr: string): str
   if (isVitest) {
     const failedMatch = resultStr.match(/(\d+)\s*failed/);
     if (failedMatch && parseInt(failedMatch[1]) > 0) {
-      return `vitest: ${failedMatch[1]} test(s) failed`;
+      // Extract failing test file + line: "❯ path/to/test.ts:15:20" or "FAIL tests/file.test.ts"
+      const failLocations: string[] = [];
+      const failLineRe = /[❯✗×]\s*(\S+?\.(?:test|spec)\.\w+):(\d+)/g;
+      let fm: RegExpExecArray | null;
+      while ((fm = failLineRe.exec(resultStr)) !== null && failLocations.length < 5) {
+        failLocations.push(`${fm[1]}:${fm[2]}`);
+      }
+      // Also try FAIL lines: "FAIL  tests/core/foo.test.ts > describe > test name"
+      const failNameRe = /\bFAIL\s+(\S+?\.(?:test|spec)\.\w+)(?:\s*>\s*([^\n]+))?/g;
+      const failNames: string[] = [];
+      let fn: RegExpExecArray | null;
+      while ((fn = failNameRe.exec(resultStr)) !== null && failNames.length < 5) {
+        failNames.push(fn[2] ? `${fn[1]}: ${fn[2].trim()}` : fn[1]);
+      }
+      const detail = failLocations.length > 0 ? `\n${failLocations.join("\n")}` :
+                     failNames.length > 0 ? `\n${failNames.join("\n")}` : "";
+      return `vitest: ${failedMatch[1]} test(s) failed${detail}`;
     }
   }
   if (isPlaywright) {
     const failedMatch = resultStr.match(/(\d+)\s*failed/);
     if (failedMatch && parseInt(failedMatch[1]) > 0) {
-      return `playwright: ${failedMatch[1]} test(s) failed`;
+      // Playwright format: "1) tests/e2e/auth.spec.ts:23:5 › suite › test name"
+      const pwLocations: string[] = [];
+      const pwRe = /\d+\)\s+(\S+?\.\w+):(\d+):\d+(?:\s*›\s*([^\n]+))?/g;
+      let pm: RegExpExecArray | null;
+      while ((pm = pwRe.exec(resultStr)) !== null && pwLocations.length < 5) {
+        pwLocations.push(pm[3] ? `${pm[1]}:${pm[2]} — ${pm[3].trim()}` : `${pm[1]}:${pm[2]}`);
+      }
+      const detail = pwLocations.length > 0 ? `\n${pwLocations.join("\n")}` : "";
+      return `playwright: ${failedMatch[1]} test(s) failed${detail}`;
     }
   }
   if (isBuild) {
+    // Next.js build: "./src/pages/api/users.ts\nType error: ... \n  12 | ..."
+    const buildFileRe = /\.\/(\S+?\.\w+)\n.*?(?:Type error|Failed to compile|Build error)[:\s]*([^\n]*)/i;
+    const buildMatch = buildFileRe.exec(resultStr);
+    if (buildMatch) {
+      // Try to extract the line number from the code preview (e.g., "  12 | ...")
+      const lineRe = /^\s*(\d+)\s*\|/m;
+      const lineMatch = lineRe.exec(resultStr);
+      const line = lineMatch ? `:${lineMatch[1]}` : "";
+      return `build: ${buildFileRe.exec(resultStr)?.[2]?.trim() || "compilation error"} in ${buildMatch[1]}${line}`;
+    }
     if (/Failed to compile|Build error|Type error/i.test(resultStr)) {
       return `build: compilation error detected`;
     }
