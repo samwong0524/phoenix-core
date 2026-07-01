@@ -15,6 +15,7 @@ import { useVizLayout } from "./useVizLayout";
 import { FileCard } from "./FileCard";
 const MarkdownContent = dynamic(() => import("./MarkdownContent").then(m => ({ default: m.MarkdownContent })), { ssr: false });
 import { QuestionCard } from "./QuestionCard";
+import { CommandConfirmCard } from "./CommandConfirmCard";
 import { statusColor } from "./colors";
 import { useAgentStream } from "./useAgentStream";
 import { useUiStream } from "./useUiStream";
@@ -85,6 +86,8 @@ function IMPageInner() {
     setWorkingDir,
     // Skill suggestions (A-05)
     skillSuggestions, dismissSkillSuggestion,
+    // Blocked commands (dangerous cmd / git gate)
+    blockedCommands, addBlockedCommand, dismissBlockedCommand,
   } = useIMStore();
 
   // Round vizSize to 10px granularity to avoid vizLayout recalc on every ResizeObserver pixel
@@ -300,6 +303,52 @@ function IMPageInner() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+
+  // ── Blocked command detection: scan llmHistory for DANGEROUS/GIT blocks ──
+  useEffect(() => {
+    if (!llmHistory) return;
+    try {
+      const entries: Array<{
+        role?: string;
+        content?: string;
+        tool_call_id?: string;
+        tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+      }> = JSON.parse(llmHistory);
+
+      // Map tool_call_id → command from assistant bash calls
+      const bashCalls = new Map<string, string>();
+      for (const e of entries) {
+        if (e.role !== "assistant" || !Array.isArray(e.tool_calls)) continue;
+        for (const tc of e.tool_calls) {
+          if (tc.function?.name !== "bash" || !tc.id) continue;
+          try {
+            const a = JSON.parse(tc.function.arguments ?? "{}");
+            if (typeof a.command === "string") bashCalls.set(tc.id, a.command);
+          } catch { /* skip */ }
+        }
+      }
+
+      // Check tool results for blocked markers
+      for (const e of entries) {
+        if (e.role !== "tool" || typeof e.content !== "string") continue;
+        const content = e.content;
+
+        if (content.includes("DANGEROUS COMMAND BLOCKED")) {
+          const cmd = (e.tool_call_id && bashCalls.get(e.tool_call_id))
+            ?? content.match(/Command:\s*(.+)/)?.[1]?.trim()
+            ?? "unknown command";
+          addBlockedCommand({ command: cmd, kind: "dangerous" });
+        }
+
+        if (/GIT \w+ requires user confirmation/.test(content)) {
+          const m = content.match(/GIT (\w+)/);
+          const gitOp = m ? `git ${m[1].toLowerCase()}` : "git commit/push";
+          const cmd = (e.tool_call_id && bashCalls.get(e.tool_call_id)) ?? gitOp;
+          addBlockedCommand({ command: cmd, kind: "git" });
+        }
+      }
+    } catch { /* parse error — ignore */ }
+  }, [llmHistory, addBlockedCommand]);
 
   // NOTE: bootstrap() already loads agents + groups, so no need to refresh here.
   // Individual actions (hireSubAgent, sendMessage) call refreshAgents/refreshGroups as needed.
@@ -937,6 +986,53 @@ function IMPageInner() {
 
           </div>
         </div>
+
+        {/* Blocked command confirmation cards */}
+        {blockedCommands.length > 0 && blockedCommands.map((bc) => (
+          <CommandConfirmCard
+            key={bc.id}
+            command={bc.command}
+            kind={bc.kind}
+            onApprove={() => {
+              dismissBlockedCommand(bc.id);
+              if (session && activeGroupId) {
+                const text = `确认执行: ${bc.command}`;
+                const optimistic: Message = {
+                  id: `optimistic-${Date.now()}`,
+                  senderId: session.humanAgentId,
+                  content: text,
+                  contentType: "text",
+                  sendTime: new Date().toISOString(),
+                };
+                setMessages((m) => [...m, optimistic]);
+                queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+                void api(`/api/groups/${activeGroupId}/messages`, {
+                  method: "POST",
+                  body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
+                });
+              }
+            }}
+            onReject={() => {
+              dismissBlockedCommand(bc.id);
+              if (session && activeGroupId) {
+                const text = `跳过该命令，请用其他方式完成`;
+                const optimistic: Message = {
+                  id: `optimistic-${Date.now()}`,
+                  senderId: session.humanAgentId,
+                  content: text,
+                  contentType: "text",
+                  sendTime: new Date().toISOString(),
+                };
+                setMessages((m) => [...m, optimistic]);
+                queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+                void api(`/api/groups/${activeGroupId}/messages`, {
+                  method: "POST",
+                  body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
+                });
+              }
+            }}
+          />
+        ))}
 
         {/* Skill suggestion chips (A-05) — non-intrusive hints above the input */}
         {skillSuggestions.length > 0 && (

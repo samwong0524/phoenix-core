@@ -3,7 +3,7 @@ import { immer } from "zustand/middleware/immer";
 import type {
   UUID, ModelEntry, WorkspaceDefaults, AgentMeta, AgentStatus,
   Group, Message, VizEvent, VizBeam, VizDebugEntry,
-  RightPanelState, SkillSuggestion, BootStatus,
+  RightPanelState, SkillSuggestion, BlockedCommand, BootStatus,
 } from "./types";
 
 // ── Store interface ───────────────────────────────────────────
@@ -64,6 +64,9 @@ export interface IMState {
 
   // ── Skill suggestions slice (A-05) ────────────────────────
   skillSuggestions: SkillSuggestion[];
+
+  // ── Blocked commands slice (dangerous cmd / git gate) ─────
+  blockedCommands: BlockedCommand[];
 
   // ── Agent status slice ────────────────────────────────────
   agentStatusById: Record<string, AgentStatus>;
@@ -126,6 +129,11 @@ export interface IMState {
   // ── Skill suggestion actions (A-05) ───────────────────────
   addSkillSuggestion: (suggestion: Omit<SkillSuggestion, "id" | "createdAt">) => void;
   dismissSkillSuggestion: (id: string) => void;
+
+  // ── Blocked commands actions ────────────────────────────────
+  addBlockedCommand: (cmd: Omit<BlockedCommand, "id" | "dismissed">) => void;
+  dismissBlockedCommand: (id: string) => void;
+  clearBlockedCommands: () => void;
 
   // ── Agent status actions ──────────────────────────────────
   setAgentStatusById: (updater: (prev: Record<string, AgentStatus>) => Record<string, AgentStatus>) => void;
@@ -201,6 +209,9 @@ export const useIMStore = create<IMState>()(
 
     // ── Skill suggestions slice (A-05) ────────────────────
     skillSuggestions: [],
+
+    // ── Blocked commands slice ─────────────────────────────
+    blockedCommands: [],
 
     // ── Agent status slice ────────────────────────────────
     agentStatusById: {},
@@ -471,6 +482,28 @@ export const useIMStore = create<IMState>()(
     dismissSkillSuggestion: (id) =>
       set((state) => {
         state.skillSuggestions = state.skillSuggestions.filter((s) => s.id !== id);
+      }),
+
+    // ── Blocked commands actions ──────────────────────────
+    addBlockedCommand: (cmd) =>
+      set((state) => {
+        // Deduplicate by command text + kind
+        if (state.blockedCommands.some((b) => b.command === cmd.command && b.kind === cmd.kind)) return;
+        state.blockedCommands.push({
+          ...cmd,
+          id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          dismissed: false,
+        });
+      }),
+
+    dismissBlockedCommand: (id) =>
+      set((state) => {
+        state.blockedCommands = state.blockedCommands.filter((b) => b.id !== id);
+      }),
+
+    clearBlockedCommands: () =>
+      set((state) => {
+        state.blockedCommands = [];
       }),
 
     // ── Agent status actions ──────────────────────────────
