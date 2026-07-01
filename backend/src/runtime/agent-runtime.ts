@@ -114,6 +114,15 @@ export class AgentRunner {
   // search_skill query cache: query -> { results, timestamp }
   private static _searchCache = new Map<string, { results: unknown[]; ts: number }>();
   private static _SEARCH_CACHE_MAX = 100;
+  // === Skill Proposal Approval Gate: pending proposals awaiting user confirmation ===
+  private static _pendingProposals = new Map<string, {
+    action: "create" | "patch";
+    skillName: string;
+    skillDescription: string;
+    skillContent: string;
+    createdAt: string;
+    source: "nudge" | "workflow";
+  }>();
   // Pipeline context: when agent is woken via pipeline (not group message), store the instruction here
   private pipelineContext: { groupId: string; instruction: string; stageName: string } | null = null;
   // === Cognitive Pipeline: per-turn tracking for verification gate ===
@@ -857,6 +866,29 @@ export class AgentRunner {
       }
     }
 
+    // === Skill Proposal Approval Gate: notify agent about pending proposals ===
+    const pendingProposal = AgentRunner._pendingProposals.get(this.agentId);
+    if (pendingProposal) {
+      const preview = pendingProposal.skillContent.slice(0, 300).replace(/\n/g, " ");
+      history.push({
+        role: "system",
+        content: [
+          `[Skill Proposal — Pending User Approval]`,
+          `The system identified a reusable pattern and prepared a skill ${pendingProposal.action === "patch" ? "update" : "creation"}:`,
+          `- Name: "${pendingProposal.skillName}"`,
+          `- Description: ${pendingProposal.skillDescription}`,
+          `- Source: ${pendingProposal.source === "workflow" ? "completed workflow" : "conversation analysis"}`,
+          `- Content preview: ${preview}...`,
+          ``,
+          `IMPORTANT: Do NOT create/patch this skill automatically.`,
+          `1. Relay this proposal to the user via send_group_message.`,
+          `2. Wait for explicit user approval ("approve", "go ahead", "可以", "好的").`,
+          `3. Then call approve_skill_proposal(action: "${pendingProposal.action}") to execute.`,
+          `4. If the user declines, the proposal will be discarded.`,
+        ].join("\n"),
+      });
+    }
+
     if (lastId) {
       await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
@@ -1451,36 +1483,18 @@ export class AgentRunner {
         "- Review and update the content for reusability.",
       ].join("\n");
 
-      // Write skill file
-      const { getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
-      const skillsDir = getSkillDirectory();
-      const skillDir = path.join(skillsDir, skillName);
-      const existing = await fs.stat(skillDir).catch(() => null);
-      if (existing?.isDirectory()) return; // skip if skill already exists
-
-      await fs.mkdir(skillDir, { recursive: true });
-      const frontmatter = [
-        "---",
-        `name: ${skillName}`,
-        `description: ${skillDescription.slice(0, 200)}`,
-        "---",
-        "",
+      // === Approval Gate: store as proposal instead of direct execution ===
+      AgentRunner._pendingProposals.set(this.agentId, {
+        action: "create",
+        skillName,
+        skillDescription: skillDescription.slice(0, 200),
         skillContent,
-      ].join("\n");
-      await fs.writeFile(path.join(skillDir, "SKILL.md"), frontmatter, "utf-8");
-      invalidateSkillCache();
-
-      // Record in skill_usage table
-      try {
-        await db.execute(
-          sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
-              VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
-        );
-      } catch { /* best-effort */ }
-
-      console.info(`[autoCreateSkill] auto-created skill "${skillName}" from workflow "${wfName}"`);
+        createdAt: new Date().toISOString(),
+        source: "workflow",
+      });
+      console.info(`[autoCreateSkillFromWorkflow] stored CREATE proposal for "${skillName}" (pending user approval)`);
     } catch {
-      // best-effort —skill auto-creation should never block the agent
+      // best-effort — workflow skill proposals should never block the agent
     }
   }
 
@@ -1513,7 +1527,7 @@ export class AgentRunner {
       }
 
       // Discover existing skills for potential patching
-      const { getSkillLoader, getSkillDirectory, invalidateSkillCache } = await import("./skill-loader");
+      const { getSkillLoader } = await import("./skill-loader");
       const skillLoader = await getSkillLoader();
       const existingSkills = await skillLoader.listAutoLoadSkills();
       const existingSkillsBlock = existingSkills.length > 0
@@ -1675,76 +1689,43 @@ export class AgentRunner {
 
       const action = result.action === "patch" ? "patch" : "create";
 
+      // === Approval Gate: store as proposal instead of direct execution ===
+      // The agent will be notified and must get user confirmation before creating/patching.
       if (action === "patch") {
-        // ---- Auto-patching: update existing skill ----
         const existingSkill = existingSkills.find((s) => s.name === result.skillName);
-        if (!existingSkill) {
-          console.warn(`[nudgeAnalysis] patch requested for "${result.skillName}" but skill not found, falling back to create`);
-          // Fall through to create logic below
-        } else {
-          const skillDescription = (result.skillDescription ?? existingSkill.description).slice(0, 200);
-          const skillContent = result.skillContent;
-
-          // Write updated content with patch metadata
-          const patchVersion = new Date().toISOString().slice(0, 10);
-          const frontmatter = [
-            "---",
-            `name: ${existingSkill.name}`,
-            `description: ${skillDescription}`,
-            `patched: ${patchVersion}`,
-            "---",
-            "",
-            skillContent,
-          ].join("\n");
-          await fs.writeFile(path.join(existingSkill.skillDir, "SKILL.md"), frontmatter, "utf-8");
-          invalidateSkillCache();
-
-          await db.execute(
-            sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
-                VALUES (gen_random_uuid(), ${existingSkill.name}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
-          ).catch((err) => console.warn(`[nudgeAnalysis] skill_usage INSERT failed: ${err}`));
-
-          const patchSummary = result.patchSummary ?? "updated via nudge analysis";
-          console.info(`[nudgeAnalysis] patched skill "${existingSkill.name}": ${patchSummary}`);
+        if (existingSkill) {
+          AgentRunner._pendingProposals.set(this.agentId, {
+            action: "patch",
+            skillName: existingSkill.name,
+            skillDescription: (result.skillDescription ?? existingSkill.description).slice(0, 200),
+            skillContent: result.skillContent,
+            createdAt: new Date().toISOString(),
+            source: "nudge",
+          });
+          console.info(`[nudgeAnalysis] stored PATCH proposal for "${existingSkill.name}" (pending user approval)`);
           return;
         }
+        // Skill not found — fall through to create proposal
       }
 
-      // ---- Create new skill (default, or fallback from failed patch) ----
+      // Create proposal (default, or fallback from failed patch)
       const skillName = `auto-nudge-${(result.skillName ?? "pattern")
         .toLowerCase()
         .replace(/[^a-z0-9一-龥]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 60)}`;
-      const skillDescription = (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200);
-      const skillContent = result.skillContent;
 
-      // Respect daily limit for new skill creation
       if (usedToday >= MAX_AUTO_SKILLS_PER_AGENT_PER_DAY) return;
 
-      const skillsDir = getSkillDirectory();
-      const skillDirPath = path.join(skillsDir, skillName);
-      const existing = await fs.stat(skillDirPath).catch(() => null);
-      if (existing?.isDirectory()) return;
-
-      await fs.mkdir(skillDirPath, { recursive: true });
-      const frontmatter = [
-        "---",
-        `name: ${skillName}`,
-        `description: ${skillDescription}`,
-        "---",
-        "",
-        skillContent,
-      ].join("\n");
-      await fs.writeFile(path.join(skillDirPath, "SKILL.md"), frontmatter, "utf-8");
-      invalidateSkillCache();
-
-      await db.execute(
-        sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
-            VALUES (gen_random_uuid(), ${skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
-      ).catch((err) => console.warn(`[nudgeAnalysis] skill_usage INSERT failed: ${err}`));
-
-      console.info(`[nudgeAnalysis] LLM created skill "${skillName}" from conversation analysis`);
+      AgentRunner._pendingProposals.set(this.agentId, {
+        action: "create",
+        skillName,
+        skillDescription: (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200),
+        skillContent: result.skillContent,
+        createdAt: new Date().toISOString(),
+        source: "nudge",
+      });
+      console.info(`[nudgeAnalysis] stored CREATE proposal for "${skillName}" (pending user approval)`);
 
       // ── Skill Auto-Discovery (A-05): emit suggestions via UI bus ──
       // Runs after the existing LLM-based nudge analysis. Non-blocking, best-effort.
@@ -2283,6 +2264,75 @@ export class AgentRunner {
       } catch (err: unknown) {
         emitToolDone(false);
         return { ok: false, error: err instanceof Error ? err.message : "Failed to install skill" };
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // approve_skill_proposal: Execute a pending skill proposal after user approval
+    // -----------------------------------------------------------------------
+    if (name === "approve_skill_proposal") {
+      const proposal = AgentRunner._pendingProposals.get(this.agentId);
+      if (!proposal) {
+        emitToolDone(false);
+        return { ok: false, error: "No pending skill proposal to approve." };
+      }
+      AgentRunner._pendingProposals.delete(this.agentId);
+
+      const { getSkillDirectory, getSkillLoader, invalidateSkillCache } = await import("./skill-loader");
+      const skillsDir = getSkillDirectory();
+
+      try {
+        if (proposal.action === "patch") {
+          const skillLoader = await getSkillLoader();
+          const existingSkill = await skillLoader.getSkill(proposal.skillName);
+          if (!existingSkill) {
+            emitToolDone(false);
+            return { ok: false, error: `Skill "${proposal.skillName}" not found for patching.` };
+          }
+          const patchVersion = new Date().toISOString().slice(0, 10);
+          const frontmatter = [
+            "---",
+            `name: ${existingSkill.name}`,
+            `description: ${proposal.skillDescription}`,
+            `version: ${patchVersion}`,
+            "---",
+            "",
+            proposal.skillContent,
+          ].join("\n");
+          await fs.writeFile(path.join(existingSkill.skillDir, "SKILL.md"), frontmatter, "utf-8");
+        } else {
+          const skillDirPath = path.join(skillsDir, proposal.skillName);
+          const existing = existsSync(skillDirPath);
+          if (existing) {
+            emitToolDone(false);
+            return { ok: false, error: `Skill "${proposal.skillName}" already exists.` };
+          }
+          await fs.mkdir(skillDirPath, { recursive: true });
+          const frontmatter = [
+            "---",
+            `name: ${proposal.skillName}`,
+            `description: ${proposal.skillDescription}`,
+            "---",
+            "",
+            proposal.skillContent,
+          ].join("\n");
+          await fs.writeFile(path.join(skillDirPath, "SKILL.md"), frontmatter, "utf-8");
+        }
+
+        invalidateSkillCache();
+
+        // Record skill usage
+        const db = getDb();
+        await db.execute(
+          sql`INSERT INTO skill_usage (id, skill_name, agent_id, success, used_at, status)
+              VALUES (gen_random_uuid(), ${proposal.skillName}, ${this.agentId}, true, ${new Date().toISOString()}, 'active')`
+        ).catch((err) => console.warn(`[approve_skill_proposal] skill_usage INSERT failed: ${err}`));
+
+        emitToolDone(true);
+        return { ok: true, action: proposal.action, skillName: proposal.skillName };
+      } catch (err: unknown) {
+        emitToolDone(false);
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to execute skill proposal" };
       }
     }
 

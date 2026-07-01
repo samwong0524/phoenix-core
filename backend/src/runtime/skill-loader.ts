@@ -152,6 +152,8 @@ async function findSkillFiles(dir: string): Promise<string[]> {
     entries.map(async (entry) => {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        // Skip trash and archived directories
+        if (entry.name === ".trash" || entry.name.startsWith("_archived-")) return;
         const nested = await findSkillFiles(fullPath);
         results.push(...nested);
         return;

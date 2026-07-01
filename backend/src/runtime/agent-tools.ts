@@ -163,6 +163,22 @@ export const AGENT_TOOLS_SKILL = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "approve_skill_proposal",
+      description:
+        "[Skill] Execute a pending skill proposal (create or patch) after user approval. Only call this after the user has explicitly approved the skill proposal shown in the system hint.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          action: { type: "string", enum: ["approve"], description: "Must be 'approve' to confirm execution" },
+        },
+        required: ["action"],
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------

@@ -192,9 +192,32 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: `Skill "${skillName}" not found` }, { status: 404 });
   }
 
-  await fs.rm(skillDir, { recursive: true, force: true });
+  // Safe deletion: move to .trash/ instead of permanent removal.
+  // Recoverable until trash is cleaned (>30 days auto-purge).
+  const trashDir = path.join(skillsDir, ".trash");
+  await fs.mkdir(trashDir, { recursive: true });
+  const trashTarget = path.join(trashDir, `${skillName}-${Date.now()}`);
+  await fs.rename(skillDir, trashTarget);
+
+  // Best-effort: purge trash entries older than 30 days
+  try {
+    const entries = await fs.readdir(trashDir, { withFileTypes: true });
+    const now = Date.now();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = path.join(trashDir, entry.name);
+      const stat = await fs.stat(entryPath).catch(() => null);
+      if (stat && now - stat.mtimeMs > THIRTY_DAYS_MS) {
+        await fs.rm(entryPath, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } catch {
+    // non-critical — trash cleanup is best-effort
+  }
+
   invalidateSkillCache();
-  return NextResponse.json({ ok: true, deleted: skillName });
+  return NextResponse.json({ ok: true, deleted: skillName, trashed: true });
 }
 
 export async function PATCH(req: NextRequest) {
