@@ -140,6 +140,10 @@ export class AgentRunner {
   private verificationErrorSummary = "";
   // Safety valve: count of verification gate blocks to prevent deadlock
   private verificationGateBlocks = 0;
+  // Dangerous command confirmation gate: commands awaiting user approval
+  private _pendingConfirmCommands = new Set<string>();
+  // Coordinator plan hint: injected once per wakeup to remind coordinator to output plan
+  private _coordinatorPlanHintInjected = false;
 
   /**
    * Record a structured decision event for self-learning.
@@ -900,6 +904,35 @@ export class AgentRunner {
       });
     }
 
+    // === Dangerous Command Confirmation Reminder ===
+    if (this._pendingConfirmCommands.size > 0) {
+      const cmds = Array.from(this._pendingConfirmCommands).map((c) => `\`${c.slice(0, 80)}\``);
+      history.push({
+        role: "system",
+        content: [
+          `[Pending Command Confirmation] You have ${this._pendingConfirmCommands.size} blocked command(s) awaiting user approval: ${cmds.join(", ")}.`,
+          `If the user has approved, re-call bash with the same command and confirm: true.`,
+          `If the user declined, proceed with an alternative approach.`,
+        ].join("\n"),
+      });
+    }
+
+    // === Coordinator Plan Confirmation: require plan output before hiring agents ===
+    if (isCoordinator && !this._coordinatorPlanHintInjected) {
+      this._coordinatorPlanHintInjected = true;
+      history.push({
+        role: "system",
+        content: [
+          `[Coordinator — Plan Confirmation Required]`,
+          `Before creating agents (hire_agent) or assigning tasks (assign_agent), you MUST:`,
+          `1. Output your task decomposition plan: what tasks, who handles what, dependencies.`,
+          `2. Wait for the user to confirm or adjust the plan.`,
+          `3. Only proceed with agent creation after explicit approval.`,
+          `Do NOT silently create agents — the user must see and approve the work distribution.`,
+        ].join("\n"),
+      });
+    }
+
     if (lastId) {
       await store.markGroupReadToMessage({ groupId, readerId: this.agentId, messageId: lastId });
     }
@@ -995,6 +1028,7 @@ export class AgentRunner {
     this.verificationHadErrors = false;
     this.verificationErrorSummary = "";
     this.verificationGateBlocks = 0;
+    this._coordinatorPlanHintInjected = false;
   }
 
   private async runWithTools(input: {
@@ -2396,14 +2430,16 @@ export class AgentRunner {
         cwd?: string;
         timeoutMs?: number;
         maxOutputKB?: number;
+        confirm?: boolean;
       }>(input.call.argumentsText, {});
       const command = (args.command ?? "").trim();
       if (!command) {
         emitToolDone(false);
         return { ok: false, error: "Missing command" };
       }
+      const userConfirmed = args.confirm === true;
 
-      // Destructive/dangerous command blacklist — code-level guard, cannot be bypassed by prompt
+      // Destructive/dangerous command blacklist — code-level guard with user confirmation gate
       const DENIED_COMMANDS: RegExp[] = [
         /\brm\s+(-[a-zA-Z]*rf?)/,           // rm -rf
         /\bdel\s+\/[sfa]/i,                  // del /s /q /f
@@ -2434,9 +2470,49 @@ export class AgentRunner {
 
       for (const pattern of DENIED_COMMANDS) {
         if (pattern.test(command)) {
-          emitToolDone(false);
-          return { ok: false, error: `Command blocked: potentially destructive pattern detected. Use safer alternatives.` };
+          if (!userConfirmed) {
+            this._pendingConfirmCommands.add(command);
+            emitToolDone(false);
+            return {
+              ok: false,
+              error: [
+                `⚠️ DANGEROUS COMMAND BLOCKED — requires user confirmation.`,
+                `Command: ${command.slice(0, 200)}`,
+                ``,
+                `Steps:`,
+                `1. Tell the user this command was blocked for safety.`,
+                `2. Show the exact command and ask for explicit approval.`,
+                `3. If approved, re-call bash with the same command and confirm: true.`,
+              ].join("\n"),
+            };
+          }
+          // User confirmed — remove from pending and allow execution
+          this._pendingConfirmCommands.delete(command);
+          console.warn(`[bash] DANGEROUS COMMAND ALLOWED (user-confirmed): ${command.slice(0, 100)}`);
+          break;
         }
+      }
+
+      // Git commit/push confirmation gate — agents must summarize changes first
+      const gitGateRe = /\bgit\s+(commit|push)\b/;
+      if (gitGateRe.test(command) && !userConfirmed) {
+        this._pendingConfirmCommands.add(command);
+        emitToolDone(false);
+        return {
+          ok: false,
+          error: [
+            `🔒 GIT ${command.match(gitGateRe)?.[1]?.toUpperCase()} requires user confirmation.`,
+            ``,
+            `Steps:`,
+            `1. Summarize what was changed (files modified, purpose of changes).`,
+            `2. Show the user and ask for explicit approval.`,
+            `3. If approved, re-call bash with the same command and confirm: true.`,
+          ].join("\n"),
+        };
+      }
+      if (gitGateRe.test(command) && userConfirmed) {
+        this._pendingConfirmCommands.delete(command);
+        console.info(`[bash] git ${command.match(gitGateRe)?.[1]} ALLOWED (user-confirmed)`);
       }
 
       // Audit log: record every bash attempt before execution

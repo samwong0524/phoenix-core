@@ -371,6 +371,7 @@ export const AGENT_TOOLS_EXECUTION = [
           cwd: { type: "string", description: "Working directory (relative to workspace root or absolute)" },
           timeoutMs: { type: "number", description: "Timeout in milliseconds (default 120000)" },
           maxOutputKB: { type: "number", description: "Maximum combined output size in KB (default 1024)" },
+          confirm: { type: "boolean", description: "Set to true to execute a previously blocked dangerous command (after user approval)" },
         },
         required: ["command"],
       },
