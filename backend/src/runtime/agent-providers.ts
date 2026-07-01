@@ -133,6 +133,7 @@ export interface LlmStreamResult {
   assistantThinking: string;
   toolCalls: ToolCall[];
   finishReason: string | null;
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
 }
 
 // Keyed by LlmProvider (string) for extensibility 鈥?no switch needed.

@@ -15,6 +15,7 @@ import { appendAgentHistorySnapshot, appendAgentLlmRequestRaw, appendAgentStream
 import { formatSkillPrompt, getSkillLoader, getSkillDirectory, invalidateSkillCache, FRONTMATTER_RE, parseFrontmatter } from "./skill-loader";
 import { parseSkillReferences } from "@/lib/skill-utils";
 import { analyzeForSkillSuggestions } from "./skill-discovery";
+import { getMetricsCollector, estimateCost } from "../observability/metrics-collector";
 
 // Sub-module imports
 import {
@@ -3704,20 +3705,71 @@ export class AgentRunner {
 
     const chain = getProviderChain();
     const errors: string[] = [];
+    const startTime = Date.now();
 
-    for (const provider of chain) {
+    for (let i = 0; i < chain.length; i++) {
+      const provider = chain[i];
+      const isFallback = i > 0;
       try {
         const result = await this.callLlmProvider(provider, history, ctx);
         recordLlmSuccess();
+
+        // Record metrics (fire-and-forget)
+        const latencyMs = Date.now() - startTime;
+        const model = this.getModelForProvider(provider);
+        const usage = result.usage;
+        void getMetricsCollector().recordLLMRequest({
+          requestId: crypto.randomUUID(),
+          agentId: this.agentId,
+          groupId: ctx.groupId,
+          workspaceId: ctx.workspaceId,
+          provider,
+          model,
+          isFallback,
+          tokensPrompt: usage?.promptTokens ?? 0,
+          tokensCompletion: usage?.completionTokens ?? 0,
+          tokensTotal: usage?.totalTokens ?? 0,
+          tokensCached: 0,
+          latencyMs,
+          queueWaitMs: 0,
+          finishReason: result.finishReason ?? "stop",
+          toolCallCount: result.toolCalls.length,
+          costUsd: usage ? estimateCost(model, usage.promptTokens, usage.completionTokens) : 0,
+        });
+
         return result;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // Only retry on 429 (rate limit). 401/403/500 are fatal - no point wasting tokens on fallback.
         const is429 = msg.includes("429");
+
+        // Record error metrics (fire-and-forget)
+        const latencyMs = Date.now() - startTime;
+        const model = this.getModelForProvider(provider);
+        void getMetricsCollector().recordLLMRequest({
+          requestId: crypto.randomUUID(),
+          agentId: this.agentId,
+          groupId: ctx.groupId,
+          workspaceId: ctx.workspaceId,
+          provider,
+          model,
+          isFallback,
+          tokensPrompt: 0,
+          tokensCompletion: 0,
+          tokensTotal: 0,
+          tokensCached: 0,
+          latencyMs,
+          queueWaitMs: 0,
+          finishReason: "error",
+          toolCallCount: 0,
+          errorMessage: msg,
+          costUsd: 0,
+        });
+
         if (!is429) throw err;
         recordLlmFailure();
         errors.push(`${provider}: ${msg}`);
-        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" →")}`);
+        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" → ")}`);
         // Keep streaming to the UI so the user sees the fallback
         getWorkspaceUIBus().emit(ctx.workspaceId, {
           event: "ui.agent.llm.fallback",
@@ -3733,6 +3785,22 @@ export class AgentRunner {
     }
 
     throw new Error(`All providers returned 429: ${errors.join("; ")}`);
+  }
+
+  /** Resolve the active model name for a given provider (best-effort, never throws). */
+  private getModelForProvider(provider: string): string {
+    try {
+      switch (provider) {
+        case "glm": return getGlmConfig().model;
+        case "openrouter": return getOpenRouterConfig().model;
+        case "anthropic": return getAnthropicConfig().model;
+        case "ollama": return getOllamaConfig().model;
+        case "freellmapi": return getFreellmapiConfig().model;
+        default: return "unknown";
+      }
+    } catch {
+      return "unknown";
+    }
   }
 
   private async callLlmProvider(
@@ -3819,6 +3887,7 @@ export class AgentRunner {
       assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
+      usage: finalState.usage ?? null,
     };
   }
 
@@ -4040,6 +4109,7 @@ export class AgentRunner {
       assistantThinking: "",
       toolCalls,
       finishReason,
+      usage: null,
     };
   }
 
@@ -4107,6 +4177,7 @@ export class AgentRunner {
       assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
+      usage: finalState.usage ?? null,
     };
   }
 
@@ -4176,6 +4247,7 @@ export class AgentRunner {
       assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
+      usage: finalState.usage ?? null,
     };
   }
 
@@ -4251,6 +4323,7 @@ export class AgentRunner {
       assistantThinking: finalState.reasoningContent,
       toolCalls: (finalState.toolCalls ?? []) as ToolCall[],
       finishReason: finalState.finishReason ?? null,
+      usage: finalState.usage ?? null,
     };
   }
 }
@@ -4313,6 +4386,9 @@ export class AgentRuntime {
 
     // Start periodic cleanup timer
     this.startCleanupTimer();
+
+    // Start observability metrics timers (hourly rollup, daily cost, alert eval)
+    getMetricsCollector().startTimers();
 
     const agents = workspaceId
       ? await store.listAgents({ workspaceId })
