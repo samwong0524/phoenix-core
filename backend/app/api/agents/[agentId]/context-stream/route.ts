@@ -23,9 +23,9 @@ export async function GET(
   const agent = await store.getAgent({ agentId });
   const runtime = getAgentRuntime();
   await runtime.bootstrap(agent.workspaceId);
-  if (agent.role !== "human") {
-    void runtime.wakeAgent(agentId, "context_stream");
-  }
+  // NOTE: Do NOT wake agent here. context-stream is observation-only.
+  // Waking agents on every SSE reconnect (EventSource auto-reconnects) causes
+  // agents to restart after user explicitly stops them via "Stop All Agents".
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const sendKeepalive = () => controller.enqueue(new TextEncoder().encode(`: ping\n\n`));

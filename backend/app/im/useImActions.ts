@@ -47,7 +47,17 @@ export function useImActions(
     });
   }, []);
 
+  const refreshGroupsLastCall = useRef(0);
+  const REFRESH_GROUPS_DEBOUNCE_MS = 2000; // Prevent more than 1 call per 2 seconds
+
   const refreshGroups = useCallback(async (s: WorkspaceDefaults, opts?: { silent?: boolean }) => {
+    // Debounce: skip if called too recently (unless forced)
+    const now = Date.now();
+    if (now - refreshGroupsLastCall.current < REFRESH_GROUPS_DEBOUNCE_MS) {
+      return;
+    }
+    refreshGroupsLastCall.current = now;
+
     if (!opts?.silent) setStatus("groups");
     const q = new URLSearchParams({ workspaceId: s.workspaceId, agentId: s.humanAgentId });
     const { groups } = await api<{ groups: Group[] }>(`/api/groups?${q.toString()}`);
@@ -55,12 +65,23 @@ export function useImActions(
     if (!opts?.silent) setStatus("idle");
   }, []);
 
+  const refreshMessagesLastCall = useRef<Map<string, number>>(new Map());
+  const REFRESH_MESSAGES_DEBOUNCE_MS = 1000; // Prevent more than 1 call per second per group
+
   const refreshMessages = useCallback(
     async (
       s: WorkspaceDefaults,
       groupId: string,
       opts?: { markRead?: boolean; silent?: boolean; skipGroupRefresh?: boolean; scrollToBottom?: boolean }
     ) => {
+      // Debounce: skip if called too recently for this groupId
+      const now = Date.now();
+      const lastCall = refreshMessagesLastCall.current.get(groupId) ?? 0;
+      if (now - lastCall < REFRESH_MESSAGES_DEBOUNCE_MS) {
+        return;
+      }
+      refreshMessagesLastCall.current.set(groupId, now);
+
       if (!opts?.silent) setStatus("messages");
       const q = new URLSearchParams();
       if (opts?.markRead ?? true) q.set("markRead", "true");

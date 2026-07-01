@@ -99,7 +99,7 @@ export class AgentRunner {
   private memoryCache = new Map<string, Array<Record<string, unknown>>>();
   // Track last activity time for cleanup
   private lastActiveTime = Date.now();
-  // Memory snapshot flag 鈥?injected once per fresh session to stabilize prompt caching
+  // Memory snapshot flag —injected once per fresh session to stabilize prompt caching
   private memorySnapshotAdded = false;
   // Tool context for check_fn availability filtering (updated each turn)
   private toolContext: ToolContext | null = null;
@@ -146,12 +146,12 @@ export class AgentRunner {
             VALUES (${uuid()}, ${this.agentId}, ${input.groupId ?? null}, ${ws.workspace_id}, ${input.decisionType}, ${input.targetType ?? null}, ${input.targetId ?? null}, ${(input.inputSummary ?? "").slice(0, MAX_SUMMARY)}, ${(input.outputSummary ?? "").slice(0, MAX_SUMMARY)}, ${input.success ?? null}, ${new Date()})`
       );
     } catch {
-      // best-effort 鈥?table may not exist or decision extraction is non-critical
+      // best-effort —table may not exist or decision extraction is non-critical
     }
   }
 
   /**
-   * Archive a completed session 鈥?generate summary and clear llm_history.
+   * Archive a completed session —generate summary and clear llm_history.
    * Inspired by human episodic memory: distill events into a structured summary,
    * don't keep the raw conversation forever.
    */
@@ -238,7 +238,7 @@ export class AgentRunner {
 
   wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" = "manual") {
     console.info(`[AgentRunner:wakeup] agent=${this.agentId} reason=${reason}`);
-    // Run skill evaluation on wakeup 鈥?async, non-blocking (design doc 搂11.4)
+    // Run skill evaluation on wakeup —async, non-blocking (design doc 搂11.4)
     void this.evaluateSkills();
     this.wake.resolve();
     this.wake = createDeferred<void>();
@@ -249,6 +249,7 @@ export class AgentRunner {
   }
 
   requestInterrupt() {
+    console.info(`[AgentRunner:requestInterrupt] agent=${this.agentId.slice(0,8)} setting interrupt flag`);
     this.interruptRequested = true;
     this.wake.resolve();
     this.wake = createDeferred<void>();
@@ -260,15 +261,24 @@ export class AgentRunner {
 
   private consumeInterruptRequest() {
     if (!this.interruptRequested) return false;
-    this.interruptRequested = false;
+    // Don't clear the flag here — it should persist until explicitly cleared
+    // via clearInterrupt(). This prevents agents from auto-restarting after
+    // user clicks "Stop All Agents" and then receives new messages.
+    console.info(`[AgentRunner:consumeInterruptRequest] agent=${this.agentId.slice(0,8)} interrupt flag is set, returning early`);
     return true;
+  }
+
+  /** Clear the interrupt flag. Called when user explicitly resumes the agent. */
+  clearInterrupt() {
+    console.info(`[AgentRunner:clearInterrupt] agent=${this.agentId.slice(0,8)} clearing interrupt flag`);
+    this.interruptRequested = false;
   }
 
   private async loop() {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
-        // Safety timeout: if no wakeup within 600s, agent is orphaned 鈥?stop
+        // Safety timeout: if no wakeup within 600s, agent is orphaned —stop
         const timeoutMs = 600_000;
         let woke = false;
         await Promise.race([
@@ -329,7 +339,7 @@ export class AgentRunner {
   /**
    * Trim agent history to prevent unbounded growth.
    * Keep system messages + last 30 conversation messages.
-   * Runs async, best-effort 鈥?never blocks the loop.
+   * Runs async, best-effort —never blocks the loop.
    */
   private async trimHistoryIfNeeded() {
     const MAX_CONVERSATION_MSGS = 30;
@@ -351,7 +361,7 @@ export class AgentRunner {
       if (trimmedJson.length < 50_000) {
         // Only trim if result is under 50KB
         await store.setAgentHistory({ agentId: this.agentId, llmHistory: trimmedJson });
-        console.info(`[trimHistory] agent=${this.agentId.slice(0,8)} ${history.length}鈫?{trimmed.length} msgs, ${agent.llmHistory.length}鈫?{trimmedJson.length} chars`);
+        console.info(`[trimHistory] agent=${this.agentId.slice(0,8)} ${history.length}→{trimmed.length} msgs, ${agent.llmHistory.length}→{trimmedJson.length} chars`);
       }
     } catch {
       // best-effort
@@ -444,7 +454,7 @@ export class AgentRunner {
 
     // 缇や富 = coordinator锛堥搧寰?#6锛夈€傝皝鍒涘缓鐨勭兢/宸ヤ綔娴侊紝璋佸氨鏄?coordinator
     const isCoordinator = wfRow ? wfRow.creator_id === this.agentId : false;
-    // Free mode: no workflow or only draft 鈫?all agents respond freely
+    // Free mode: no workflow or only draft →all agents respond freely
     const isFreeMode = wfRow === null || wfRow.status === "draft";
 
     // activeWf: only non-draft workflows count as "active workflow mode"
@@ -476,7 +486,7 @@ export class AgentRunner {
     // If workflow is paused and this agent is not coordinator, skip
     if (activeWf && activeWf.status === "paused" && !isCoordinator) { console.info('[processGroupUnread] SKIP: workflow paused, not coordinator'); return; }
 
-    // If workflow active and this is the coordinator: check if human just spoke 鈫?auto-pause
+    // If workflow active and this is the coordinator: check if human just spoke →auto-pause
     if (activeWf && activeWf.status === "active" && isCoordinator) {
       if (hasHumanSender) {
         console.info('[processGroupUnread] SKIP: human spoke during active workflow, auto-pause');
@@ -533,7 +543,7 @@ export class AgentRunner {
       try {
         roleContent = await fs.readFile(roleTemplatePath, "utf-8");
       } catch {
-        // No template for this role 鈥?continue with default prompt
+        // No template for this role —continue with default prompt
       }
 
       const workflowContext = activeWf
@@ -546,7 +556,7 @@ export class AgentRunner {
       const systemContent =
         `You are an agent in an IM system. Agent ID: ${this.agentId}, workspace: ${workspaceId}, role: ${role}.\n` +
         `Group members: [${membersList}]. Reference agents by role only.\n` +
-        `Act as your role. Replies are NOT auto-delivered 鈥?use send_group_message or send_direct_message.\n` +
+        `Act as your role. Replies are NOT auto-delivered —use send_group_message or send_direct_message.\n` +
         `When creating groups, always include 'human' in memberIds.\n` +
         `Use bash for shell commands. Save solved patterns as skills with create_skill.` +
         workflowContext +
@@ -603,7 +613,7 @@ export class AgentRunner {
               const imgData = await this.fetchImageAsBase64(parsed.url);
               parts.push({
                 type: "text",
-                text: `[group:${groupId}] ${senderLabel} (鍙戦€佷簡涓€寮犲浘鐗?:`,
+                text: `[group:${groupId}] ${senderLabel} (发送了一张图片):`,
               });
               parts.push({
                 type: "image_url",
@@ -658,7 +668,7 @@ export class AgentRunner {
     if (hasHumanSender) {
       groupAgentTurnCount.set(groupId, 0);
     } else {
-      // Skip cascade counter when workflow is active 鈥?workflow has its own coordinator review
+      // Skip cascade counter when workflow is active —workflow has its own coordinator review
       if (activeWf && activeWf.status === "active") {
         // Active workflow: managed by coordinator, no cascade limit needed
       } else {
@@ -692,7 +702,7 @@ export class AgentRunner {
       // When LLM is unavailable (429 quota, etc.), send a short notice to human so they
       // aren't left wondering why the agent is silently BUSY.
       if (hasHumanSender && !this.interruptRequested) {
-        assistantText = `[绯荤粺: LLM 鏈嶅姟鏆備笉鍙敤 (${errMsg.slice(0, 80)}), 璇风◢鍚庡啀璇昡`;
+        assistantText = `[系统: LLM 服务暂不可用 (${errMsg.slice(0, 80)}), 请稍后再试]`;
         await store.sendMessage({
           groupId,
           senderId: this.agentId,
@@ -728,7 +738,7 @@ export class AgentRunner {
     // When assistantText is empty, send a short system notice so the human isn't left waiting.
     if (hasHumanSender && !didSend && !this.interruptRequested) {
       const content = assistantText.trim()
-        || `[绯荤粺: ${this.agentId.substring(0, 8)} 鏈疆鏃犳硶鍥炲锛岃妫€鏌ヤ笂涓嬫枃鎴栭噸璇昡`;
+        || `[系统: ${this.agentId.substring(0, 8)} 本轮无法回复，请检查上下文或重试]`;
       const members = await store.listGroupMemberIds({ groupId });
       const result = await store.sendMessage({
         groupId,
@@ -786,7 +796,7 @@ export class AgentRunner {
         this.meaningfulActions = 0;
         history.push({
           role: "system",
-          content: `[Self-Learning] Patterns discovered 鈥?save with create_skill if worth preserving.`,
+          content: `[Self-Learning] Patterns discovered —save with create_skill if worth preserving.`,
         });
         console.info(`[processGroupUnread] injected skill auto-trigger nudge for agent ${this.agentId}`);
       }
@@ -838,7 +848,7 @@ export class AgentRunner {
 
   /**
    * Archive the current LLM history to session_archives for cross-session retrieval.
-   * Async, best-effort 鈥?does not block the main loop.
+   * Async, best-effort —does not block the main loop.
    * Called after every LLM turn (design doc 搂6.3).
    */
   private async archiveSessionToDb(
@@ -908,8 +918,8 @@ export class AgentRunner {
       const senderHint = input.isPipeline
         ? "Pipeline mode: execute the task directly. Mark PIPELINE_STAGE_COMPLETE and OUTPUT: when done."
         : input.hasHumanSender
-        ? "Human waiting 鈥?fulfill request then confirm with send_group_message."
-        : "No human input 鈥?stay silent unless meaningful reason to speak.";
+        ? "Human waiting —fulfill request then confirm with send_group_message."
+        : "No human input —stay silent unless meaningful reason to speak.";
       input.history.push({
         role: "system",
         content: `[turn ${round}] ${senderHint}. One action per message.`,
@@ -1194,7 +1204,7 @@ export class AgentRunner {
 
   /**
    * Auto-create a skill when all tasks in a workflow are complete.
-   * Best-effort 鈥?failures are silently ignored.
+   * Best-effort —failures are silently ignored.
    * Triggered after update_task returns taskDone === true.
    */
   private async autoCreateSkillFromWorkflow(groupId: UUID) {
@@ -1291,13 +1301,13 @@ export class AgentRunner {
 
       console.info(`[autoCreateSkill] auto-created skill "${skillName}" from workflow "${wfName}"`);
     } catch {
-      // best-effort 鈥?skill auto-creation should never block the agent
+      // best-effort —skill auto-creation should never block the agent
     }
   }
 
   /**
    * Nudge Engine: full LLM-based background analysis of recent conversation.
-   * Runs every NUDGE_INTERVAL rounds. Fire-and-forget 鈥?never blocks the agent.
+   * Runs every NUDGE_INTERVAL rounds. Fire-and-forget —never blocks the agent.
    *
    * Sends recent history to the primary LLM provider for semantic analysis,
    * asking it to identify reusable patterns, fix recipes, and improvement
@@ -1524,7 +1534,7 @@ export class AgentRunner {
       // ---- Create new skill (default, or fallback from failed patch) ----
       const skillName = `auto-nudge-${(result.skillName ?? "pattern")
         .toLowerCase()
-        .replace(/[^a-z0-9涓€-榭?]+/g, "-")
+        .replace(/[^a-z0-9一-龥]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 60)}`;
       const skillDescription = (result.skillDescription ?? "Auto-generated skill from nudge analysis").slice(0, 200);
@@ -1579,14 +1589,14 @@ export class AgentRunner {
         console.info(`[nudgeAnalysis] emitted ${suggestions.length} skill suggestion(s) for agent ${this.agentId.slice(0, 8)}`);
       }
     } catch {
-      // best-effort 鈥?nudge analysis should never block the agent
+      // best-effort —nudge analysis should never block the agent
     }
   }
 
   /**
    * Skill lifecycle maintenance: detect stale skills, archive old ones,
    * and merge duplicates. Runs once per nudge cycle as best-effort.
-   * (design doc 搂11.4 鈥?skill lifecycle)
+   * (design doc 搂11.4 —skill lifecycle)
    */
   private async skillMaintenance() {
     try {
@@ -1627,13 +1637,13 @@ export class AgentRunner {
             );
             console.info(`[skillMaintenance] archived skill "${skill.name}" (last used ${lastUsed.slice(0, 10)})`);
           } catch {
-            // best-effort 鈥?skill archiving should not break anything
+            // best-effort —skill archiving should not break anything
           }
           invalidateSkillCache();
         }
-        // Stale: no usage in 30 days 鈥?add usage hint for future nudge analysis
+        // Stale: no usage in 30 days —add usage hint for future nudge analysis
         else if (lastUsed < staleThreshold) {
-          console.info(`[skillMaintenance] skill "${skill.name}" is stale (last used ${lastUsed.slice(0, 10)}) 鈥?consider merging or removing`);
+          console.info(`[skillMaintenance] skill "${skill.name}" is stale (last used ${lastUsed.slice(0, 10)}) —consider merging or removing`);
         }
       }
 
@@ -1650,19 +1660,19 @@ export class AgentRunner {
           const overlap = [...aWords].filter(w => bWords.has(w)).length;
           const union = new Set([...aWords, ...bWords]).size;
           if (union > 3 && overlap / union >= SKILL_MERGE_SIMILARITY) {
-            console.info(`[skillMaintenance] potential duplicate skills: "${a.name}" and "${b.name}" 鈥?consider merging`);
+            console.info(`[skillMaintenance] potential duplicate skills: "${a.name}" and "${b.name}" —consider merging`);
           }
         }
       }
     } catch {
-      // best-effort 鈥?skill maintenance should never block the agent
+      // best-effort —skill maintenance should never block the agent
     }
   }
 
   /**
    * Per-turn file-mutation verifier: after a file-write tool call,
    * read back the target file to confirm it actually exists and has content.
-   * Best-effort 鈥?failures are logged, not surfaced to the agent.
+   * Best-effort —failures are logged, not surfaced to the agent.
    * (design doc 搂11.5)
    */
   private async verifyFileMutation(args: Record<string, unknown>, resultContent: string) {
@@ -1690,9 +1700,9 @@ export class AgentRunner {
   }
 
   /**
-   * Build a memory snapshot 鈥?top N important memories frozen at session start.
+   * Build a memory snapshot —top N important memories frozen at session start.
    * Injected as a system message to stabilize prompt caching.
-   * Best-effort 鈥?returns null on failure or if no memories exist.
+   * Best-effort —returns null on failure or if no memories exist.
    */
   private async buildMemorySnapshot(): Promise<string | null> {
     try {
@@ -1756,7 +1766,7 @@ export class AgentRunner {
 
   /**
    * Record a skill/tool usage for self-evolution tracking.
-   * Best-effort 鈥?failures are silently ignored.
+   * Best-effort —failures are silently ignored.
    */
   private async recordSkillUsage(skillName: string, success: boolean) {
     try {
@@ -1919,7 +1929,7 @@ export class AgentRunner {
           return { ok: false, error: "Daily skill creation limit reached (3 per day). Try again tomorrow." };
         }
       } catch {
-        // best-effort; table may not exist 鈥?proceed without limit
+        // best-effort; table may not exist —proceed without limit
       }
 
       const skillsDir = getSkillDirectory();
@@ -2015,7 +2025,7 @@ export class AgentRunner {
         return { ok: true, results, count: results.length };
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        // GitHub API rate limit or network error 鈫?fallback to local skills
+        // GitHub API rate limit or network error →fallback to local skills
         if (errMsg.includes("403") || errMsg.includes("429") || errMsg.includes("rate")) {
           const localResults = await searchLocalSkills(query);
           emitToolDone(true);
@@ -2627,8 +2637,8 @@ export class AgentRunner {
       const db = getDb();
 
       // Authorization: groups table has no creator_id column.
-      // Multi-member groups have a workflow 鈫?only the workflow creator (coordinator) can delete.
-      // P2P groups have no workflow 鈫?any member can delete.
+      // Multi-member groups have a workflow →only the workflow creator (coordinator) can delete.
+      // P2P groups have no workflow →any member can delete.
       const wfRows = await db.execute(
         sql`SELECT creator_id FROM workflows WHERE group_id = ${groupId} ORDER BY created_at DESC LIMIT 1`
       );
@@ -2652,7 +2662,7 @@ export class AgentRunner {
       );
       const wfIds = (workflowIds as unknown as Array<{ id: string }>).map((r) => r.id);
 
-      // Cascade delete: task_logs 鈫?tasks 鈫?agent_assignments 鈫?workflows 鈫?messages 鈫?group_members 鈫?session_archive 鈫?groups
+      // Cascade delete: task_logs →tasks →agent_assignments →workflows →messages →group_members →session_archive →groups
       try {
         await db.transaction(async (tx) => {
           if (wfIds.length > 0) {
@@ -2817,7 +2827,7 @@ export class AgentRunner {
       const msgLimit = args.limit && args.limit > 0 && args.limit <= 50 ? args.limit : 20;
       const messages = await store.listMessages({ groupId, limit: msgLimit });
 
-      // Return summary cards (library catalog pattern 鈥?metadata only, not full content)
+      // Return summary cards (library catalog pattern —metadata only, not full content)
       const cards = messages.map(m => ({
         id: m.id,
         sender: m.senderId,
@@ -3026,7 +3036,7 @@ export class AgentRunner {
         decisionType,
         targetType: "task",
         targetId: taskId,
-        inputSummary: `Task ${taskId} 鈫?${finalStatus}`,
+        inputSummary: `Task ${taskId} →${finalStatus}`,
         outputSummary: args.result?.slice(0, 200) ?? finalStatus,
         success: finalStatus === "done" || finalStatus === "approved",
       });
@@ -3271,7 +3281,7 @@ export class AgentRunner {
           source: r.source as string | null,
         }));
 
-        // Layer 2: TagMemo Spike propagation 鈥?tag co-occurrence expansion (design doc 搂6.2)
+        // Layer 2: TagMemo Spike propagation —tag co-occurrence expansion (design doc 搂6.2)
         // Extract tags from layer 1 results, find memories with co-occurring tags
         const layer1Tags = new Set<string>();
         for (const mem of layer1) {
@@ -3586,7 +3596,7 @@ export class AgentRunner {
 
       // Per-turn file-mutation verifier: after file-write operations,
       // read back the file to confirm content was actually persisted.
-      // (design doc 搂11.5 鈥?file-mutation verifier)
+      // (design doc 搂11.5 —file-mutation verifier)
       const fileWriteTools = new Set(["write_file", "edit_file", "write", "str_replace_editor", "write_to_file", "create_file"]);
       if (fileWriteTools.has(name) && result.ok && result.content) {
         void this.verifyFileMutation(args, result.content);
@@ -3669,7 +3679,7 @@ export class AgentRunner {
   ) {
     // Circuit breaker: skip if too many consecutive failures
     if (isLlmCircuitOpen()) {
-      console.warn(`[callLlmStreaming] circuit breaker open 鈥?skipping LLM call`);
+      console.warn(`[callLlmStreaming] circuit breaker open —skipping LLM call`);
       throw new Error("LLM circuit breaker open: too many consecutive failures");
     }
 
@@ -3688,7 +3698,7 @@ export class AgentRunner {
         if (!is429) throw err;
         recordLlmFailure();
         errors.push(`${provider}: ${msg}`);
-        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" 鈫?")}`);
+        console.warn(`[callLlmStreaming] ${provider} 429, trying next provider. Chain: ${chain.join(" →")}`);
         // Keep streaming to the UI so the user sees the fallback
         getWorkspaceUIBus().emit(ctx.workspaceId, {
           event: "ui.agent.llm.fallback",
@@ -3818,7 +3828,7 @@ export class AgentRunner {
 
     // --- Anthropic Prompt Caching ---
     // Separate system messages from conversation, send as `system` param with cache_control.
-    // Strategy: "system_and_3" 鈥?cache breakpoints on system prompt + last 3 messages.
+    // Strategy: "system_and_3" —cache breakpoints on system prompt + last 3 messages.
     const systemMessages = history.filter((m) => m.role === "system");
     const chatMessages = history.filter((m) => m.role !== "system");
 
@@ -4429,6 +4439,31 @@ export class AgentRuntime {
     }
 
     return { interrupted: agentIds.length, agentIds };
+  }
+
+  /** Resume a single agent by clearing its interrupt flag. */
+  resumeAgent(agentId: UUID) {
+    const runner = this.runners.get(agentId);
+    if (runner) {
+      runner.clearInterrupt();
+    }
+  }
+
+  /** Resume all agents in a workspace by clearing their interrupt flags. */
+  async resumeAll(input?: { workspaceId?: UUID }) {
+    await this.bootstrap();
+    const workspaceId = input?.workspaceId?.trim();
+    const agents = await store.listAgents(workspaceId ? { workspaceId } : undefined);
+    const agentIds = agents.filter((agent) => agent.role !== "human").map((agent) => agent.id);
+
+    for (const agentId of agentIds) {
+      const runner = this.runners.get(agentId);
+      if (runner) {
+        runner.clearInterrupt();
+      }
+    }
+
+    return { resumed: agentIds.length, agentIds };
   }
 
   stopRunner(agentId: UUID) {

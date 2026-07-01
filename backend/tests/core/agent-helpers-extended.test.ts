@@ -162,12 +162,24 @@ describe("mapOpenRouterMessages", () => {
     expect(fn.arguments).toBe("{}");
   });
 
-  it("passes tool role messages through unchanged", () => {
+  it("passes tool role messages through when matching assistant tool_calls exists", () => {
     const history: HistoryMessage[] = [
+      { role: "assistant", content: "", tool_calls: [{ id: "tc1", type: "function", function: { name: "bash", arguments: "{}" } }] },
       { role: "tool", content: '{"ok":true}', name: "bash", tool_call_id: "tc1" },
     ];
     const result = mapOpenRouterMessages(history);
-    expect(result[0]).toEqual(history[0]);
+    expect(result).toHaveLength(2);
+    expect(result[1]).toEqual(history[1]);
+  });
+
+  it("filters out orphaned tool messages without matching assistant tool_calls", () => {
+    const history: HistoryMessage[] = [
+      { role: "user", content: "hello" },
+      { role: "tool", content: '{"ok":true}', name: "bash", tool_call_id: "orphaned-tc" },
+    ];
+    const result = mapOpenRouterMessages(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
   });
 
   it("handles empty history", () => {

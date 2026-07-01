@@ -267,7 +267,29 @@ export function mapOpenRouterMessages(history: HistoryMessage[]): Array<Record<s
     else others.push(msg);
   }
   const normalized = [...systems, ...others];
-  return normalized.map((msg) => {
+
+  // First pass: collect all valid tool_call_ids from assistant messages
+  const validToolCallIds = new Set<string>();
+  for (const msg of normalized) {
+    if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        if (tc.id) validToolCallIds.add(tc.id);
+      }
+    }
+  }
+
+  // Second pass: filter out orphaned tool messages (no matching assistant tool_call)
+  const filtered = normalized.filter((msg) => {
+    if (msg.role === "tool") {
+      const toolMsg = msg as HistoryMessage & { role: "tool"; tool_call_id?: string };
+      if (!toolMsg.tool_call_id || !validToolCallIds.has(toolMsg.tool_call_id)) {
+        return false; // orphaned tool message — strip it
+      }
+    }
+    return true;
+  });
+
+  return filtered.map((msg) => {
     if (msg.role === "tool") return msg;
 
     const { reasoning_content, ...rest } = msg as Exclude<HistoryMessage, { role: 'tool' }>;
