@@ -32,6 +32,8 @@ type SkillEntry = {
 type RemoteSkill = {
   name: string;
   description: string;
+  description_zh?: string;
+  is_english?: boolean;
   source_url: string;
   source: string;
 };
@@ -501,13 +503,22 @@ function MarketplaceTab({
             <Card key={r.name + r.source} hoverable padding={16} borderRadius="var(--radius-md)" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--purple-text)", flex: 1 }}>{r.name}</div>
-                <span style={{
-                  fontSize: 10, padding: "2px 6px", borderRadius: 4,
-                  background: "var(--bg-hover)", color: "var(--text-secondary)",
-                }}>{r.source}</span>
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+                  {r.is_english && (
+                    <span style={{
+                      fontSize: 9, padding: "1px 4px", borderRadius: 3,
+                      background: "var(--yellow-soft)", color: "var(--yellow-text)",
+                      border: "1px solid var(--yellow-muted)",
+                    }}>EN</span>
+                  )}
+                  <span style={{
+                    fontSize: 10, padding: "2px 6px", borderRadius: 4,
+                    background: "var(--bg-hover)", color: "var(--text-secondary)",
+                  }}>{r.source}</span>
+                </div>
               </div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5, minHeight: "2.4em", marginBottom: 12 }}>
-                {r.description}
+                {r.description_zh || r.description}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <a

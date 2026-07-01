@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { invalidateSkillCache } from "@/runtime/skill-loader";
+import { translateDescription } from "@/lib/skill-translations";
 
 const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
 
@@ -309,7 +310,17 @@ async function searchRemoteSkills(query: string) {
     });
   }
 
-  return NextResponse.json({ skills: merged.slice(0, 30), total: merged.length });
+  // Add Chinese translations
+  const translated = merged.slice(0, 30).map((item) => {
+    const { text, isEnglish } = translateDescription(item.name, item.description);
+    return {
+      ...item,
+      description_zh: text,
+      is_english: isEnglish,
+    };
+  });
+
+  return NextResponse.json({ skills: translated, total: merged.length });
 }
 
 // -- GitHub Code Search + known taps --
