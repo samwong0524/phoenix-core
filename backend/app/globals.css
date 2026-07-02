@@ -207,10 +207,10 @@
   --bp-lg: 1024px;
   --bp-xl: 1280px;
 
-  /* ─── Fonts ─── */
-  --font-display: "Exo 2", sans-serif;
-  --font-body: "Exo 2", sans-serif;
-  --font-mono: "JetBrains Mono", "ui-monospace", "SFMono-Regular", monospace;
+  /* ─── Fonts (Chinese-first system font chains) ─── */
+  --font-display: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", ui-monospace, monospace;
 
 }
 
@@ -289,6 +289,16 @@ body {
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;
+  /* CJK typography: trim punctuation spacing, auto-space CJK-Latin boundaries */
+  text-spacing-trim: trim-start allow-adjacent;
+  text-autospace: ideograph-alpha ideograph-numeric;
+}
+
+/* Ban uppercase on CJK text — meaningless and visually broken for Chinese/Japanese/Korean */
+:lang(zh),
+:lang(ja),
+:lang(ko) {
+  text-transform: none !important;
 }
 
 /* Thin cyan scrollbar matching design system */
