@@ -191,15 +191,11 @@ export default function TemplateGallery() {
 
             {/* Description */}
             <div
-              className="muted"
+              className="muted line-clamp-2"
               style={{
                 fontSize: 11,
                 lineHeight: 1.4,
                 marginBottom: 8,
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
               }}
             >
               {t(template.descKey)}
@@ -224,7 +220,10 @@ export default function TemplateGallery() {
                 </span>
               ))}
               {template.agents.length > 3 && (
-                <span style={{ fontSize: 9, color: "var(--text-dim)", padding: "1px 4px" }}>
+                <span
+                  style={{ fontSize: 9, color: "var(--text-dim)", padding: "1px 4px" }}
+                  title={template.agents.slice(3).map(a => a.role).join(", ")}
+                >
                   +{template.agents.length - 3}
                 </span>
               )}
