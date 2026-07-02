@@ -2,6 +2,92 @@
 @import "tailwindcss";
 @source "../node_modules/streamdown/dist/*.js";
 
+/* ─── Tailwind v4 Theme Tokens ─── */
+@theme {
+  /* Background layers */
+  --color-void: var(--bg-void);
+  --color-panel: var(--bg-panel);
+  --color-card: var(--bg-card);
+  --color-elevated: var(--bg-elevated);
+  --color-overlay: var(--bg-overlay);
+  --color-code: var(--bg-code);
+  --color-hover: var(--bg-hover);
+
+  /* Primary accent */
+  --color-primary: var(--color-primary);
+  --color-primary-dim: var(--color-primary-dim);
+  --color-primary-glow: var(--color-primary-glow);
+  --color-primary-soft: var(--color-primary-soft);
+
+  /* Secondary accent */
+  --color-secondary: var(--color-secondary);
+  --color-secondary-dim: var(--color-secondary-dim);
+
+  /* Agent / purple */
+  --color-purple: var(--purple);
+  --color-purple-dim: var(--purple-dim);
+
+  /* Semantic colors */
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+
+  /* Semantic aliases */
+  --color-green: var(--green);
+  --color-green-dim: var(--green-dim);
+  --color-yellow: var(--yellow);
+  --color-yellow-dim: var(--yellow-dim);
+  --color-red: var(--red);
+  --color-red-dim: var(--red-dim);
+
+  /* Text */
+  --color-text: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-dim: var(--text-dim);
+
+  /* Border */
+  --color-border: var(--border);
+  --color-border-bright: var(--border-bright);
+  --color-border-hairline: var(--border-hairline);
+
+  /* Semantic variants */
+  --color-green-soft: var(--green-soft);
+  --color-green-muted: var(--green-muted);
+  --color-green-mid: var(--green-mid);
+  --color-green-vivid: var(--green-vivid);
+  --color-green-text: var(--green-text);
+  --color-red-soft: var(--red-soft);
+  --color-red-muted: var(--red-muted);
+  --color-red-text: var(--red-text);
+  --color-blue-soft: var(--blue-soft);
+  --color-blue-muted: var(--blue-muted);
+  --color-blue-text: var(--blue-text);
+  --color-blue-link: var(--blue-link);
+  --color-slate-soft: var(--slate-soft);
+  --color-slate-muted: var(--slate-muted);
+  --color-yellow-soft: var(--yellow-soft);
+  --color-yellow-text: var(--yellow-text);
+  --color-purple-text: var(--purple-text);
+
+  /* Beam labels */
+  --color-beam-create-text: var(--beam-create-text);
+  --color-beam-create-border: var(--beam-create-border);
+  --color-beam-create-bg: var(--beam-create-bg);
+  --color-beam-msg-text: var(--beam-msg-text);
+  --color-beam-msg-border: var(--beam-msg-border);
+  --color-beam-msg-bg: var(--beam-msg-bg);
+
+  /* Radius */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  /* Shadows */
+  --shadow-glow-sm: var(--shadow-glow-sm);
+  --shadow-glow-md: var(--shadow-glow-md);
+  --shadow-glow-lg: var(--shadow-glow-lg);
+}
+
 :root {
   color-scheme: dark;
 
@@ -126,10 +212,6 @@
   --font-body: "Exo 2", sans-serif;
   --font-mono: "JetBrains Mono", "ui-monospace", "SFMono-Regular", monospace;
 
-  /* ─── Tailwind compat HSL ─── */
-  --background: 222.2 47% 11%;
-  --foreground: 210 40% 98%;
-  --border-hsl: 215 16% 47%;
 }
 
 /* ===== LIGHT MODE ===== */
