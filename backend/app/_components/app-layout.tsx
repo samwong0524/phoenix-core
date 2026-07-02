@@ -2,11 +2,11 @@
 
 import { memo, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { GlobalSidebar } from "./global-sidebar";
 import { ROUTES } from "./routes";
-import { stepTransition } from "@/lib/motion";
+import { stepTransition, getReducedVariant } from "@/lib/motion";
 import { useIsMobile } from "@/lib/use-media-query";
 
 const SIDEBAR_EXCLUDED_PATHS = [ROUTES.LOGIN];
@@ -18,10 +18,12 @@ export const AppLayout = memo(function AppLayout({
 }) {
   const pathname = usePathname();
   const isMobile = useIsMobile();
+  const prefersReduced = useReducedMotion();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const hideSidebar = SIDEBAR_EXCLUDED_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + "/")
   );
+  const pageVariants = prefersReduced ? getReducedVariant(stepTransition) : stepTransition;
 
   // Auto-close mobile drawer on navigation
   useEffect(() => {
@@ -69,7 +71,7 @@ export const AppLayout = memo(function AppLayout({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: prefersReduced ? 0.1 : 0.2 }}
                 onClick={() => setDrawerOpen(false)}
                 style={{
                   position: "fixed",
@@ -80,10 +82,10 @@ export const AppLayout = memo(function AppLayout({
                 }}
               />
               <motion.div
-                initial={{ x: -220 }}
-                animate={{ x: 0 }}
-                exit={{ x: -220 }}
-                transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+                initial={prefersReduced ? { opacity: 0 } : { x: -220, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={prefersReduced ? { opacity: 0 } : { x: -220, opacity: 0 }}
+                transition={{ duration: prefersReduced ? 0.1 : 0.25, ease: [0.2, 0, 0, 1] }}
                 style={{
                   position: "fixed",
                   top: 0,
@@ -102,7 +104,7 @@ export const AppLayout = memo(function AppLayout({
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
-              variants={stepTransition}
+              variants={pageVariants}
               initial="enter"
               animate="active"
               exit="exit"
@@ -124,7 +126,7 @@ export const AppLayout = memo(function AppLayout({
         <AnimatePresence mode="wait">
           <motion.div
             key={pathname}
-            variants={stepTransition}
+            variants={pageVariants}
             initial="enter"
             animate="active"
             exit="exit"

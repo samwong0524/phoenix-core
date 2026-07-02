@@ -3,7 +3,8 @@
 import { memo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { getReducedVariant } from "@/lib/motion";
 import {
   MessageSquare,
   Workflow,
@@ -83,6 +84,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
   const { t } = useI18n();
   const NAV_ITEMS = buildNavItems(t);
   const [collapsed, setCollapsed] = useState(false);
+  const prefersReduced = useReducedMotion();
   // Progressive disclosure: all groups collapsed by default;
   // auto-expand the group that matches the current route
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
@@ -111,7 +113,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
     <motion.aside
       aria-label="Sidebar"
       animate={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
-      transition={{ duration: 0.25, ease: EASE }}
+      transition={{ duration: prefersReduced ? 0.1 : 0.25, ease: EASE }}
       className="flex flex-col h-full border-r border-border bg-panel overflow-hidden shrink-0"
     >
       {/* Logo */}
@@ -270,7 +272,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
       >
         <motion.span
           animate={{ rotate: collapsed ? 180 : 0 }}
-          transition={{ duration: 0.25, ease: EASE }}
+          transition={{ duration: prefersReduced ? 0.1 : 0.25, ease: EASE }}
           className="flex"
         >
           <ChevronLeft size={16} />
