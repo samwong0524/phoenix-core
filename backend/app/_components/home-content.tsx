@@ -18,8 +18,8 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
   const { t } = useI18n();
 
   return (
-    <div style={{ height: "100vh", overflowY: "auto", padding: "24px 24px 48px" }}>
-      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+    <div className="h-screen overflow-y-auto px-6 pt-6 pb-12">
+      <div className="max-w-[960px] mx-auto">
         {/* Header */}
         <PageHeader
           title={t("home.title")}
@@ -29,7 +29,7 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
 
         {/* DB Error Notice */}
         {dbError && (
-          <Alert variant="error" style={{ marginBottom: 16 }}>
+          <Alert variant="error" className="mb-4">
             {t("home.db_error")}
           </Alert>
         )}
@@ -38,25 +38,11 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
         {children}
 
         {/* Navigation Cards */}
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--text-secondary)",
-            marginBottom: 12,
-          }}
-        >
+        <div className="text-xs font-semibold text-text-secondary mb-3">
           {t("nav.quick_nav")}
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 12,
-            marginBottom: 24,
-          }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3 mb-6">
           <NavCard href={ROUTES.CHAT} title={t("home.im_title")} desc={t("home.im_desc")} />
           <NavCard href={ROUTES.WORKFLOW} title={t("home.workflow_title")} desc={t("home.workflow_desc")} />
           <NavCard href={ROUTES.HISTORY} title={t("home.history_title")} desc={t("home.history_desc")} />
@@ -67,22 +53,22 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
         </div>
 
         {/* Workspaces */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+        <div className="mb-6">
+          <div className="text-[13px] font-bold mb-2">
             {t("home.workspaces")}
           </div>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 13 }}>
+          <p className="muted mt-0 mb-3 text-[13px]">
             {t("home.workspaces_hint")}
           </p>
           <WorkspacesList workspaces={workspaces} />
         </div>
 
         {/* Template Gallery */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+        <div className="mb-6">
+          <div className="text-[13px] font-bold mb-1">
             {t("templates.title")}
           </div>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
+          <p className="muted mt-0 mb-3 text-xs">
             {t("templates.subtitle")}
           </p>
           <TemplateGallery />
@@ -94,10 +80,10 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
 
 function NavCard({ href, title, desc, external }: { href: string; title: string; desc: string; external?: boolean }) {
   return (
-    <Link href={href} target={external ? "_blank" : undefined} rel={external ? "noopener" : undefined} style={{ textDecoration: "none", color: "inherit" }}>
+    <Link href={href} target={external ? "_blank" : undefined} rel={external ? "noopener" : undefined} className="no-underline text-inherit block">
       <Card hoverable padding="16px 20px" borderRadius="8px">
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{title}</div>
-        <div className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>{desc}</div>
+        <div className="font-bold text-sm mb-1">{title}</div>
+        <div className="muted text-xs leading-[1.4]">{desc}</div>
       </Card>
     </Link>
   );

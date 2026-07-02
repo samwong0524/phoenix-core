@@ -6,6 +6,7 @@ type AlertProps = {
   variant?: AlertVariant;
   children: React.ReactNode;
   style?: React.CSSProperties;
+  className?: string;
 };
 
 const variantStyles: Record<AlertVariant, { bg: string; border: string; color: string }> = {
@@ -15,10 +16,11 @@ const variantStyles: Record<AlertVariant, { bg: string; border: string; color: s
   error: { bg: "var(--red-soft)", border: "var(--red-muted)", color: "var(--red-text)" },
 };
 
-export function Alert({ variant = "info", children, style }: AlertProps) {
+export function Alert({ variant = "info", children, style, className }: AlertProps) {
   const v = variantStyles[variant];
   return (
     <div
+      className={className}
       style={{
         padding: "10px 16px",
         borderRadius: "var(--radius-md)",
