@@ -190,7 +190,14 @@
     "cfg_url": "URL:",
     "cfg_key": "Key:",
     "cfg_model": "Model:",
-    "load_fail": "Failed to load configuration"
+    "load_fail": "Failed to load configuration",
+    "quick_setup": "Quick Setup",
+    "preset_deepseek": "DeepSeek",
+    "preset_openai": "OpenAI",
+    "preset_zhipu": "Zhipu GLM",
+    "preset_openrouter": "OpenRouter",
+    "preset_ollama": "Ollama Local",
+    "preset_freellmapi": "FreeLLMAPI"
   },
   "observability": {
     "title": "Observability",

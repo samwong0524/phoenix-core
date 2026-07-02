@@ -190,7 +190,14 @@
     "cfg_url": "URL:",
     "cfg_key": "密钥:",
     "cfg_model": "模型:",
-    "load_fail": "配置加载失败"
+    "load_fail": "配置加载失败",
+    "quick_setup": "快速配置",
+    "preset_deepseek": "DeepSeek",
+    "preset_openai": "OpenAI",
+    "preset_zhipu": "智谱 GLM",
+    "preset_openrouter": "OpenRouter",
+    "preset_ollama": "Ollama 本地",
+    "preset_freellmapi": "FreeLLMAPI"
   },
   "observability": {
     "title": "可观测性",

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, AlertCircle, Eye, EyeOff, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { corporateVariants } from "@/lib/motion";
@@ -25,6 +25,46 @@ type TestResult = {
   model?: string;
   error?: string;
 };
+
+/** Preset configurations for popular LLM providers */
+const PROVIDER_PRESETS = [
+  {
+    id: "deepseek",
+    provider: "anthropic",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+  },
+  {
+    id: "openai",
+    provider: "anthropic",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+  },
+  {
+    id: "zhipu",
+    provider: "anthropic",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4-flash",
+  },
+  {
+    id: "openrouter",
+    provider: "openrouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "auto",
+  },
+  {
+    id: "ollama",
+    provider: "ollama",
+    baseUrl: "http://localhost:11434/v1",
+    model: "qwen3:8b",
+  },
+  {
+    id: "freellmapi",
+    provider: "freellmapi",
+    baseUrl: "http://127.0.0.1:3001/v1",
+    model: "auto",
+  },
+] as const;
 
 export default function ModelsPage() {
   const { t } = useI18n();
@@ -91,6 +131,24 @@ export default function ModelsPage() {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+
+  const applyPreset = (presetId: string) => {
+    const preset = PROVIDER_PRESETS.find((p) => p.id === presetId);
+    if (!preset || !config) return;
+    setSelectedPreset(presetId);
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            llmProvider: preset.provider,
+            baseUrl: preset.baseUrl,
+            model: preset.model,
+          }
+        : prev
+    );
+  };
+
   return (
     <PageLayout
       title={t("models.title")}
@@ -106,6 +164,40 @@ export default function ModelsPage() {
         animate="visible"
         style={{ maxWidth: 600, display: "flex", flexDirection: "column", gap: 0 }}
       >
+        {/* Quick Setup — one-click presets */}
+        <motion.div variants={corporateVariants.staggerItem} style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Zap size={14} style={{ color: "var(--color-primary)" }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {t("models.quick_setup")}
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {PROVIDER_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => applyPreset(preset.id)}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  background: selectedPreset === preset.id ? "var(--color-primary-soft)" : "var(--bg-card)",
+                  border: `1px solid ${selectedPreset === preset.id ? "var(--color-primary)" : "var(--border)"}`,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
+                  {t(`models.preset_${preset.id}`)}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                  {preset.model}
+                </div>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Provider selection */}
         <FormField label={t("models.provider")}>
           <select
