@@ -83,9 +83,17 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
   const { t } = useI18n();
   const NAV_ITEMS = buildNavItems(t);
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(["orchestrate", "operations", "config"])
-  );
+  // Progressive disclosure: all groups collapsed by default;
+  // auto-expand the group that matches the current route
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const item of NAV_ITEMS) {
+      if (item.children?.some((c) => pathname === c.href || pathname.startsWith(c.href + "/"))) {
+        initial.add(item.key);
+      }
+    }
+    return initial;
+  });
 
   const toggleGroup = (key: string) => {
     setExpandedGroups((prev) => {
