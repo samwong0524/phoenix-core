@@ -78,7 +78,7 @@ export default function SettingsPage() {
         variants={corporateVariants.staggerContainer}
         initial="hidden"
         animate="visible"
-        style={{ maxWidth: 600, display: "flex", flexDirection: "column", gap: 24 }}
+        className="max-w-[600px] flex flex-col gap-6"
       >
         {/* Language */}
         <SettingsSection icon={Globe} title={t("settings.language")} desc={t("settings.language_desc")}>
@@ -104,20 +104,7 @@ export default function SettingsPage() {
         <SettingsSection icon={Cpu} title={t("settings.llm")} desc={t("settings.llm_desc")}>
           <Link
             href={ROUTES.MODELS}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--border)",
-              background: "var(--bg-elevated)",
-              color: "var(--accent-cyan)",
-              fontSize: 13,
-              fontFamily: "var(--font-mono)",
-              textDecoration: "none",
-              transition: "border-color 0.15s",
-            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--radius-sm)] border border-border bg-elevated text-primary text-[13px] font-[family-name:var(--font-mono)] no-underline transition-colors hover:border-bright"
           >
             {t("settings.llm_goto")} →
           </Link>
@@ -125,14 +112,8 @@ export default function SettingsPage() {
 
         {/* About */}
         <SettingsSection icon={Info} title={t("settings.about")} desc="">
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--text-secondary)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {t("settings.version")}: <span style={{ color: "var(--text-primary)" }}>1.0.0</span>
+          <div className="text-[13px] text-text-secondary font-[family-name:var(--font-mono)]">
+            {t("settings.version")}: <span className="text-text">1.0.0</span>
           </div>
         </SettingsSection>
       </motion.div>
@@ -156,30 +137,18 @@ function SettingsSection({
   return (
     <motion.section
       variants={corporateVariants.staggerItem}
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
-        padding: "20px 24px",
-      }}
+      className="bg-card border border-border rounded-[var(--radius-sm)] px-6 py-5"
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: desc ? 6 : 12 }}>
-        <Icon size={16} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} aria-hidden="true" />
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>{title}</h2>
+      <div className={`flex items-center gap-2.5 ${desc ? "mb-1.5" : "mb-3"}`}>
+        <Icon size={16} className="text-primary shrink-0" aria-hidden="true" />
+        <h2 className="text-sm font-semibold text-text m-0">{title}</h2>
       </div>
       {desc && (
-        <p
-          style={{
-            fontSize: 13,
-            color: "var(--text-secondary)",
-            margin: "0 0 12px 26px",
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="text-[13px] text-text-secondary ml-[26px] mb-3 leading-[1.5] mt-0">
           {desc}
         </p>
       )}
-      <div style={{ marginLeft: 26 }}>{children}</div>
+      <div className="ml-[26px]">{children}</div>
     </motion.section>
   );
 }
@@ -217,12 +186,7 @@ function SegmentedControl({
     <div
       role="radiogroup"
       aria-label={label}
-      style={{
-        display: "inline-flex",
-        borderRadius: "var(--radius-sm)",
-        border: "1px solid var(--border)",
-        overflow: "hidden",
-      }}
+      className="inline-flex rounded-[var(--radius-sm)] border border-border overflow-hidden"
     >
       {options.map((opt, index) => {
         const active = opt.value === value;
@@ -234,17 +198,11 @@ function SegmentedControl({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => handleKeyDown(e, index)}
-            style={{
-              padding: "6px 16px",
-              fontSize: 13,
-              fontFamily: "var(--font-mono)",
-              border: "none",
-              cursor: "pointer",
-              transition: "all 0.15s",
-              background: active ? "var(--accent-cyan)" : "var(--bg-elevated)",
-              color: active ? "#000" : "var(--text-secondary)",
-              fontWeight: active ? 600 : 400,
-            }}
+            className={`px-4 py-1.5 text-[13px] font-[family-name:var(--font-mono)] border-0 cursor-pointer transition-all ${
+              active
+                ? "bg-primary text-black font-semibold"
+                : "bg-elevated text-text-secondary font-normal"
+            }`}
           >
             {opt.label}
           </button>
