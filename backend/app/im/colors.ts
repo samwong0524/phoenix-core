@@ -1,4 +1,5 @@
 import type { AgentStatus } from "./types";
+import { fromImStatus, AGENT_STATUS_META } from "@/lib/agent-status";
 
 /** Map agent role to a CSS variable color for avatars, nodes, dots. */
 export function roleColor(role?: string): string {
@@ -11,11 +12,11 @@ export function roleColor(role?: string): string {
   return "var(--yellow)";
 }
 
-/** Map agent status to a CSS variable color for status dots. */
-export function statusColor(status?: AgentStatus): string {
-  if (status === "BUSY") return "var(--red)";
-  if (status === "WAKING") return "var(--yellow)";
-  return "var(--green)";
+/** Map agent status to a CSS variable color for status dots/rings. */
+export function statusColor(status?: AgentStatus | string): string {
+  if (!status) return "var(--green)";
+  const unified = fromImStatus(status);
+  return AGENT_STATUS_META[unified].color;
 }
 
 /** Accent color for LLM history entries by role. */

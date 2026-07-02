@@ -167,12 +167,15 @@ export function AgentSidebar(props: AgentSidebarProps) {
   }, [setDetailsCollapsed]);
 
   const getGroupStatus = useCallback(
-    (g: Group, agentId?: string): "online" | "busy" | "idle" | "error" => {
+    (g: Group, agentId?: string): "idle" | "working" | "waking" | "error" | "waiting" => {
       const aid = agentId ?? g.memberIds.find((id) => id !== session?.humanAgentId);
       if (!aid) return "idle";
-      const status = agentStatusById[aid];
-      if (status === "BUSY" || status === "WAKING") return "busy";
-      if (g.unreadCount > 0) return "online";
+      const status = agentStatusById[aid] as string;
+      if (status === "BUSY" || status === "busy" || status === "working") return "working";
+      if (status === "WAKING" || status === "waking") return "waking";
+      if (status === "ERROR" || status === "error") return "error";
+      if (status === "WAITING" || status === "waiting") return "waiting";
+      if (g.unreadCount > 0) return "idle";
       return "idle";
     },
     [agentStatusById, session?.humanAgentId]
