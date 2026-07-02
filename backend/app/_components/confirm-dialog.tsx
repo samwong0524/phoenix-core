@@ -166,16 +166,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             initial="hidden"
             animate="visible"
             exit="exit"
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 9999,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0, 0, 0, 0.6)",
-              backdropFilter: "blur(4px)",
-            }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
             onClick={() => !loading && handleResolve(false)}
           >
             <motion.div
@@ -187,27 +178,17 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               initial="hidden"
               animate="visible"
               exit="exit"
+              className="w-full max-w-[420px] mx-4 rounded-xl bg-card p-6"
               style={{
-                width: "100%",
-                maxWidth: 420,
-                margin: "0 16px",
-                borderRadius: 12,
                 border: `1px solid ${styles.borderColor}`,
-                background: "var(--bg-card, #0f172a)",
                 boxShadow: `0 0 40px ${styles.bgGlow}, 0 20px 60px rgba(0,0,0,0.5)`,
-                padding: "24px",
               }}
             >
           {/* Icon + Title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 20 }}>{styles.icon}</span>
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="text-xl">{styles.icon}</span>
             <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-                fontWeight: 600,
-                color: "var(--text-primary, #e2e8f0)",
-              }}
+              className="text-base font-semibold text-text"
             >
               {state.title ?? "Confirm Action"}
             </h3>
@@ -216,27 +197,18 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           {/* Message */}
           <p
             aria-live="polite"
-            style={{
-              margin: "0 0 16px",
-              fontSize: 14,
-              lineHeight: 1.6,
-              color: "var(--text-secondary, #94a3b8)",
-            }}
+            className="mb-4 text-sm leading-relaxed text-text-secondary"
           >
             {state.message}
           </p>
 
           {/* Type-to-confirm input */}
           {state.typeToConfirm && (
-            <div style={{ marginBottom: 16 }}>
+            <div className="mb-4">
               <p
-                style={{
-                  margin: "0 0 6px",
-                  fontSize: 12,
-                  color: "var(--text-secondary, #94a3b8)",
-                }}
+                className="mb-1.5 text-xs text-text-secondary"
               >
-                Type <strong style={{ color: "#f87171" }}>{state.typeToConfirm}</strong> to confirm
+                Type <strong className="text-red-text">{state.typeToConfirm}</strong> to confirm
               </p>
               <input
                 type="text"
@@ -244,37 +216,21 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 onChange={(e) => setTyped(e.target.value)}
                 placeholder={state.typeToConfirm}
                 autoFocus
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: `1px solid ${canConfirm ? "rgba(34, 197, 94, 0.5)" : "rgba(239, 68, 68, 0.3)"}`,
-                  background: "var(--bg-elevated, rgba(30, 41, 59, 0.8))",
-                  color: "var(--text-primary, #e2e8f0)",
-                  fontSize: 14,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                className={`w-full px-3 py-2 rounded-lg bg-elevated text-text text-sm outline-none ${
+                  canConfirm ? "border border-green-500/50" : "border border-red-500/30"
+                }`}
               />
             </div>
           )}
 
           {/* Buttons */}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <div className="flex gap-2.5 justify-end">
             <button
               onClick={() => !loading && handleResolve(false)}
               disabled={loading}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 8,
-                border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
-                background: "transparent",
-                color: "var(--text-secondary, #94a3b8)",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.5 : 1,
-              }}
+              className={`px-4 py-2 rounded-lg border border-border bg-transparent text-text-secondary text-[13px] font-medium ${
+                loading ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+              }`}
             >
               Cancel
             </button>
@@ -284,17 +240,12 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 handleResolve(true);
               }}
               disabled={!canConfirm}
-              style={{
-                padding: "8px 20px",
-                borderRadius: 8,
-                border: "none",
-                background: canConfirm ? styles.btnBg : "rgba(100, 116, 139, 0.3)",
-                color: canConfirm ? "#fff" : "rgba(148, 163, 184, 0.5)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: canConfirm ? "pointer" : "not-allowed",
-                transition: "all 0.15s",
-              }}
+              className={`px-5 py-2 rounded-lg border-0 text-[13px] font-semibold transition-all duration-150 ${
+                canConfirm
+                  ? "cursor-pointer text-white"
+                  : "cursor-not-allowed bg-slate-500/30 text-text-secondary/50"
+              }`}
+              style={canConfirm ? { background: styles.btnBg } : undefined}
             >
               {state.confirmLabel ?? "Confirm"}
             </button>
