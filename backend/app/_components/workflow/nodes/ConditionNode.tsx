@@ -5,9 +5,9 @@ import type { ConditionNodeData } from "@/lib/workflow-types";
 
 const statusStyles: Record<string, { border: string; shadow: string }> = {
   idle: { border: "var(--border)", shadow: "none" },
-  running: { border: "#a855f7", shadow: "0 0 16px rgba(168, 85, 247, 0.4)" },
-  completed: { border: "var(--green, #4ade80)", shadow: "0 0 12px rgba(74, 222, 128, 0.3)" },
-  failed: { border: "var(--red, #ef4444)", shadow: "0 0 12px rgba(239, 68, 68, 0.3)" },
+  running: { border: "#a855f7", shadow: "0 2px 8px rgba(0,0,0,0.2)" },
+  completed: { border: "var(--green, #4ade80)", shadow: "0 2px 6px rgba(0,0,0,0.15)" },
+  failed: { border: "var(--red, #ef4444)", shadow: "0 2px 6px rgba(0,0,0,0.15)" },
 };
 
 export default function ConditionNode({ data, selected }: NodeProps) {
@@ -29,8 +29,8 @@ export default function ConditionNode({ data, selected }: NodeProps) {
       {isRunning && (
         <style>{`
           @keyframes condPulse {
-            0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.2); }
-            50% { box-shadow: 0 0 24px rgba(168, 85, 247, 0.5); }
+            0%, 100% { border-color: #a855f7; }
+            50% { border-color: rgba(168, 85, 247, 0.3); }
           }
         `}</style>
       )}
@@ -45,7 +45,7 @@ export default function ConditionNode({ data, selected }: NodeProps) {
           border: `2px solid ${selected ? "#a855f7" : style.border}`,
           borderRadius: 8,
           boxShadow: selected
-            ? "0 0 20px rgba(168, 85, 247, 0.3)"
+            ? "0 4px 12px rgba(0,0,0,0.25)"
             : style.shadow,
           transition: "border-color 0.3s, box-shadow 0.3s",
           animation: isRunning ? "condPulse 2s ease-in-out infinite" : undefined,

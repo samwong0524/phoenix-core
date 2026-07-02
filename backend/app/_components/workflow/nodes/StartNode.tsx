@@ -15,7 +15,7 @@ export default function StartNode({}: NodeProps) {
         alignItems: "center",
         justifyContent: "center",
         fontSize: 18,
-        boxShadow: "0 0 12px rgba(74, 222, 128, 0.3)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
       }}
     >
       ▶

@@ -313,20 +313,6 @@ body {
   border-radius: 4px;
 }
 
-/* Glitch animation for logo text (text-shadow shift, no positional transform) */
-@keyframes glitch {
-  0%, 90%, 100% { text-shadow: 0 0 25px var(--cyan-dim), 0 0 50px rgba(0, 240, 255, 0.12); }
-  92% { text-shadow: -2px 0 var(--magenta), 2px 0 var(--cyan); }
-  94% { text-shadow: 2px 0 var(--magenta), -2px 0 var(--cyan); }
-  96% { text-shadow: 0 0 25px var(--cyan-dim), 0 0 50px rgba(0, 240, 255, 0.12); }
-}
-
-/* Pulse glow for badges and indicators */
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 8px var(--cyan-dim); }
-  50% { box-shadow: 0 0 20px var(--cyan-glow); }
-}
-
 * {
   box-sizing: border-box;
 }
@@ -712,12 +698,6 @@ textarea {
   height: 32px;
   border-radius: 8px;
   object-fit: cover;
-  box-shadow: 0 0 25px var(--cyan-dim), 0 0 50px rgba(0, 240, 255, 0.1);
-  animation: logoPulse 30s ease-in-out infinite;
-}
-@keyframes logoPulse {
-  0%, 100% { box-shadow: 0 0 25px var(--cyan-dim), 0 0 50px rgba(0, 240, 255, 0.1); }
-  50% { box-shadow: 0 0 45px var(--cyan-dim), 0 0 80px rgba(0, 240, 255, 0.18); }
 }
 
 /* ===== WORKSPACE INFO ===== */
@@ -763,7 +743,6 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 4px;
   margin: 6px 12px;
-  text-shadow: 0 0 12px var(--cyan-dim);
 }
 .section-label::before {
   content: "";
@@ -771,7 +750,6 @@ textarea {
   height: 4px;
   background: var(--cyan);
   border-radius: 50%;
-  box-shadow: 0 0 6px var(--cyan);
 }
 .agent-group {
   margin-bottom: 2px;
@@ -789,7 +767,7 @@ textarea {
   background: var(--bg-hover);
 }
 .agent-group-header.active {
-  background: rgba(0, 240, 255, 0.08);
+  background: var(--bg-hover);
 }
 .agent-group-header.active::before {
   content: "";
@@ -799,7 +777,6 @@ textarea {
   bottom: 0;
   width: 2px;
   background: var(--cyan);
-  box-shadow: 0 0 10px var(--cyan);
 }
 .group-chevron {
   font-size: 8px;
@@ -867,20 +844,15 @@ textarea {
 }
 .status-dot.online {
   background: var(--green);
-  box-shadow: 0 0 8px var(--green-dim);
-  animation: dotPulse 4s ease-in-out infinite;
 }
 .status-dot.busy {
   background: var(--magenta);
-  box-shadow: 0 0 8px var(--magenta-dim);
-  animation: dotPulse 3s ease-in-out infinite;
 }
 .status-dot.idle {
   background: var(--text-dim);
 }
 .status-dot.error {
   background: var(--red);
-  box-shadow: 0 0 8px var(--red-dim);
 }
 @keyframes dotPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -898,12 +870,6 @@ textarea {
   font-family: var(--font-mono);
   background: var(--magenta);
   color: #fff;
-  box-shadow: 0 0 10px var(--magenta-dim);
-  animation: badgePulse 6s ease-in-out infinite;
-}
-@keyframes badgePulse {
-  0%, 100% { box-shadow: 0 0 10px var(--magenta-dim); }
-  50% { box-shadow: 0 0 18px var(--magenta-dim); }
 }
 
 /* Agent sub-items */
@@ -986,14 +952,12 @@ textarea {
 .btn-action:hover {
   border-color: var(--cyan-dim);
   color: var(--cyan);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.18);
 }
 .btn-action.danger {
   border-color: var(--magenta-dim);
   color: var(--magenta);
 }
 .btn-action.danger:hover {
-  box-shadow: 0 0 20px var(--magenta-dim), 0 0 40px rgba(255, 45, 123, 0.1);
   background: rgba(255, 45, 123, 0.08);
 }
 
@@ -1125,7 +1089,6 @@ textarea {
 }
 .chat-input-field:focus {
   border-color: var(--cyan-dim);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.07);
 }
 
 /* Skill autocomplete popup */
@@ -1352,11 +1315,10 @@ textarea {
   letter-spacing: 1.5px;
   cursor: pointer;
   transition: all 0.3s;
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.25), 0 0 40px rgba(0, 240, 255, 0.08);
 }
 .send-btn:hover {
-  box-shadow: 0 0 35px rgba(0, 240, 255, 0.4), 0 0 60px rgba(0, 240, 255, 0.15);
   transform: translateY(-1px);
+  filter: brightness(1.1);
 }
 .send-btn:disabled {
   opacity: 0.4;
@@ -1384,7 +1346,6 @@ textarea {
 .chat-attach:hover {
   border-color: var(--cyan-dim);
   color: var(--cyan);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.2), 0 0 40px rgba(0, 240, 255, 0.06);
 }
 .chat-model {
   padding: 5px 8px;
@@ -1404,7 +1365,6 @@ textarea {
 .chat-model:focus {
   border-color: var(--cyan-dim);
   color: var(--cyan);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.15);
 }
 
 /* LLM History entries */
@@ -1470,23 +1430,20 @@ textarea {
   color: var(--green);
 }
 
-/* Glitch override for logo uses existing @keyframes glitch */
-
 /* ===== SHARED UI COMPONENTS — Hover/Focus states ===== */
 
 /* Button hover/active states */
 .phx-btn:not(:disabled):hover {
   filter: brightness(1.15);
-  box-shadow: 0 0 16px var(--cyan-glow);
 }
 .phx-btn-primary:not(:disabled):hover {
-  box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(0, 240, 255, 0.08);
+  filter: brightness(1.15);
 }
 .phx-btn-danger:not(:disabled):hover {
-  box-shadow: 0 0 16px var(--red-dim);
+  filter: brightness(1.15);
 }
 .phx-btn-success:not(:disabled):hover {
-  box-shadow: 0 0 16px var(--green-dim);
+  filter: brightness(1.15);
 }
 .phx-btn:not(:disabled):active {
   transform: scale(0.97);
@@ -1521,7 +1478,6 @@ textarea {
 .models-btn:hover {
   border-color: var(--cyan-dim);
   color: var(--cyan);
-  box-shadow: 0 0 18px var(--cyan-glow);
 }
 .models-input:focus {
   border-color: var(--cyan-dim);
@@ -1553,15 +1509,13 @@ textarea {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .pipeline-stage-card:hover {
-  box-shadow: 0 0 12px var(--cyan-glow);
+  border-color: var(--cyan-dim);
 }
 .pipeline-approve-btn:hover {
   opacity: 0.85;
-  box-shadow: 0 0 12px var(--green-dim);
 }
 .pipeline-reject-btn:hover {
   opacity: 0.85;
-  box-shadow: 0 0 12px var(--red-dim);
 }
 
 /* ===== ACCESSIBILITY — FOCUS VISIBLE ===== */
@@ -1907,7 +1861,7 @@ select:focus-visible,
   border: 1px solid var(--border, #2a2a3a);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 0 40px rgba(0, 255, 255, 0.06), 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   animation: qp-slide-in 0.15s ease-out;

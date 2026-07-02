@@ -15,7 +15,7 @@ export default function EndNode({}: NodeProps) {
         alignItems: "center",
         justifyContent: "center",
         fontSize: 16,
-        boxShadow: "0 0 12px rgba(239, 68, 68, 0.3)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
       }}
     >
       ■

@@ -11,17 +11,17 @@ const statusStyles: Record<string, { border: string; shadow: string; badge: stri
   },
   running: {
     border: "var(--cyan, #00f0ff)",
-    shadow: "0 0 16px rgba(0, 240, 255, 0.4)",
+    shadow: "0 2px 8px rgba(0,0,0,0.2)",
     badge: "⏳",
   },
   completed: {
     border: "var(--green, #4ade80)",
-    shadow: "0 0 12px rgba(74, 222, 128, 0.3)",
+    shadow: "0 2px 6px rgba(0,0,0,0.15)",
     badge: "✓",
   },
   failed: {
     border: "var(--red, #ef4444)",
-    shadow: "0 0 12px rgba(239, 68, 68, 0.3)",
+    shadow: "0 2px 6px rgba(0,0,0,0.15)",
     badge: "✗",
   },
 };
@@ -41,7 +41,7 @@ export default function AgentNode({ data, selected }: NodeProps) {
         border: `2px solid ${selected ? "var(--cyan-dim, rgba(0, 240, 255, 0.4))" : style.border}`,
         borderRadius: 10,
         boxShadow: selected
-          ? "0 0 20px rgba(0, 240, 255, 0.2)"
+          ? "0 4px 12px rgba(0,0,0,0.25)"
           : style.shadow,
         transition: "border-color 0.3s, box-shadow 0.3s",
         overflow: "hidden",
@@ -52,8 +52,8 @@ export default function AgentNode({ data, selected }: NodeProps) {
       {isRunning && (
         <style>{`
           @keyframes agentPulse {
-            0%, 100% { box-shadow: 0 0 8px rgba(0, 240, 255, 0.2); }
-            50% { box-shadow: 0 0 24px rgba(0, 240, 255, 0.5); }
+            0%, 100% { border-color: var(--cyan, #00f0ff); }
+            50% { border-color: var(--cyan-dim, rgba(0, 240, 255, 0.3)); }
           }
           @keyframes progressSlide {
             0% { transform: translateX(-100%); }

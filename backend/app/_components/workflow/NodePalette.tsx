@@ -74,7 +74,7 @@ export default function NodePalette() {
           }}
           onMouseEnter={(e) => {
             (e.target as HTMLElement).style.borderColor = "#a855f7";
-            (e.target as HTMLElement).style.boxShadow = "0 0 8px rgba(168,85,247,0.15)";
+            (e.target as HTMLElement).style.boxShadow = "0 2px 6px rgba(0,0,0,0.12)";
           }}
           onMouseLeave={(e) => {
             (e.target as HTMLElement).style.borderColor = "#a855f730";
@@ -130,7 +130,7 @@ export default function NodePalette() {
                 }}
                 onMouseEnter={(e) => {
                   (e.target as HTMLElement).style.borderColor = "var(--cyan-dim)";
-                  (e.target as HTMLElement).style.boxShadow = "0 0 8px rgba(0,240,255,0.15)";
+                  (e.target as HTMLElement).style.boxShadow = "0 2px 6px rgba(0,0,0,0.12)";
                 }}
                 onMouseLeave={(e) => {
                   (e.target as HTMLElement).style.borderColor = "var(--border)";

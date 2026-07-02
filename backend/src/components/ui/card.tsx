@@ -37,7 +37,7 @@ export function Card({
     background,
     overflow: "hidden",
     transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-    ...(hoverable && hovered ? { borderColor: hoverBorderColor, boxShadow: "0 0 12px var(--cyan-glow)" } : {}),
+    ...(hoverable && hovered ? { borderColor: hoverBorderColor, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" } : {}),
     ...(accentBorder
       ? { [`border${accentBorder.side.charAt(0).toUpperCase() + accentBorder.side.slice(1)}Width`]: accentBorder.width ?? 3,
           [`border${accentBorder.side.charAt(0).toUpperCase() + accentBorder.side.slice(1)}Color`]: accentBorder.color }
