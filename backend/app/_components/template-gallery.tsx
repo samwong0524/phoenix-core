@@ -205,7 +205,32 @@ export default function TemplateGallery() {
               {t(template.descKey)}
             </div>
 
-            {/* Agent count badge */}
+            {/* Agent roles (max 3 pills + overflow) */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+              {template.agents.slice(0, 3).map((agent) => (
+                <span
+                  key={agent.role}
+                  style={{
+                    fontSize: 9,
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--cyan)",
+                    background: "var(--cyan-soft)",
+                    border: "1px solid var(--cyan-dim)",
+                  }}
+                >
+                  {agent.role}
+                </span>
+              ))}
+              {template.agents.length > 3 && (
+                <span style={{ fontSize: 9, color: "var(--text-dim)", padding: "1px 4px" }}>
+                  +{template.agents.length - 3}
+                </span>
+              )}
+            </div>
+
+            {/* Agent + group count */}
             <div
               style={{
                 fontSize: 10,
@@ -214,6 +239,8 @@ export default function TemplateGallery() {
               }}
             >
               {template.agents.length} agent{template.agents.length !== 1 ? "s" : ""}
+              {" · "}
+              {template.groups.length} group{template.groups.length !== 1 ? "s" : ""}
             </div>
           </Card>
         ))}
