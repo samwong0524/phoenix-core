@@ -321,12 +321,12 @@
     "product-team": { "name": "Product Team", "desc": "Full product development from requirements to launch" },
     "support-team": { "name": "Customer Support", "desc": "Customer inquiry handling and knowledge base management" },
     "welcome": {
-      "blank": "Hi! I'm your assistant. How can I help?",
-      "research-team": "Research team is ready. I coordinate, Researcher gathers information, Creator writes reports. Tell me your research topic.",
-      "dev-team": "Dev team is ready: Coordinator leads, Frontend handles UI, Backend handles APIs, Reviewer reviews code, QA runs tests. Describe your project requirements.",
-      "content-team": "Content team is ready: Creator writes, Editor polishes, SEO Specialist optimizes for search. What type of content do you need?",
-      "product-team": "Product team is ready: PM manages requirements, Designer handles design, Developer implements, QA tests. Start with a product brief.",
-      "support-team": "Support team is ready: Coordinator triages, Support handles inquiries, Specialist manages knowledge base, Escalation handles complex issues."
+      "blank": "Hi! I'm your assistant. How can I help?\n\n> [!suggestion] Help me write a project proposal\n> [!suggestion] Analyze this code for issues\n> [!suggestion] Summarize the key points of an article",
+      "research-team": "Research team is ready. I coordinate, Researcher gathers information, Creator writes reports. Tell me your research topic.\n\n> [!suggestion] Research the latest trends in AI agents\n> [!suggestion] Compare three competing products\n> [!suggestion] Write a market analysis report",
+      "dev-team": "Dev team is ready: Coordinator leads, Frontend handles UI, Backend handles APIs, Reviewer reviews code, QA runs tests. Describe your project requirements.\n\n> [!suggestion] Set up a Next.js project scaffold\n> [!suggestion] Design a user auth API module\n> [!suggestion] Review existing code and suggest improvements",
+      "content-team": "Content team is ready: Creator writes, Editor polishes, SEO Specialist optimizes for search. What type of content do you need?\n\n> [!suggestion] Write a technical blog post about AI coding\n> [!suggestion] Polish this product description copy\n> [!suggestion] Create social media promotional content",
+      "product-team": "Product team is ready: PM manages requirements, Designer handles design, Developer implements, QA tests. Start with a product brief.\n\n> [!suggestion] Write a product requirements document\n> [!suggestion] Design a user registration flow\n> [!suggestion] Plan the next feature iteration",
+      "support-team": "Support team is ready: Coordinator triages, Support handles inquiries, Specialist manages knowledge base, Escalation handles complex issues.\n\n> [!suggestion] Draft standard replies for common questions\n> [!suggestion] Analyze recent customer feedback trends\n> [!suggestion] Reorganize the support knowledge base"
     }
   },
   "workflow": {
