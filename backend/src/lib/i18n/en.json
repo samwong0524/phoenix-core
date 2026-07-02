@@ -445,5 +445,19 @@
     "footer_esc": "Esc Close",
     "member_count": "{count} members",
     "status_label": "Status: {status}"
+  },
+  "wizard": {
+    "title": "Quick LLM Setup",
+    "choose_desc": "Pick a provider and paste your API key. Takes 30 seconds.",
+    "api_key_label": "API Key",
+    "test_btn": "Test & Save",
+    "testing": "Testing connection...",
+    "test_reply": "LLM Reply",
+    "done": "Setup complete!",
+    "start_using": "Start Using",
+    "error_title": "Connection Failed",
+    "test_fail_unknown": "Unknown error. Please check your API key and network.",
+    "retry": "Retry",
+    "skip": "Skip for now"
   }
 }

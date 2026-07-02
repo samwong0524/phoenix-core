@@ -6,6 +6,7 @@ import { useI18n, LanguageSwitcher } from "@/lib/i18n/context";
 import { Card, PageHeader, Alert } from "@/components/ui";
 import WorkspacesList from "./workspaces-list";
 import TemplateGallery from "./template-gallery";
+import { ModelSetupWizard, useModelSetupWizard } from "./model-setup-wizard";
 import { ROUTES, templatesUrl } from "./routes";
 
 type HomePageContentProps = {
@@ -16,6 +17,7 @@ type HomePageContentProps = {
 
 export default function HomePageContent({ workspaces, dbError, children }: HomePageContentProps) {
   const { t } = useI18n();
+  const { wizardOpen, openWizard, closeWizard } = useModelSetupWizard();
 
   return (
     <div className="h-screen overflow-y-auto px-6 pt-6 pb-12">
@@ -24,7 +26,17 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
         <PageHeader
           title={t("home.title")}
           subtitle={t("home.subtitle")}
-          actions={<LanguageSwitcher />}
+          actions={
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openWizard}
+                className="text-xs text-text-dim hover:text-primary transition-colors cursor-pointer"
+              >
+                ⚡ {t("wizard.title")}
+              </button>
+              <LanguageSwitcher />
+            </div>
+          }
         />
 
         {/* DB Error Notice */}
@@ -74,6 +86,9 @@ export default function HomePageContent({ workspaces, dbError, children }: HomeP
           <TemplateGallery />
         </div>
       </div>
+
+      {/* LLM Setup Wizard — auto-pops on first visit when no API key configured */}
+      <ModelSetupWizard open={wizardOpen} onClose={closeWizard} />
     </div>
   );
 }
