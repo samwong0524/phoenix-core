@@ -8,6 +8,7 @@ import { GlobalSidebar } from "./global-sidebar";
 import { ROUTES } from "./routes";
 import { stepTransition, getReducedVariant } from "@/lib/motion";
 import { useIsMobile } from "@/lib/use-media-query";
+import { MobileTabBar } from "@/components/ui";
 
 const SIDEBAR_EXCLUDED_PATHS = [ROUTES.LOGIN];
 
@@ -100,7 +101,7 @@ export const AppLayout = memo(function AppLayout({
           )}
         </AnimatePresence>
 
-        <main id="main-content" className="flex-1 overflow-hidden" style={{ position: "relative" }}>
+        <main id="main-content" className="flex-1 overflow-hidden pb-14" style={{ position: "relative" }}>
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}
@@ -114,6 +115,7 @@ export const AppLayout = memo(function AppLayout({
             </motion.div>
           </AnimatePresence>
         </main>
+        <MobileTabBar />
       </div>
     );
   }

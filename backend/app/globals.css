@@ -390,6 +390,11 @@ textarea {
   }
 }
 
+/* iOS safe area inset for bottom navigation bars */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .panel {
   border-color: var(--border);
   border-style: solid;
