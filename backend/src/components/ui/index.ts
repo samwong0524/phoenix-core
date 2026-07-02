@@ -13,3 +13,4 @@ export { AlertDialog } from "./alert-dialog";
 export { ToastContainer, toast } from "./toast";
 export { ScrollArea } from "./scroll-area";
 export { BottomSheet } from "./bottom-sheet";
+export { StatusBadge } from "./status-badge";
