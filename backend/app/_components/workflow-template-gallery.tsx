@@ -136,41 +136,33 @@ export default function WorkflowTemplateGallery() {
   if (selected) {
     const agentNodes = selected.dsl.nodes.filter((n) => n.type === "agent" || n.type === "condition");
     return (
-      <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
+      <div className="p-6 max-w-[720px] mx-auto">
         <button
           onClick={() => setSelected(null)}
-          style={{ background: "none", border: "none", color: "var(--cyan)", cursor: "pointer", fontSize: 13, marginBottom: 16, fontFamily: "var(--font-mono)" }}
+          className="bg-transparent border-0 text-primary cursor-pointer text-[13px] mb-4 font-[family-name:var(--font-mono)]"
         >
           &larr; Back to templates
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-          <span style={{ fontSize: 48 }}>{selected.icon}</span>
+        <div className="flex items-center gap-4 mb-5">
+          <span className="text-5xl">{selected.icon}</span>
           <div>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{selected.name}</h2>
-            <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
+            <h2 className="m-0 text-[22px] font-bold text-text">{selected.name}</h2>
+            <div className="text-xs text-text-dim mt-1">
               {selected.category} &middot; {selected.nodeCount} nodes &middot; {selected.edgeCount} edges &middot; Used {selected.usageCount} times
             </div>
           </div>
         </div>
 
-        <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 24 }}>
+        <p className="text-sm text-text-secondary leading-[1.7] mb-6">
           {selected.description}
         </p>
 
         {/* Tags */}
         {selected.tags.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 24 }}>
+          <div className="flex gap-1.5 flex-wrap mb-6">
             {selected.tags.map((tag) => (
-              <span key={tag} style={{
-                padding: "2px 10px",
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                color: "var(--cyan)",
-                background: "rgba(0,240,255,0.08)",
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-              }}>
+              <span key={tag} className="px-2.5 py-0.5 text-[11px] font-[family-name:var(--font-mono)] text-primary bg-primary-soft border border-border rounded-xl">
                 {tag}
               </span>
             ))}
@@ -178,47 +170,29 @@ export default function WorkflowTemplateGallery() {
         )}
 
         {/* Node list */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+        <div className="mb-6">
+          <div className="text-[11px] font-bold text-text-dim uppercase tracking-[0.08em] mb-2.5">
             Steps
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div className="flex flex-col gap-1.5">
             {agentNodes.map((n, i) => (
-              <div key={n.id} style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 12px",
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                fontSize: 13,
-              }}>
-                <span style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: "50%",
-                  background: n.type === "condition" ? "#a855f7" : "var(--cyan)",
-                  color: "#000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}>
+              <div key={n.id} className="flex items-center gap-2.5 px-3 py-2 bg-card border border-border rounded-lg text-[13px]">
+                <span
+                  className="w-[22px] h-[22px] rounded-full text-black flex items-center justify-center text-[11px] font-bold shrink-0"
+                  style={{ background: n.type === "condition" ? "#a855f7" : "var(--color-primary)" }}
+                >
                   {n.type === "condition" ? "?" : i + 1}
                 </span>
-                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                <span className="font-semibold text-text">
                   {String(n.data.label || n.id)}
                 </span>
                 {n.type === "agent" && Boolean(n.data.role) && (
-                  <span style={{ fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                  <span className="text-[11px] text-text-dim font-[family-name:var(--font-mono)]">
                     [{String(n.data.role)}]
                   </span>
                 )}
                 {n.type === "condition" && (
-                  <span style={{ fontSize: 11, color: "#a855f7", fontFamily: "var(--font-mono)" }}>
+                  <span className="text-[11px] text-purple font-[family-name:var(--font-mono)]">
                     [condition]
                   </span>
                 )}
@@ -228,7 +202,7 @@ export default function WorkflowTemplateGallery() {
         </div>
 
         {error && (
-          <div style={{ padding: "8px 12px", background: "rgba(239,68,68,0.1)", border: "1px solid var(--red)", borderRadius: 8, color: "var(--red)", fontSize: 12, marginBottom: 16 }}>
+          <div className="px-3 py-2 bg-red-soft border border-red rounded-lg text-red text-xs mb-4">
             {error}
           </div>
         )}
@@ -243,14 +217,14 @@ export default function WorkflowTemplateGallery() {
   // ── Grid view ────────────────────────────────────────────────
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="p-6">
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}>
+          <h1 className="m-0 text-xl font-bold text-text font-[family-name:var(--font-display)] tracking-[0.05em]">
             WORKFLOW TEMPLATES
           </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-dim)" }}>
+          <p className="mt-1 text-xs text-text-dim">
             Reusable workflow blueprints. Pick a template to get started.
           </p>
         </div>
@@ -260,24 +234,16 @@ export default function WorkflowTemplateGallery() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>
+      <div className="flex gap-2 items-center mb-5 flex-wrap">
         {CATEGORIES.map((cat) => (
           <button
             key={cat.key}
             onClick={() => setCategory(cat.key)}
-            style={{
-              padding: "4px 14px",
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: "var(--font-mono)",
-              color: category === cat.key ? "var(--cyan)" : "var(--text-dim)",
-              background: category === cat.key ? "rgba(0,240,255,0.1)" : "transparent",
-              border: `1px solid ${category === cat.key ? "var(--cyan)" : "var(--border)"}`,
-              borderRadius: 16,
-              cursor: "pointer",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
+            className={`px-3.5 py-1 text-[11px] font-semibold font-[family-name:var(--font-mono)] uppercase tracking-[0.05em] rounded-2xl cursor-pointer border ${
+              category === cat.key
+                ? "text-primary bg-primary-soft border-primary"
+                : "text-text-dim bg-transparent border-border"
+            }`}
           >
             {cat.label}
           </button>
@@ -286,79 +252,47 @@ export default function WorkflowTemplateGallery() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search templates..."
-          style={{
-            marginLeft: "auto",
-            padding: "4px 12px",
-            fontSize: 12,
-            fontFamily: "var(--font-body)",
-            color: "var(--text-primary)",
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            outline: "none",
-            width: 180,
-          }}
+          className="ml-auto px-3 py-1 text-xs font-[family-name:var(--font-body)] text-text bg-card border border-border rounded-md outline-none w-[180px]"
         />
       </div>
 
       {/* Grid */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 60, color: "var(--text-dim)", fontSize: 13 }}>Loading templates...</div>
+        <div className="text-center py-16 text-text-dim text-[13px]">Loading templates...</div>
       ) : templates.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: "var(--text-dim)", fontSize: 13 }}>No templates found.</div>
+        <div className="text-center py-16 text-text-dim text-[13px]">No templates found.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
           {templates.map((tpl) => (
             <div
               key={tpl.id}
               onClick={() => handleSelectTemplate(tpl)}
-              style={{
-                padding: 20,
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                cursor: "pointer",
-                transition: "border-color 0.15s, box-shadow 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "var(--cyan-dim, var(--cyan))";
-                (e.currentTarget as HTMLElement).style.boxShadow = "0 0 12px rgba(0,240,255,0.1)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-                (e.currentTarget as HTMLElement).style.boxShadow = "none";
-              }}
+              className="p-5 bg-card border border-border rounded-xl cursor-pointer transition-all hover:border-primary-dim hover:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: 32 }}>{tpl.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{tpl.name}</div>
-                  <div style={{ fontSize: 11, color: CATEGORY_COLORS[tpl.category] || "var(--text-dim)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
+              <div className="flex items-center gap-3 mb-2.5">
+                <span className="text-[32px]">{tpl.icon}</span>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-text">{tpl.name}</div>
+                  <div
+                    className="text-[11px] font-[family-name:var(--font-mono)] uppercase"
+                    style={{ color: CATEGORY_COLORS[tpl.category] || "var(--text-dim)" }}
+                  >
                     {tpl.category}
                   </div>
                 </div>
                 {tpl.isBuiltin && (
-                  <span style={{ fontSize: 9, padding: "1px 6px", background: "rgba(0,240,255,0.1)", color: "var(--cyan)", borderRadius: 8, fontFamily: "var(--font-mono)" }}>
+                  <span className="text-[9px] px-1.5 py-px bg-primary-soft text-primary rounded-lg font-[family-name:var(--font-mono)]">
                     BUILTIN
                   </span>
                 )}
               </div>
-              <div style={{
-                fontSize: 12,
-                color: "var(--text-dim)",
-                lineHeight: 1.5,
-                marginBottom: 12,
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}>
+              <div className="text-xs text-text-dim leading-[1.5] mb-3 line-clamp-2">
                 {tpl.description}
               </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+              <div className="flex gap-3 text-[11px] text-text-dim font-[family-name:var(--font-mono)]">
                 <span>{tpl.nodeCount} nodes</span>
                 <span>{tpl.edgeCount} edges</span>
-                <span style={{ marginLeft: "auto" }}>{tpl.usageCount} uses</span>
+                <span className="ml-auto">{tpl.usageCount} uses</span>
               </div>
             </div>
           ))}

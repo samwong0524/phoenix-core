@@ -12,16 +12,7 @@ const WorkflowCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div
-        style={{
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "var(--text-dim)",
-          fontSize: 13,
-        }}
-      >
+      <div className="h-full flex items-center justify-center text-text-dim text-[13px]">
         Loading canvas...
       </div>
     ),
@@ -83,25 +74,14 @@ function SaveAsTemplateModal({
     { value: "operations", label: t("workflow.tpl_cat_operations") },
   ];
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10, fontWeight: 700, color: "var(--text-dim)",
-    textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 4,
-  };
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "6px 10px", fontSize: 12, color: "var(--text-primary)",
-    background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 6,
-    outline: "none", boxSizing: "border-box",
-  };
+  const labelCls = "text-[10px] font-bold text-text-dim uppercase tracking-[0.08em] block mb-1";
+  const inputCls = "w-full px-2.5 py-1.5 text-xs text-text bg-card border border-border rounded-md outline-none box-border";
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          style={{
-            position: "fixed", inset: 0, zIndex: 9999,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
+          className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center"
           variants={corporateVariants.modalOverlay}
           initial="hidden"
           animate="visible"
@@ -109,36 +89,33 @@ function SaveAsTemplateModal({
           onClick={onClose}
         >
           <motion.div
-            style={{
-              background: "var(--bg-panel)", border: "1px solid var(--border)",
-              borderRadius: 12, padding: 24, width: 380, maxWidth: "90vw",
-            }}
+            className="bg-panel border border-border rounded-xl p-6 w-[380px] max-w-[90vw]"
             variants={corporateVariants.modalPanel}
             initial="hidden"
             animate="visible"
             exit="exit"
             onClick={(e) => e.stopPropagation()}
           >
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+        <div className="text-sm font-bold text-text mb-4">
           {t("workflow.tpl_title")}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="flex flex-col gap-3">
           <div>
-            <label style={labelStyle}>{t("workflow.tpl_name")}</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+            <label className={labelCls}>{t("workflow.tpl_name")}</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label style={labelStyle}>{t("workflow.tpl_desc")}</label>
-            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+            <label className={labelCls}>{t("workflow.tpl_desc")}</label>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className={`${inputCls} resize-y`} />
           </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>{t("workflow.tpl_icon")}</label>
-              <input value={icon} onChange={(e) => setIcon(e.target.value)} style={{ ...inputStyle, fontSize: 16 }} />
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className={labelCls}>{t("workflow.tpl_icon")}</label>
+              <input value={icon} onChange={(e) => setIcon(e.target.value)} className={`${inputCls} text-base`} />
             </div>
-            <div style={{ flex: 2 }}>
-              <label style={labelStyle}>{t("workflow.tpl_category")}</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+            <div className="flex-[2]">
+              <label className={labelCls}>{t("workflow.tpl_category")}</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
                 {categories.map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
@@ -146,7 +123,7 @@ function SaveAsTemplateModal({
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+        <div className="flex gap-2 justify-end mt-5">
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
             {saving ? t("workflow.tpl_saving") : t("workflow.tpl_save")}
@@ -371,44 +348,23 @@ function WorkflowEditor() {
   }
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="h-screen flex flex-col">
       {/* Top bar */}
-      <div
-        style={{
-          height: 44,
-          borderBottom: "1px solid var(--border)",
-          background: "var(--bg-panel)",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 16px",
-          gap: 12,
-        }}
-      >
+      <div className="h-11 border-b border-border bg-panel flex items-center px-4 gap-3">
         <Link
           href={ROUTES.HOME}
-          style={{
-            fontSize: 12,
-            color: "var(--text-dim)",
-            textDecoration: "none",
-          }}
+          className="text-xs text-text-dim no-underline"
         >
           {t("common.back_home")}
         </Link>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: "var(--cyan)",
-            fontFamily: "var(--font-display)",
-          }}
-        >
+        <div className="text-[13px] font-bold text-primary font-[family-name:var(--font-display)]">
           {t("workflow.editor_title")}
         </div>
-        <div style={{ flex: 1 }} />
+        <div className="flex-1" />
         {message && (
           <span
+            className="text-[11px]"
             style={{
-              fontSize: 11,
               color:
                 message.includes("failed") || message.includes(t("workflow.save_first"))
                   ? "var(--red-text)"
@@ -420,7 +376,7 @@ function WorkflowEditor() {
         )}
         <Link
           href={templatesUrl(workspaceId || undefined)}
-          style={{ fontSize: 11, color: "var(--text-dim)", textDecoration: "none", fontFamily: "var(--font-mono)" }}
+          className="text-[11px] text-text-dim no-underline font-[family-name:var(--font-mono)]"
         >
           {t("workflow.templates")}
         </Link>
@@ -428,7 +384,7 @@ function WorkflowEditor() {
           variant="ghost"
           onClick={() => setShowSaveAsTemplate(true)}
           disabled={!useWorkflowStore.getState().workflowId}
-          style={{ fontSize: 11 }}
+          className="text-[11px]"
         >
           {t("workflow.save_as_template")}
         </Button>
@@ -462,7 +418,7 @@ function WorkflowEditor() {
       />
 
       {/* Canvas */}
-      <div style={{ flex: 1 }}>
+      <div className="flex-1">
         <WorkflowCanvas />
       </div>
     </div>
@@ -474,15 +430,7 @@ export default function WorkflowPage() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            height: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-dim)",
-          }}
-        >
+        <div className="h-screen flex items-center justify-center text-text-dim">
           {t("workflow.loading")}
         </div>
       }
