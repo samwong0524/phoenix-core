@@ -4,11 +4,11 @@ import AxeBuilder from '@axe-core/playwright';
 test.describe('Accessibility', () => {
   
   const pages = [
-    { name: 'Login', path: '/登录' },
-    { name: 'IM', path: '/对话' },
-    { name: 'Skills', path: '/配置/技能' },
-    { name: 'Workflow', path: '/编排/工作流' },
-    { name: 'Models', path: '/运维/模型' },
+    { name: 'Login', path: '/login' },
+    { name: 'IM', path: '/im' },
+    { name: 'Skills', path: '/skills' },
+    { name: 'Workflow', path: '/workflow' },
+    { name: 'Models', path: '/models' },
   ];
 
   for (const { name, path } of pages) {
