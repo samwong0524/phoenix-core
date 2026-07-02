@@ -2,9 +2,10 @@ export const runtime = "nodejs";
 
 import { store } from "@/lib/storage";
 import { getTemplate } from "@/lib/templates";
-import { isAuthEnabled, requireSession, getSession, AuthError } from "@/lib/auth";
+import { isAuthEnabled, getSession, AuthError } from "@/lib/auth";
 import { addWorkspaceMember } from "@/lib/rbac";
 import { checkRateLimit, RATE_LIMITS, withRateLimitHeaders, rateLimitExceededResponse } from "@/lib/rate-limiter";
+import { apiOk, apiCreated, apiError, apiErrorFromCatch } from "@/lib/api-response";
 
 export async function GET(req: Request) {
   try {
@@ -16,23 +17,14 @@ export async function GET(req: Request) {
 
     // Auth check: require login when auth is enabled
     if (isAuthEnabled()) {
-      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!session) return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
     const workspaces = await store.listWorkspaces();
-    return withRateLimitHeaders(Response.json({ workspaces }), limit);
+    return withRateLimitHeaders(apiOk({ workspaces }), limit);
   } catch (e) {
-    if (e instanceof AuthError) {
-      return Response.json({ error: e.message }, { status: e.status });
-    }
-    return Response.json(
-      {
-        error: "Database not ready",
-        message: e instanceof Error ? e.message : String(e),
-        hint: "Run POST /api/admin/init-db after starting Postgres",
-      },
-      { status: 500 }
-    );
+    if (e instanceof AuthError) return apiErrorFromCatch(e);
+    return apiError("DB_ERROR", `Database not ready: ${e instanceof Error ? e.message : String(e)}`, 500);
   }
 }
 
@@ -46,7 +38,7 @@ export async function POST(req: Request) {
 
     // Auth check: require login when auth is enabled
     if (isAuthEnabled()) {
-      if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!session) return apiError("UNAUTHORIZED", "Authentication required", 401);
     }
 
     const body = (await req.json().catch(() => null)) as {
@@ -63,10 +55,7 @@ export async function POST(req: Request) {
     if (templateId && templateId !== "blank") {
       const template = getTemplate(templateId);
       if (!template) {
-        return Response.json(
-          { error: "Unknown template", templateId },
-          { status: 400 }
-        );
+        return apiError("NOT_FOUND", `Unknown template: ${templateId}`, 400);
       }
 
       // Resolve locale from cookie
@@ -89,18 +78,9 @@ export async function POST(req: Request) {
       await addWorkspaceMember(result.workspaceId, session.id, "owner");
     }
 
-    return withRateLimitHeaders(Response.json(result, { status: 201 }), limit);
+    return withRateLimitHeaders(apiCreated(result), limit);
   } catch (e) {
-    if (e instanceof AuthError) {
-      return Response.json({ error: e.message }, { status: e.status });
-    }
-    return Response.json(
-      {
-        error: "Failed to create workspace",
-        message: e instanceof Error ? e.message : String(e),
-        hint: "Check DATABASE_URL, start Postgres, then POST /api/admin/init-db",
-      },
-      { status: 500 }
-    );
+    if (e instanceof AuthError) return apiErrorFromCatch(e);
+    return apiError("DB_ERROR", `Failed to create workspace: ${e instanceof Error ? e.message : String(e)}`, 500);
   }
 }
