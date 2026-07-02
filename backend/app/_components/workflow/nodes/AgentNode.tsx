@@ -34,17 +34,12 @@ export default function AgentNode({ data, selected }: NodeProps) {
 
   return (
     <div
+      className="min-w-[180px] max-w-[240px] bg-card rounded-[10px] overflow-hidden transition duration-300"
       style={{
-        minWidth: 180,
-        maxWidth: 240,
-        background: "var(--bg-card)",
         border: `2px solid ${selected ? "var(--cyan-dim, rgba(0, 240, 255, 0.4))" : style.border}`,
-        borderRadius: 10,
         boxShadow: selected
           ? "0 4px 12px rgba(0,0,0,0.25)"
           : style.shadow,
-        transition: "border-color 0.3s, box-shadow 0.3s",
-        overflow: "hidden",
         animation: isRunning ? "agentPulse 2s ease-in-out infinite" : undefined,
       }}
     >
@@ -66,67 +61,31 @@ export default function AgentNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Left}
+        className="w-[10px] h-[10px] border-2 border-panel"
         style={{
           background: isRunning ? "var(--cyan, #00f0ff)" : "var(--border-bright)",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
         }}
       />
 
       {/* Header */}
-      <div
-        style={{
-          padding: "8px 12px",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
+      <div className="py-2 px-3 border-b border-border flex items-center justify-between gap-2">
         <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: isRunning ? "var(--cyan)" : "var(--text-dim)",
-            fontFamily: "var(--font-mono)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            transition: "color 0.3s",
-          }}
+          className={`text-[11px] font-bold font-[family-name:var(--font-mono)] uppercase tracking-wider transition-colors duration-300 ${isRunning ? "text-[var(--cyan)]" : "text-text-dim"}`}
         >
           {agentData.role || "agent"}
         </span>
         {status !== "idle" && (
-          <span style={{ fontSize: 14 }}>{style.badge}</span>
+          <span className="text-sm">{style.badge}</span>
         )}
       </div>
 
       {/* Body */}
-      <div style={{ padding: "8px 12px" }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--text-primary)",
-            marginBottom: 4,
-          }}
-        >
+      <div className="py-2 px-3">
+        <div className="text-[13px] font-semibold text-text mb-1">
           {agentData.label}
         </div>
         {agentData.description && (
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-dim)",
-              lineHeight: 1.4,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            }}
-          >
+          <div className="text-[11px] text-text-dim leading-[1.4] line-clamp-2">
             {agentData.description}
           </div>
         )}
@@ -134,20 +93,10 @@ export default function AgentNode({ data, selected }: NodeProps) {
 
       {/* Running progress bar */}
       {isRunning && (
-        <div
-          style={{
-            height: 2,
-            background: "var(--bg-panel)",
-            overflow: "hidden",
-          }}
-        >
+        <div className="h-[2px] bg-panel overflow-hidden">
           <div
-            style={{
-              width: "40%",
-              height: "100%",
-              background: "var(--cyan, #00f0ff)",
-              animation: "progressSlide 1.5s ease-in-out infinite",
-            }}
+            className="w-2/5 h-full bg-[var(--cyan,#00f0ff)]"
+            style={{ animation: "progressSlide 1.5s ease-in-out infinite" }}
           />
         </div>
       )}
@@ -156,11 +105,9 @@ export default function AgentNode({ data, selected }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
+        className="w-[10px] h-[10px] border-2 border-panel"
         style={{
           background: isRunning ? "var(--cyan, #00f0ff)" : "var(--border-bright)",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
         }}
       />
     </div>

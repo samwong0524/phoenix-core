@@ -240,12 +240,12 @@ function WorkflowCanvasInner() {
   }, [defaultNodes, store]);
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100%" }}>
+    <div className="flex h-screen w-full">
       {/* Left: Node Palette */}
       <NodePalette />
 
       {/* Center: Canvas */}
-      <div ref={reactFlowWrapper} style={{ flex: 1, position: "relative" }}>
+      <div ref={reactFlowWrapper} className="flex-1 relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -266,14 +266,10 @@ function WorkflowCanvasInner() {
             type: "smoothstep",
             style: { stroke: "var(--cyan-dim, rgba(0,240,255,0.4))", strokeWidth: 2 },
           }}
-          style={{ background: "var(--bg-void, #060a14)" }}
+          className="bg-void"
         >
           <Controls
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-            }}
+            className="bg-card border border-border rounded-[8px]"
           />
           <MiniMap
             nodeColor={(n) => {
@@ -282,11 +278,7 @@ function WorkflowCanvasInner() {
               return "#00f0ff";
             }}
             maskColor="rgba(0, 0, 0, 0.6)"
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-            }}
+            className="bg-card border border-border rounded-[8px]"
           />
           <Background
             variant={BackgroundVariant.Dots}

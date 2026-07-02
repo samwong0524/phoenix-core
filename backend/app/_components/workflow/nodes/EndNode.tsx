@@ -4,30 +4,12 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 
 export default function EndNode({}: NodeProps) {
   return (
-    <div
-      style={{
-        width: 48,
-        height: 48,
-        borderRadius: "50%",
-        background: "var(--red-soft, rgba(239, 68, 68, 0.12))",
-        border: "2px solid var(--red, #ef4444)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 16,
-        boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-      }}
-    >
+    <div className="w-12 h-12 rounded-full bg-red-soft border-2 border-red flex items-center justify-center text-base shadow-[0_2px_6px_rgba(0,0,0,0.15)]">
       ■
       <Handle
         type="target"
         position={Position.Left}
-        style={{
-          background: "var(--red, #ef4444)",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
-        }}
+        className="w-[10px] h-[10px] border-2 border-panel bg-red"
       />
     </div>
   );

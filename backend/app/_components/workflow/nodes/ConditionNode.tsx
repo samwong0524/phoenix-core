@@ -17,15 +17,7 @@ export default function ConditionNode({ data, selected }: NodeProps) {
   const isRunning = status === "running";
 
   return (
-    <div
-      style={{
-        width: 120,
-        height: 120,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
+    <div className="w-[120px] h-[120px] flex items-center justify-center">
       {isRunning && (
         <style>{`
           @keyframes condPulse {
@@ -37,51 +29,25 @@ export default function ConditionNode({ data, selected }: NodeProps) {
 
       {/* Diamond shape */}
       <div
+        className="w-[90px] h-[90px] bg-card rounded-[8px] transition duration-300 flex items-center justify-center"
         style={{
-          width: 90,
-          height: 90,
           transform: "rotate(45deg)",
-          background: "var(--bg-card)",
           border: `2px solid ${selected ? "#a855f7" : style.border}`,
-          borderRadius: 8,
           boxShadow: selected
             ? "0 4px 12px rgba(0,0,0,0.25)"
             : style.shadow,
-          transition: "border-color 0.3s, box-shadow 0.3s",
           animation: isRunning ? "condPulse 2s ease-in-out infinite" : undefined,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
         }}
       >
         {/* Content (counter-rotated to stay upright) */}
         <div
-          style={{
-            transform: "rotate(-45deg)",
-            textAlign: "center",
-            padding: 4,
-            maxWidth: 80,
-          }}
+          className="text-center p-1 max-w-[80px]"
+          style={{ transform: "rotate(-45deg)" }}
         >
-          <div
-            style={{
-              fontSize: 14,
-              marginBottom: 2,
-            }}
-          >
+          <div className="text-sm mb-0.5">
             {status === "completed" ? "✓" : status === "failed" ? "✗" : "◇"}
           </div>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              lineHeight: 1.2,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div className="text-[9px] font-bold text-text leading-[1.2] overflow-hidden text-ellipsis whitespace-nowrap">
             {condData.label || "Condition"}
           </div>
         </div>
@@ -91,13 +57,7 @@ export default function ConditionNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Left}
-        style={{
-          background: "#a855f7",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
-          left: 4,
-        }}
+        className="w-[10px] h-[10px] border-2 border-panel bg-purple left-1"
       />
 
       {/* True branch (right) */}
@@ -105,13 +65,7 @@ export default function ConditionNode({ data, selected }: NodeProps) {
         type="source"
         id="true"
         position={Position.Right}
-        style={{
-          background: "var(--green, #4ade80)",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
-          right: 4,
-        }}
+        className="w-[10px] h-[10px] border-2 border-panel bg-green right-1"
       />
 
       {/* False branch (bottom) */}
@@ -119,42 +73,28 @@ export default function ConditionNode({ data, selected }: NodeProps) {
         type="source"
         id="false"
         position={Position.Bottom}
-        style={{
-          background: "var(--red, #ef4444)",
-          width: 10,
-          height: 10,
-          border: "2px solid var(--bg-panel, #0a0e1a)",
-          bottom: 4,
-        }}
+        className="w-[10px] h-[10px] border-2 border-panel bg-red bottom-1"
       />
 
       {/* Branch labels */}
       <div
+        className="text-[8px] font-bold text-green font-[family-name:var(--font-mono)] pointer-events-none"
         style={{
           position: "absolute",
           right: -4,
           top: "50%",
           transform: "translateY(-50%)",
-          fontSize: 8,
-          fontWeight: 700,
-          color: "var(--green, #4ade80)",
-          fontFamily: "var(--font-mono)",
-          pointerEvents: "none",
         }}
       >
         T
       </div>
       <div
+        className="text-[8px] font-bold text-red font-[family-name:var(--font-mono)] pointer-events-none"
         style={{
           position: "absolute",
           bottom: -4,
           left: "50%",
           transform: "translateX(-50%)",
-          fontSize: 8,
-          fontWeight: 700,
-          color: "var(--red, #ef4444)",
-          fontFamily: "var(--font-mono)",
-          pointerEvents: "none",
         }}
       >
         F

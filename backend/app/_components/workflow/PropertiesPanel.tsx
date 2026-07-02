@@ -21,33 +21,13 @@ export default function PropertiesPanel() {
   const condData = isConditionSelected ? (selectedNode.data as ConditionNodeData) : null;
 
   return (
-    <div
-      style={{
-        width: 280,
-        borderLeft: "1px solid var(--border)",
-        background: "var(--bg-panel)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
+    <div className="w-[280px] border-l border-border bg-panel flex flex-col overflow-hidden">
       {/* Header */}
-      <div
-        style={{
-          padding: "12px 14px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "var(--cyan)",
-          fontFamily: "var(--font-display)",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-        }}
-      >
+      <div className="px-3.5 py-3 border-b border-border text-[11px] font-bold text-primary font-[family-name:var(--font-display)] uppercase tracking-[0.1em]">
         {isAgentSelected ? "Agent Properties" : isConditionSelected ? "Condition" : "Workflow"}
       </div>
 
-      <div style={{ padding: 14, overflowY: "auto", flex: 1 }}>
+      <div className="p-3.5 overflow-y-auto flex-1">
         {isAgentSelected && agentData ? (
           /* ── Agent node selected ─────────────────────────── */
           <AgentProperties
@@ -77,44 +57,22 @@ export default function PropertiesPanel() {
   );
 }
 
-// ── Shared styles ──────────────────────────────────────────────
+// ── Shared class names ──────────────────────────────────────────
 
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 10,
-  fontWeight: 700,
-  color: "var(--text-dim)",
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-  marginBottom: 4,
-};
+const labelClass = "block text-[10px] font-bold text-text-dim uppercase tracking-[0.08em] mb-1";
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "6px 10px",
-  fontSize: 12,
-  fontFamily: "var(--font-body)",
-  color: "var(--text-primary)",
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  outline: "none",
-  boxSizing: "border-box",
-};
+const inputClass = "w-full px-2.5 py-1.5 text-xs text-text bg-card border border-border rounded-sm outline-none box-border";
 
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  cursor: "pointer",
-};
+const selectClass = `${inputClass} cursor-pointer`;
 
 // ── Status color helper ────────────────────────────────────────
 
-function statusColor(status?: string): string {
+function statusColorClass(status?: string): string {
   switch (status) {
-    case "running": return "var(--cyan)";
-    case "completed": return "var(--green)";
-    case "failed": return "var(--red)";
-    default: return "var(--text-dim)";
+    case "running": return "text-primary";
+    case "completed": return "text-green";
+    case "failed": return "text-red";
+    default: return "text-text-dim";
   }
 }
 
@@ -132,13 +90,13 @@ function AgentProperties({
   updateAgentData: (id: string, d: Partial<AgentNodeData>) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
       <div>
-        <label style={labelStyle}>Role</label>
+        <label className={labelClass}>Role</label>
         <select
           value={data.role}
           onChange={(e) => updateAgentData(nodeId, { role: e.target.value })}
-          style={selectStyle}
+          className={selectClass}
         >
           {(availableRoles.length > 0
             ? availableRoles
@@ -149,36 +107,36 @@ function AgentProperties({
         </select>
       </div>
       <div>
-        <label style={labelStyle}>Name</label>
+        <label className={labelClass}>Name</label>
         <input
           value={data.label}
           onChange={(e) => updateAgentData(nodeId, { label: e.target.value })}
-          style={inputStyle}
+          className={inputClass}
         />
       </div>
       <div>
-        <label style={labelStyle}>Task Description</label>
+        <label className={labelClass}>Task Description</label>
         <textarea
           value={data.description || ""}
           onChange={(e) => updateAgentData(nodeId, { description: e.target.value })}
           placeholder="What should this agent do?"
           rows={3}
-          style={{ ...inputStyle, resize: "vertical" as const }}
+          className={`${inputClass} resize-y`}
         />
       </div>
       <div>
-        <label style={labelStyle}>Expected Output</label>
+        <label className={labelClass}>Expected Output</label>
         <textarea
           value={data.expectedOutput || ""}
           onChange={(e) => updateAgentData(nodeId, { expectedOutput: e.target.value })}
           placeholder="What should the agent produce?"
           rows={2}
-          style={{ ...inputStyle, resize: "vertical" as const }}
+          className={`${inputClass} resize-y`}
         />
       </div>
       <div>
-        <label style={labelStyle}>Status</label>
-        <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: statusColor(data.executionStatus) }}>
+        <label className={labelClass}>Status</label>
+        <div className={`text-xs font-[family-name:var(--font-mono)] ${statusColorClass(data.executionStatus)}`}>
           {data.executionStatus?.toUpperCase() || "IDLE"}
         </div>
       </div>
@@ -196,48 +154,48 @@ function ConditionProperties({
   updateNodeData: (id: string, d: Record<string, unknown>) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
       <div>
-        <label style={labelStyle}>Name</label>
+        <label className={labelClass}>Name</label>
         <input
           value={data.label}
           onChange={(e) => updateNodeData(nodeId, { label: e.target.value })}
-          style={inputStyle}
+          className={inputClass}
         />
       </div>
       <div>
-        <label style={labelStyle}>Condition</label>
+        <label className={labelClass}>Condition</label>
         <textarea
           value={data.condition}
           onChange={(e) => updateNodeData(nodeId, { condition: e.target.value })}
           placeholder="e.g. result.contains('approved') or upstream.score > 0.8"
           rows={4}
-          style={{ ...inputStyle, resize: "vertical" as const, fontFamily: "var(--font-mono)", fontSize: 11 }}
+          className={`${inputClass} resize-y font-[family-name:var(--font-mono)] text-[11px]`}
         />
       </div>
       <div>
-        <label style={labelStyle}>Input Variable (optional)</label>
+        <label className={labelClass}>Input Variable (optional)</label>
         <input
           value={data.inputVariable || ""}
           onChange={(e) => updateNodeData(nodeId, { inputVariable: e.target.value })}
           placeholder="e.g. upstream.researcher.output"
-          style={inputStyle}
+          className={inputClass}
         />
-        <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, lineHeight: 1.5 }}>
+        <div className="text-[10px] text-text-dim mt-1 leading-normal">
           Reference an upstream agent&apos;s output to evaluate the condition against.
         </div>
       </div>
       <div>
-        <label style={labelStyle}>Branches</label>
-        <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.6 }}>
-          <span style={{ color: "var(--green)", fontWeight: 600 }}>Right</span> = true branch
+        <label className={labelClass}>Branches</label>
+        <div className="text-[11px] text-text-dim leading-relaxed">
+          <span className="text-green font-semibold">Right</span> = true branch
           <br />
-          <span style={{ color: "var(--red)", fontWeight: 600 }}>Bottom</span> = false branch
+          <span className="text-red font-semibold">Bottom</span> = false branch
         </div>
       </div>
       <div>
-        <label style={labelStyle}>Status</label>
-        <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: statusColor(data.executionStatus) }}>
+        <label className={labelClass}>Status</label>
+        <div className={`text-xs font-[family-name:var(--font-mono)] ${statusColorClass(data.executionStatus)}`}>
           {data.executionStatus?.toUpperCase() || "IDLE"}
         </div>
       </div>
@@ -256,53 +214,41 @@ function WorkflowMeta({
   status: string;
   setWorkflowMeta: (meta: { name?: string; description?: string; status?: "draft" | "active" | "paused" }) => void;
 }) {
+  const statusClass =
+    status === "active"
+      ? "text-green"
+      : status === "paused"
+        ? "text-yellow"
+        : "text-text-dim";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
       <div>
-        <label style={labelStyle}>Workflow Name</label>
+        <label className={labelClass}>Workflow Name</label>
         <input
           value={name}
           onChange={(e) => setWorkflowMeta({ name: e.target.value })}
-          style={inputStyle}
+          className={inputClass}
         />
       </div>
       <div>
-        <label style={labelStyle}>Description</label>
+        <label className={labelClass}>Description</label>
         <textarea
           value={description}
           onChange={(e) => setWorkflowMeta({ description: e.target.value })}
           placeholder="What does this workflow do?"
           rows={3}
-          style={{ ...inputStyle, resize: "vertical" as const }}
+          className={`${inputClass} resize-y`}
         />
       </div>
       <div>
-        <label style={labelStyle}>Status</label>
-        <div
-          style={{
-            fontSize: 12,
-            fontFamily: "var(--font-mono)",
-            color:
-              status === "active"
-                ? "var(--green)"
-                : status === "paused"
-                  ? "var(--yellow)"
-                  : "var(--text-dim)",
-          }}
-        >
+        <label className={labelClass}>Status</label>
+        <div className={`text-xs font-[family-name:var(--font-mono)] ${statusClass}`}>
           {status.toUpperCase()}
         </div>
       </div>
-      <div
-        style={{
-          marginTop: 8,
-          padding: 12,
-          background: "var(--bg-card)",
-          borderRadius: 8,
-          border: "1px solid var(--border)",
-        }}
-      >
-        <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.6 }}>
+      <div className="mt-2 p-3 bg-card rounded-[8px] border border-border">
+        <div className="text-[11px] text-text-dim leading-relaxed">
           Drag agent or condition nodes from the left panel onto the canvas.
           Connect them by dragging between handles.
           Condition nodes branch into true (right) and false (bottom) paths.
