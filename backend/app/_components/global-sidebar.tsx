@@ -112,43 +112,11 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
       aria-label="Sidebar"
       animate={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
       transition={{ duration: 0.25, ease: EASE }}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        borderRight: "1px solid var(--border)",
-        backgroundColor: "var(--bg-panel)",
-        overflow: "hidden",
-        flexShrink: 0,
-      }}
+      className="flex flex-col h-full border-r border-border bg-panel overflow-hidden shrink-0"
     >
       {/* Logo */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-2)",
-          padding: "0 var(--space-3)",
-          height: 48,
-          borderBottom: "1px solid var(--border)",
-          flexShrink: 0,
-          overflow: "hidden",
-          whiteSpace: "nowrap",
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: "var(--radius-sm)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-            backgroundColor: "var(--accent-cyan)",
-            color: "#000",
-          }}
-        >
+      <div className="flex items-center gap-2 px-3 h-12 border-b border-border shrink-0 overflow-hidden whitespace-nowrap">
+        <div className="w-7 h-7 rounded-sm flex items-center justify-center shrink-0 bg-primary text-black">
           <Zap size={16} />
         </div>
         <AnimatePresence>
@@ -158,7 +126,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
               transition={{ duration: 0.15, ease: EASE }}
-              style={{ fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "var(--text-primary)" }}
+              className="font-bold text-[13px] tracking-wider text-text"
             >
               SWARM IDE
             </motion.span>
@@ -167,7 +135,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
       </div>
 
       {/* Nav items */}
-      <nav aria-label="Main navigation" style={{ flex: 1, padding: "var(--space-2) 0", overflowY: "auto", overflowX: "hidden" }}>
+      <nav aria-label="Main navigation" className="flex-1 py-2 overflow-y-auto overflow-x-hidden">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -189,22 +157,9 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                     toggleGroup(item.key);
                   }
                 } : undefined}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-2)",
-                  padding: "var(--space-2) var(--space-3)",
-                  margin: "0 var(--space-1)",
-                  borderRadius: "var(--radius-sm)",
-                  cursor: "pointer",
-                  backgroundColor:
-                    active && !hasChildren
-                      ? "var(--bg-card)"
-                      : "transparent",
-                  color: groupActive
-                    ? "var(--accent-cyan)"
-                    : "var(--text-secondary)",
-                }}
+                className={`flex items-center gap-2 py-2 px-3 mx-1 rounded-sm cursor-pointer ${
+                  active && !hasChildren ? "bg-card" : "bg-transparent"
+                } ${groupActive ? "text-primary" : "text-text-secondary"}`}
                 whileHover={{
                   backgroundColor: active && !hasChildren
                     ? "var(--bg-card)"
@@ -218,7 +173,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
               >
                 <Link
                   href={item.href}
-                  style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flex: 1, minWidth: 0, color: "inherit", textDecoration: "none" }}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-inherit no-underline"
                   aria-current={active && !hasChildren ? "page" : undefined}
                   onClick={(e) => {
                     if (hasChildren) {
@@ -227,7 +182,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                     }
                   }}
                 >
-                  <Icon size={18} style={{ flexShrink: 0 }} aria-hidden="true" />
+                  <Icon size={18} className="shrink-0" aria-hidden="true" />
                   <AnimatePresence>
                     {!collapsed && (
                       <motion.span
@@ -235,7 +190,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                         animate={{ opacity: 1, width: "auto" }}
                         exit={{ opacity: 0, width: 0 }}
                         transition={{ duration: 0.2, ease: EASE }}
-                        style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        className="text-[13px] overflow-hidden text-ellipsis whitespace-nowrap"
                       >
                         {item.label}
                       </motion.span>
@@ -249,7 +204,7 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                       animate={{ opacity: 0.5, rotate: expanded ? 90 : 0 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2, ease: EASE }}
-                      style={{ marginLeft: "auto", fontSize: 11, display: "flex" }}
+                      className="ml-auto text-[11px] flex"
                     >
                       <ChevronRight size={14} />
                     </motion.span>
@@ -265,9 +220,9 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2, ease: EASE }}
-                    style={{ overflow: "hidden", marginLeft: 16 }}
+                    className="overflow-hidden ml-4"
                   >
-                    <div style={{ marginBottom: 4 }}>
+                    <div className="mb-1">
                       {item.children!.map((child) => {
                         const ChildIcon = child.icon;
                         const childActive = isActive(child.href);
@@ -280,31 +235,17 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
                                 : "rgba(0, 240, 255, 0.06)",
                             }}
                             transition={{ duration: 0.15 }}
-                            style={{
-                              borderRadius: "var(--radius-sm)",
-                              margin: "0 var(--space-1)",
-                            }}
+                            className="rounded-sm mx-1"
                           >
                             <Link
                               href={child.href}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "var(--space-2)",
-                                padding: "6px var(--space-3)",
-                                fontSize: 13,
-                                backgroundColor: childActive
-                                  ? "var(--bg-card)"
-                                  : "transparent",
-                                color: childActive
-                                  ? "var(--accent-cyan)"
-                                  : "var(--text-secondary)",
-                                textDecoration: "none",
-                              }}
+                              className={`flex items-center gap-2 py-1.5 px-3 text-[13px] no-underline ${
+                                childActive ? "bg-card text-primary" : "bg-transparent text-text-secondary"
+                              }`}
                               aria-current={childActive ? "page" : undefined}
                             >
-                              <ChildIcon size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.label}</span>
+                              <ChildIcon size={14} className="shrink-0" aria-hidden="true" />
+                              <span className="overflow-hidden text-ellipsis whitespace-nowrap">{child.label}</span>
                             </Link>
                           </motion.div>
                         );
@@ -324,24 +265,13 @@ export const GlobalSidebar = memo(function GlobalSidebar() {
         whileHover={{ backgroundColor: "rgba(0, 240, 255, 0.06)" }}
         whileTap={{ scale: 0.95 }}
         transition={{ duration: 0.15 }}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 40,
-          flexShrink: 0,
-          background: "transparent",
-          cursor: "pointer",
-          border: "none",
-          borderTop: "1px solid var(--border)",
-          color: "var(--text-secondary)",
-        }}
+        className="flex items-center justify-center h-10 shrink-0 bg-transparent cursor-pointer border-0 border-t border-border text-text-secondary"
         aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
       >
         <motion.span
           animate={{ rotate: collapsed ? 180 : 0 }}
           transition={{ duration: 0.25, ease: EASE }}
-          style={{ display: "flex" }}
+          className="flex"
         >
           <ChevronLeft size={16} />
         </motion.span>
