@@ -16,6 +16,44 @@ function hexToRgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/** Draw a single static frame (no animation) for reduced-motion users */
+function drawStatic(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  nodes: TopoNode[],
+  edges: TopoEdge[],
+) {
+  ctx.clearRect(0, 0, width, height);
+  const nodeMap = new Map<string, TopoNode>();
+  for (const n of nodes) nodeMap.set(n.id, n);
+
+  // Static edges (solid lines, no dashes or beads)
+  for (const edge of edges) {
+    const na = nodeMap.get(edge.fromId);
+    const nb = nodeMap.get(edge.toId);
+    if (!na || !nb) continue;
+    ctx.beginPath();
+    ctx.moveTo(na.x, na.y);
+    ctx.lineTo(nb.x, nb.y);
+    ctx.strokeStyle = "rgba(0, 240, 255, 0.12)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Static node glow (no pulse)
+  for (const n of nodes) {
+    const alpha = n.status === "BUSY" ? 0.15 : 0.1;
+    const g = ctx.createRadialGradient(n.x, n.y, n.r - 2, n.x, n.y, n.r + 20);
+    g.addColorStop(0, hexToRgba(n.color, alpha));
+    g.addColorStop(1, "transparent");
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r + 20, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+}
+
 export function TopoAnimCanvas({
   width,
   height,
@@ -39,6 +77,14 @@ export function TopoAnimCanvas({
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    // If reduced motion preferred, draw static and skip animation
+    if (motionQuery.matches) {
+      drawStatic(ctx, width, height, nodes, edges);
+      return;
+    }
 
     let t = 0;
     let animId = 0;
@@ -97,8 +143,18 @@ export function TopoAnimCanvas({
     };
     draw();
 
+    // Listen for reduced-motion preference changes
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        cancelAnimationFrame(animId);
+        drawStatic(ctx, width, height, nodes, edges);
+      }
+    };
+    motionQuery.addEventListener("change", handleChange);
+
     return () => {
       cancelAnimationFrame(animId);
+      motionQuery.removeEventListener("change", handleChange);
     };
   }, [nodes, edges, width, height]);
 
