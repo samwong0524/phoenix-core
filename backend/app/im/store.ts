@@ -3,7 +3,7 @@ import { immer } from "zustand/middleware/immer";
 import type {
   UUID, ModelEntry, WorkspaceDefaults, AgentMeta, AgentStatus,
   Group, Message, VizEvent, VizBeam, VizDebugEntry,
-  RightPanelState, SkillSuggestion, BlockedCommand, BootStatus,
+  RightPanelState, SkillSuggestion, BlockedCommand, ToolError, TimelineEvent, BootStatus,
 } from "./types";
 
 // ── Store interface ───────────────────────────────────────────
@@ -67,6 +67,12 @@ export interface IMState {
 
   // ── Blocked commands slice (dangerous cmd / git gate) ─────
   blockedCommands: BlockedCommand[];
+
+  // ── Tool errors slice (failed tool calls) ─────────────────
+  toolErrors: ToolError[];
+
+  // ── Timeline slice (collaboration events) ─────────────────
+  timeline: TimelineEvent[];
 
   // ── Agent status slice ────────────────────────────────────
   agentStatusById: Record<string, AgentStatus>;
@@ -134,6 +140,14 @@ export interface IMState {
   addBlockedCommand: (cmd: Omit<BlockedCommand, "id" | "dismissed">) => void;
   dismissBlockedCommand: (id: string) => void;
   clearBlockedCommands: () => void;
+
+  // ── Tool errors actions ─────────────────────────────────────
+  addToolError: (error: ToolError) => void;
+  clearToolErrors: () => void;
+
+  // ── Timeline actions ────────────────────────────────────────
+  addTimelineEvent: (event: TimelineEvent) => void;
+  clearTimeline: () => void;
 
   // ── Agent status actions ──────────────────────────────────
   setAgentStatusById: (updater: (prev: Record<string, AgentStatus>) => Record<string, AgentStatus>) => void;
@@ -213,6 +227,12 @@ export const useIMStore = create<IMState>()(
     // ── Blocked commands slice ─────────────────────────────
     blockedCommands: [],
 
+    // ── Tool errors slice ──────────────────────────────────
+    toolErrors: [],
+
+    // ── Timeline slice ─────────────────────────────────────
+    timeline: [],
+
     // ── Agent status slice ────────────────────────────────
     agentStatusById: {},
 
@@ -285,6 +305,7 @@ export const useIMStore = create<IMState>()(
         state.reasoningStream = "";
         state.toolStream = "";
         state.agentError = null;
+        state.toolErrors = [];
       }),
 
     // ── UI actions ────────────────────────────────────────
@@ -504,6 +525,28 @@ export const useIMStore = create<IMState>()(
     clearBlockedCommands: () =>
       set((state) => {
         state.blockedCommands = [];
+      }),
+
+    // ── Tool errors actions ────────────────────────────────
+    addToolError: (error) =>
+      set((state) => {
+        state.toolErrors = [...state.toolErrors.slice(-4), error]; // Keep last 5
+      }),
+
+    clearToolErrors: () =>
+      set((state) => {
+        state.toolErrors = [];
+      }),
+
+    // ── Timeline actions ─────────────────────────────────────
+    addTimelineEvent: (event) =>
+      set((state) => {
+        state.timeline = [...state.timeline.slice(-49), event]; // Keep last 50
+      }),
+
+    clearTimeline: () =>
+      set((state) => {
+        state.timeline = [];
       }),
 
     // ── Agent status actions ──────────────────────────────

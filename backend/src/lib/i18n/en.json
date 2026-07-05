@@ -459,5 +459,23 @@
     "test_fail_unknown": "Unknown error. Please check your API key and network.",
     "retry": "Retry",
     "skip": "Skip for now"
+  },
+  "orchestrate": {
+    "title": "Orchestration",
+    "subtitle": "Unified management of Workflow and Pipeline with intelligent routing",
+    "new": "New Orchestration",
+    "active": "Active",
+    "draft": "Draft",
+    "paused": "Paused",
+    "total": "Total",
+    "progress": "Progress",
+    "empty_title": "No orchestrations yet",
+    "empty_desc": "Create your first orchestration with visual DAG editing and intelligent execution routing",
+    "create_first": "Create first orchestration",
+    "status": {
+      "active": "Active",
+      "draft": "Draft",
+      "paused": "Paused"
+    }
   }
 }

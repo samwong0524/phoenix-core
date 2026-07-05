@@ -8,6 +8,8 @@ export const ROUTES = {
   HOME: "/",
   /** Agent 对话 */
   CHAT: "/im",
+  /** 统一编排入口 */
+  ORCHESTRATE: "/orchestrate",
   /** 工作流编辑器 */
   WORKFLOW: "/workflow",
   /** 工作流模板市场 */

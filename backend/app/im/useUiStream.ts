@@ -29,7 +29,7 @@ export function useUiStream(
   const { t } = useI18n();
   const {
     setVizEvents, setVizBeams, setVizDebug, setAgentStatusById,
-    setAgents, setGroups, addSkillSuggestion,
+    setAgents, setGroups, addSkillSuggestion, addTimelineEvent,
   } = useIMStore();
 
   // Internal refs (only used by UI stream logic)
@@ -320,6 +320,24 @@ export function useUiStream(
           const triggerPattern = (payload.data?.triggerPattern as string) ?? "";
           if (skillName && confidence >= 0.8) {
             addSkillSuggestion({ skillName, confidence, reason, triggerPattern });
+          }
+        } else if (payload.event === "ui.task.assigned") {
+          const coordinatorId = (payload.data?.coordinatorId as string) ?? "";
+          const assigneeId = (payload.data?.assigneeId as string) ?? "";
+          const taskDescription = (payload.data?.taskDescription as string) ?? "";
+          if (coordinatorId && assigneeId) {
+            const coordinatorRole = agentRoleByIdRef.current.get(coordinatorId) ?? coordinatorId.slice(0, 8);
+            const assigneeRole = (payload.data?.assigneeRole as string) || agentRoleByIdRef.current.get(assigneeId) || assigneeId.slice(0, 8);
+            addTimelineEvent({
+              id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+              type: "task_assigned",
+              coordinatorId,
+              coordinatorRole,
+              assigneeId,
+              assigneeRole,
+              taskDescription,
+              timestamp: Date.now(),
+            });
           }
         }
       }

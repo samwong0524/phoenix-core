@@ -108,9 +108,16 @@
 
 ---
 
-## Sprint P7 · W13-14：排障体验 + 协作可见性
+## Sprint P7 · W13-14：排障体验 + 协作可见性 ✅ COMPLETED
 
 **目标**：Agent 出错时用户能快速定位原因；多 Agent 协作时用户能看到全局进度。
+
+**交付状态**：✅ 全部完成 (2026-07-02)
+- ToolCallError 可折叠错误组件 + 聊天区渲染
+- 重试按钮（失败 tool_call 重执行）
+- 协作时间线（SSE 事件 + 组件 + 面板集成）
+- SSE 事件规范化（Contract 2 验证）
+- tsc + vitest (634 tests) + next build 验收通过
 
 ### 产品交付
 
@@ -193,9 +200,15 @@
 
 ---
 
-## Sprint P8 · W15-16：编排统一 + 效率工具
+## Sprint P8 · W15-16：编排统一 + 效率工具 ✅ COMPLETED
 
 **目标**：降低编排概念的认知负荷；提升 Agent 切换效率。
+
+**交付状态**：✅ 全部完成 (2026-07-03)
+- 统一编排入口 `/orchestrate`（Workflow + Pipeline 仪表盘）
+- Command Palette Ctrl+K（已存在，含 Agent/Group/Skill 搜索）
+- 动效收敛 + 状态 morph 过渡动画（400ms ease-in-out）
+- tsc + vitest (634 tests) + next build 验收通过
 
 ### 产品交付
 
@@ -287,11 +300,53 @@
 
 | Sprint | 周期 | 交付物 | 用户可见价值 |
 |--------|------|--------|--------------|
-| **P6** | W11-12 | LLM 引导 + 模板卡片 + 欢迎引导 + API 标准化 | 新用户首次使用无阻断 |
-| **P7** | W13-14 | 错误详情 + 重试按钮 + 协作时间线 + SSE 规范化 | 排障效率 + 协作可见性 |
-| **P8** | W15-16 | 统一编排入口 + Command Palette + 动效收敛 + 覆盖率 | 认知简化 + 效率提升 |
+| **P6** ✅ | W11-12 | LLM 引导 + 模板卡片 + 欢迎引导 + API 标准化 | 新用户首次使用无阻断 |
+| **P7** ✅ | W13-14 | 错误详情 + 重试按钮 + 协作时间线 + SSE 规范化 | 排障效率 + 协作可见性 |
+| **P8** ✅ | W15-16 | 统一编排入口 + Command Palette + 动效收敛 + 覆盖率 | 认知简化 + 效率提升 |
+| **P9** ✅ | W17-18 | ToolCall 断点恢复 + 重试机制增强 | 真正的 tool_call 级别重试 |
 
-**总计**：6 周（3 个 Sprint × 2 周），补齐方案中所有产品功能。
+**总计**：8 周（4 个 Sprint × 2 周），补齐方案中所有产品功能 + 技术债务。**全部完成 🎉**
+
+---
+
+## Sprint P9 · W17-18：技术债务补齐
+
+**目标**：补齐 P7 重试机制的断点恢复能力，实现真正的 tool_call 级别重试。
+
+**交付状态**：✅ 全部完成 (2026-07-03)
+- AgentRunner.resetGuardrails() 公开方法（清除 blockedTools/agentPaused/失败计数器）
+- POST /api/agents/{agentId}/retry-tool-call 断点恢复 API
+- llmHistory 回滚：移除失败 tool_result + 后续系统消息
+- 前端重试按钮改为调用断点恢复 API（不再仅发送文本消息）
+- wakeup reason 扩展支持 retry_tool_call
+- tsc + vitest (634 tests) + next build 验收通过
+
+### 产品交付
+
+#### 1. ToolCall 断点恢复（P7 重试机制增强）
+
+**当前问题**：P7 实现的重试按钮仅发送一条文本消息 "请重试工具调用: toolName"，Agent 收到后由 LLM 自行决定是否重试，无法保证精确重执行失败的 tool_call。
+
+**方案**：
+- 新建 `POST /api/agents/{agentId}/retry-tool-call` API 端点
+- 接收 `{ toolCallId, groupId }` 参数
+- 解析 agent 的 llmHistory JSON 数组
+- 找到 `tool_call_id` 匹配的 `role: "tool"` 消息并移除
+- 清除后续引用该失败的 system 消息
+- 调用 `AgentRunner.resetGuardrails()` 清除 blockedTools/agentPaused/失败计数器
+- 保存修改后的 llmHistory 到数据库
+- 唤醒 agent 重新处理（从断点继续，不重跑已成功的步骤）
+
+**文件**：
+- `app/api/agents/[agentId]/retry-tool-call/route.ts`（新 API 端点）
+- `src/runtime/agent-runtime.ts`（AgentRunner.resetGuardrails + getRunner + wakeup reason 扩展）
+- `app/im/page.tsx`（重试按钮改为调用断点恢复 API）
+
+**验收标准**：
+- 点击重试 → 调用 retry-tool-call API → llmHistory 回滚 → agent 从断点继续
+- 被 blocked 的工具在重试后解除封锁
+- 被 paused 的 agent 在重试后恢复运行
+- 前端显示 "🔄 重试工具调用: toolName" 通知消息
 
 ---
 

@@ -17,6 +17,7 @@ const MarkdownContent = dynamic(() => import("./MarkdownContent").then(m => ({ d
 import { QuestionCard } from "./QuestionCard";
 import { CommandConfirmCard } from "./CommandConfirmCard";
 import { PlanApprovalCard } from "./PlanApprovalCard";
+import { ToolCallError } from "./ToolCallError";
 import { statusColor } from "./colors";
 import { useAgentStream } from "./useAgentStream";
 import { useUiStream } from "./useUiStream";
@@ -89,6 +90,10 @@ function IMPageInner() {
     skillSuggestions, dismissSkillSuggestion,
     // Blocked commands (dangerous cmd / git gate)
     blockedCommands, addBlockedCommand, dismissBlockedCommand,
+    // Tool errors
+    toolErrors, clearToolErrors,
+    // Timeline
+    timeline,
   } = useIMStore();
 
   // Round vizSize to 10px granularity to avoid vizLayout recalc on every ResizeObserver pixel
@@ -1160,6 +1165,48 @@ function IMPageInner() {
           </div>
         )}
 
+        {/* Tool call error cards */}
+        {toolErrors.length > 0 && (
+          <ToolCallError
+            errors={toolErrors}
+            onDismiss={clearToolErrors}
+            onRetry={(error) => {
+              if (session && streamAgentId) {
+                // Call retry-tool-call API for true breakpoint recovery
+                void api(`/api/agents/${streamAgentId}/retry-tool-call`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    toolCallId: error.toolCallId,
+                    groupId: activeGroupId,
+                  }),
+                }).then(() => {
+                  // Send a notification message to the group
+                  if (activeGroupId) {
+                    const text = `🔄 重试工具调用: ${error.toolName}`;
+                    const optimistic: Message = {
+                      id: `optimistic-${Date.now()}`,
+                      senderId: session.humanAgentId,
+                      content: text,
+                      contentType: "text",
+                      sendTime: new Date().toISOString(),
+                    };
+                    setMessages((m) => [...m, optimistic]);
+                    queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
+                    void api(`/api/groups/${activeGroupId}/messages`, {
+                      method: "POST",
+                      body: JSON.stringify({ senderId: session.humanAgentId, content: text, contentType: "text" }),
+                    });
+                  }
+                }).catch((err) => {
+                  console.error("[Retry] Failed:", err);
+                  toast.error("重试失败，请检查网络连接");
+                });
+                clearToolErrors();
+              }
+            }}
+          />
+        )}
+
         <div className="chat-input-area">
           <input
             ref={fileInputRef}
@@ -1277,6 +1324,7 @@ function IMPageInner() {
           todoItems={taskMonitorData.todoItems}
           artifacts={taskMonitorData.artifacts}
           usedSkills={taskMonitorData.usedSkills}
+          timeline={timeline}
         />
         </ErrorBoundary>
       }

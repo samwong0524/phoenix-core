@@ -131,4 +131,22 @@ export type BlockedCommand = {
   dismissed: boolean;
 };
 
+export type ToolError = {
+  toolCallId: string;
+  toolName: string;
+  error: string;
+  timestamp: number;
+};
+
+export type TimelineEvent = {
+  id: string;
+  type: "task_assigned";
+  coordinatorId: string;
+  coordinatorRole: string;
+  assigneeId: string;
+  assigneeRole: string;
+  taskDescription: string;
+  timestamp: number;
+};
+
 export type BootStatus = "boot" | "groups" | "messages" | "send" | "idle";
