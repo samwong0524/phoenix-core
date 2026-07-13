@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { jwtVerify } from "jose";
 
 // Routes that never require auth
 const PUBLIC_API_PREFIXES = [
@@ -16,7 +17,7 @@ const PUBLIC_API_PREFIXES = [
   "/api/health",
 ];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Only protect /api/* routes
@@ -38,9 +39,20 @@ export function middleware(request: NextRequest) {
 
   // Check for phoenix-token cookie
   const token = request.cookies.get("phoenix-token");
-  if (!token) {
+  if (!token?.value) {
     return NextResponse.json(
       { error: "Unauthorized", message: "Please log in to continue" },
+      { status: 401 }
+    );
+  }
+
+  // Verify JWT signature and expiration
+  try {
+    const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
+    await jwtVerify(token.value, secret);
+  } catch {
+    return NextResponse.json(
+      { error: "Unauthorized", message: "Invalid or expired token" },
       { status: 401 }
     );
   }

@@ -33,5 +33,12 @@ backend/nul
 backend/test-mcp.js
 backend/.debug-archive/
 
+# Secrets & credentials
+backend/config/runtime-settings.json
+*.key
+*.pem
+*.p12
+*.pfx
+
 # AgentHound regression test reports (auto-generated, not tracked)
 evals/results/reports/
