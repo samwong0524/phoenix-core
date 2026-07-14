@@ -76,7 +76,7 @@ export function getLlmProvider(): LlmProvider {
 export function isProviderConfigured(provider: LlmProvider): boolean {
   switch (provider) {
     case "openrouter": return !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEYS);
-    case "anthropic": return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEYS);
+    case "anthropic": return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEYS || getSetting("llm_api_key"));
     case "glm": return !!(process.env.GLM_API_KEY || process.env.ZHIPUAI_API_KEY || process.env.GLM_API_KEYS);
     case "ollama": return true; // local, always available
     case "freellmapi": {
@@ -177,13 +177,17 @@ export function getOpenRouterConfig() {
 
 export function getAnthropicConfig() {
   const pool = getAnthropicKeyPool();
-  const apiKey = pool.getNext() ?? "";
-  const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "";
-  const model = process.env.ANTHROPIC_MODEL ?? "qwen3.6-plus";
+  let apiKey = pool.getNext() ?? "";
+  // Fall back to persistent settings (set via /models UI) when env vars are empty
+  if (!apiKey) {
+    apiKey = getSetting("llm_api_key") ?? "";
+  }
+  const baseUrl = (process.env.ANTHROPIC_BASE_URL ?? getSetting("llm_base_url") ?? "").replace(/\/+$/, "");
+  const model = process.env.ANTHROPIC_MODEL ?? getSetting("llm_model") ?? "qwen3.6-plus";
   const backupModel = process.env.ANTHROPIC_BACKUP_MODEL ?? "";
 
   if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY (set ANTHROPIC_API_KEY or ANTHROPIC_API_KEYS)");
+    throw new Error("Missing ANTHROPIC_API_KEY (set ANTHROPIC_API_KEY or configure via /models page)");
   }
 
   return { apiKey, baseUrl, model, backupModel, keyPool: pool };

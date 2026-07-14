@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { getSetting, setSetting } from "@/lib/settings";
+import { invalidateKeyPools } from "@/runtime/agent-keys";
 import { apiOk, apiError } from "@/lib/api-response";
 
 /**
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
   if (body.baseUrl !== undefined) setSetting("llm_base_url", body.baseUrl);
   if (body.apiKey !== undefined) setSetting("llm_api_key", body.apiKey);
   if (body.model !== undefined) setSetting("llm_model", body.model);
+
+  // Invalidate cached key pools so the new API key is picked up immediately
+  invalidateKeyPools();
 
   return apiOk({ ok: true });
 }

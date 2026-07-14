@@ -7,6 +7,20 @@ import { addWorkspaceMember } from "@/lib/rbac";
 import { checkRateLimit, RATE_LIMITS, withRateLimitHeaders, rateLimitExceededResponse } from "@/lib/rate-limiter";
 import { apiOk, apiCreated, apiError, apiErrorFromCatch } from "@/lib/api-response";
 
+/** Extract meaningful error message from postgres.js AggregateError and other non-standard errors */
+function extractErrorMessage(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  // postgres.js AggregateError has .errors array
+  const errors = (e as any)?.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    return errors.map((err: any) => err?.message ?? String(err)).join("; ");
+  }
+  // postgres.js error code
+  const code = (e as any)?.code;
+  if (code) return code;
+  return String(e);
+}
+
 export async function GET(req: Request) {
   try {
     // Rate limiting
@@ -24,7 +38,7 @@ export async function GET(req: Request) {
     return withRateLimitHeaders(apiOk({ workspaces }), limit);
   } catch (e) {
     if (e instanceof AuthError) return apiErrorFromCatch(e);
-    return apiError("DB_ERROR", `Database not ready: ${e instanceof Error ? e.message : String(e)}`, 500);
+    return apiError("DB_ERROR", `Database not ready: ${extractErrorMessage(e)}`, 500);
   }
 }
 
@@ -81,6 +95,6 @@ export async function POST(req: Request) {
     return withRateLimitHeaders(apiCreated(result), limit);
   } catch (e) {
     if (e instanceof AuthError) return apiErrorFromCatch(e);
-    return apiError("DB_ERROR", `Failed to create workspace: ${e instanceof Error ? e.message : String(e)}`, 500);
+    return apiError("DB_ERROR", `Failed to create workspace: ${extractErrorMessage(e)}`, 500);
   }
 }
