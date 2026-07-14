@@ -13,7 +13,7 @@ export function useAgentStream(streamAgentId: string | null) {
   const {
     activeGroupId,
     resetStreams, setLlmHistory, setContentStream, setReasoningStream, setToolStream,
-    setAgentError, setAgentActivity, setAgentActivityTool,
+    setAgentError, setAgentActivity, setAgentActivityTool, addToolError,
     setMessages, setGroups,
   } = useIMStore();
 
@@ -123,6 +123,24 @@ export function useAgentStream(streamAgentId: string | null) {
                     : toolCallBuffersRef.current;
                 const next = `${buffers.get(key) ?? ""}${chunk}`;
                 buffers.set(key, next);
+
+                // Detect tool errors when tool_result completes with ok:false
+                if (payload.data.kind === "tool_result") {
+                  try {
+                    const parsed = JSON.parse(next);
+                    if (parsed && typeof parsed === "object" && parsed.ok === false && parsed.error) {
+                      addToolError({
+                        toolCallId: key,
+                        toolName: name,
+                        error: parsed.error,
+                        timestamp: Date.now(),
+                      });
+                    }
+                  } catch {
+                    // Not yet complete JSON, ignore
+                  }
+                }
+
                 const callLines = Array.from(toolCallBuffersRef.current.entries()).map(
                   ([id, value]) => `tool_calls[${id}]: ${value}`,
                 );
@@ -177,7 +195,7 @@ export function useAgentStream(streamAgentId: string | null) {
     },
     [
       resetStreams, setLlmHistory, setContentStream, setReasoningStream, setToolStream,
-      setAgentError, setActivityDebounced, refreshMessages, refreshGroups, refreshLlmHistory, t,
+      setAgentError, setActivityDebounced, addToolError, refreshMessages, refreshGroups, refreshLlmHistory, t,
     ],
   );
 

@@ -1,6 +1,8 @@
 export const runtime = "nodejs";
 
 import { getSetting, setSetting } from "@/lib/settings";
+import { invalidateKeyPools } from "@/runtime/agent-keys";
+import { apiOk, apiError } from "@/lib/api-response";
 
 /**
  * Simple admin token check.
@@ -23,7 +25,7 @@ export async function GET() {
     model: getSetting("llm_model") ?? process.env.FREELLMAPI_MODEL ?? "",
   };
   // Never expose full API key in GET, just show masked
-  return Response.json({
+  return apiOk({
     ...config,
     apiKeyMasked: config.apiKey ? config.apiKey.slice(0, 4) + "..." + config.apiKey.slice(-4) : "(empty)",
     hasApiKey: config.apiKey !== "",
@@ -32,7 +34,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   if (!checkAdminAuth(req)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Authentication required", 401);
   }
 
   const body = (await req.json()) as {
@@ -47,5 +49,8 @@ export async function POST(req: Request) {
   if (body.apiKey !== undefined) setSetting("llm_api_key", body.apiKey);
   if (body.model !== undefined) setSetting("llm_model", body.model);
 
-  return Response.json({ ok: true });
+  // Invalidate cached key pools so the new API key is picked up immediately
+  invalidateKeyPools();
+
+  return apiOk({ ok: true });
 }

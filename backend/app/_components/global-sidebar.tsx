@@ -44,8 +44,9 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
       key: "orchestrate",
       label: t("sidebar.orchestrate"),
       icon: Workflow,
-      href: ROUTES.WORKFLOW,
+      href: ROUTES.ORCHESTRATE,
       children: [
+        { key: "orchestrate-dashboard", label: t("sidebar.orchestrate"), href: ROUTES.ORCHESTRATE, icon: Workflow },
         { key: "workflow", label: t("sidebar.workflow"), href: ROUTES.WORKFLOW, icon: Workflow },
         { key: "pipeline", label: t("sidebar.pipeline"), href: ROUTES.PIPELINE, icon: Zap },
         { key: "topology", label: t("sidebar.topology"), href: ROUTES.GRAPH, icon: Activity },

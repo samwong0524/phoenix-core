@@ -7,7 +7,9 @@
 
 import { memo, useState, useMemo, useCallback } from "react";
 import { TraceTree } from "./TraceTree";
+import { CollaborationTimeline } from "./CollaborationTimeline";
 import { useI18n } from "@/lib/i18n/context";
+import type { TimelineEvent } from "./types";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -44,9 +46,11 @@ type TaskMonitorProps = {
   artifacts?: ArtifactFile[];
   /** 使用的技能/MCP */
   usedSkills?: SkillEntry[];
+  /** 协作时间线事件 */
+  timeline?: TimelineEvent[];
 };
 
-type SectionId = "todo" | "artifacts" | "skills" | "awareness" | "debug";
+type SectionId = "todo" | "artifacts" | "skills" | "awareness" | "timeline" | "debug";
 
 // ─── Collapsible Section ────────────────────────────────────
 
@@ -84,7 +88,7 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
     agents, agentStatusById, groups, activeGroupId,
     vizEvents, streamAgentId, contentStream, reasoningStream, toolStream,
     agentError, llmHistory = "",
-    todoItems, artifacts, usedSkills,
+    todoItems, artifacts, usedSkills, timeline,
   } = props;
 
   const { t } = useI18n();
@@ -177,6 +181,13 @@ export const TaskMonitor = memo(function TaskMonitor(props: TaskMonitorProps) {
             </div>
           </div>
         </CollapsibleSection>
+
+        {/* 协作时间线 (仅团队组显示) */}
+        {activeGroupId && (groups.find((g) => g.id === activeGroupId)?.memberIds.length ?? 0) >= 3 && (
+          <CollapsibleSection title="协作时间线" icon="📋" defaultOpen={!!timeline?.length}>
+            <CollaborationTimeline events={timeline ?? []} />
+          </CollapsibleSection>
+        )}
 
         {/* 调试面板（收拢状态） */}
         {showDebug && (

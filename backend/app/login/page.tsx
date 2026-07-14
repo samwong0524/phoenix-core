@@ -161,7 +161,7 @@ const submitStyle: React.CSSProperties = {
   cursor: "pointer",
   transition: "all 0.2s cubic-bezier(0.2, 0, 0, 1)",
   background: "var(--color-primary)",
-  color: "var(--bg-void)",
+  color: "#000",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -177,11 +177,12 @@ const submitDisabledStyle: React.CSSProperties = {
 const toggleStyle: React.CSSProperties = {
   background: "none",
   border: "none",
-  color: "var(--color-primary)",
+  color: "var(--text-secondary)",
   fontSize: 12,
   cursor: "pointer",
   fontFamily: "var(--font-body)",
   padding: 0,
+  textDecoration: "underline",
 };
 
 const errorStyle: React.CSSProperties = {

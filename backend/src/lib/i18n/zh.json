@@ -445,5 +445,37 @@
     "footer_esc": "Esc 关闭",
     "member_count": "{count} 成员",
     "status_label": "状态: {status}"
+  },
+  "wizard": {
+    "title": "快速配置 LLM",
+    "choose_desc": "选择一个服务商并填入 API Key，30 秒即可完成配置。",
+    "api_key_label": "API Key",
+    "test_btn": "测试连接",
+    "testing": "正在测试连接...",
+    "test_reply": "LLM 回复",
+    "done": "配置成功！",
+    "start_using": "开始使用",
+    "error_title": "连接失败",
+    "test_fail_unknown": "未知错误，请检查 API Key 和网络连接。",
+    "retry": "重试",
+    "skip": "稍后配置"
+  },
+  "orchestrate": {
+    "title": "任务编排",
+    "subtitle": "统一管理 Workflow 和 Pipeline，智能路由执行引擎",
+    "new": "新建编排",
+    "active": "运行中",
+    "draft": "草稿",
+    "paused": "已暂停",
+    "total": "总计",
+    "progress": "进度",
+    "empty_title": "暂无编排",
+    "empty_desc": "创建你的第一个任务编排，支持可视化 DAG 编辑和智能执行路由",
+    "create_first": "创建第一个编排",
+    "status": {
+      "active": "运行中",
+      "draft": "草稿",
+      "paused": "已暂停"
+    }
   }
 }

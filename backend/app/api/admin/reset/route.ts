@@ -4,7 +4,14 @@ import { getSql } from "@/db/client";
 import { ensureSchema } from "@/db/init";
 import { getUpstashRedis, isUpstashRealtimeConfigured } from "@/runtime/upstash-realtime";
 
-export async function POST() {
+export async function POST(req: Request) {
+  // Require ADMIN_SECRET header to prevent unauthorized database resets
+  const adminSecret = process.env.ADMIN_SECRET;
+  const provided = req.headers.get("x-admin-secret");
+  if (!adminSecret || provided !== adminSecret) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const sql = getSql();
 
   await sql/* sql */ `

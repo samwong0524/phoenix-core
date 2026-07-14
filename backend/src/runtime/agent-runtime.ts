@@ -265,7 +265,7 @@ export class AgentRunner {
     }
   }
 
-  wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" = "manual") {
+  wakeup(reason: "manual" | "group_message" | "direct_message" | "context_stream" | "retry_tool_call" = "manual") {
     console.info(`[AgentRunner:wakeup] agent=${this.agentId} reason=${reason}`);
     // Run skill evaluation on wakeup —async, non-blocking (design doc 搂11.4)
     void this.evaluateSkills();
@@ -1035,6 +1035,19 @@ export class AgentRunner {
     this.verificationErrorSummary = "";
     this.verificationGateBlocks = 0;
     this._coordinatorPlanHintInjected = false;
+  }
+
+  /**
+   * Reset all guardrail state for tool-call retry.
+   * Clears blocked tools, paused flag, and all failure counters.
+   * Called by the retry-tool-call API before waking the agent.
+   */
+  resetGuardrails() {
+    this.blockedTools.clear();
+    this.agentPaused = false;
+    this.turnToolFailures.clear();
+    this.exactFailureCount.clear();
+    this.sameToolFailureCount.clear();
   }
 
   private async runWithTools(input: {
@@ -3721,6 +3734,20 @@ export class AgentRunner {
           outputSummary: `Assigned, assignmentId: ${assignId.slice(0,8)}`,
           success: true,
         });
+
+        // Emit task assignment event for collaboration timeline
+        getWorkspaceUIBus().emit(workspaceId, {
+          event: "ui.task.assigned",
+          data: {
+            workspaceId,
+            groupId,
+            coordinatorId: this.agentId,
+            assigneeId: agentId,
+            assigneeRole: "", // Will be resolved by frontend from agent registry
+            taskDescription: args.taskId ?? "ad-hoc task",
+          },
+        });
+
         return { ok: true, assignmentId: assignId };
       }
 
@@ -4994,6 +5021,14 @@ export class AgentRuntime {
     }
   }
 
+  /**
+   * Get an existing runner by agentId, or null if not found.
+   * Used by retry-tool-call API to reset guardrails.
+   */
+  getRunner(agentId: UUID): AgentRunner | null {
+    return this.runners.get(agentId) ?? null;
+  }
+
   ensureRunner(agentId: UUID) {
     const existing = this.runners.get(agentId);
     if (existing) return existing;
@@ -5063,7 +5098,7 @@ export class AgentRuntime {
     }
   }
 
-  async wakeAgent(agentId: UUID, reason: "direct_message" | "context_stream" = "direct_message") {
+  async wakeAgent(agentId: UUID, reason: "direct_message" | "context_stream" | "retry_tool_call" = "direct_message") {
     await this.bootstrap();
     const role = await store.getAgentRole({ agentId }).catch(() => null);
     if (role === "human" || role === null) return;

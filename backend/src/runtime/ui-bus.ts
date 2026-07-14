@@ -104,6 +104,19 @@ export type UIEvent =
   | {
       id: number;
       at: number;
+      event: "ui.task.assigned";
+      data: {
+        workspaceId: string;
+        groupId: string;
+        coordinatorId: string;
+        assigneeId: string;
+        assigneeRole: string;
+        taskDescription: string;
+      };
+    }
+  | {
+      id: number;
+      at: number;
       event: "ui.db.write";
       data: {
         workspaceId: string;
